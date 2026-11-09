@@ -2,8 +2,7 @@
 # Builds paw.app from the SwiftPM binary and signs it.
 # Usage: scripts/bundle.sh [out_dir]   (env: PAW_BUNDLE_ID, PAW_SIGN_IDENTITY)
 # Signing: PAW_SIGN_IDENTITY if set, else an "Apple Development" identity, else the
-# self-signed "paw Local Signing" certificate (just local-cert), else ad-hoc. A stable
-# identity keeps the Accessibility grant across rebuilds; ad-hoc loses it every time.
+# self-signed "paw Local Signing" certificate (just local-cert), else ad-hoc.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -51,7 +50,7 @@ if [ -n "$identity" ]; then
   echo "signed: $identity"
 else
   codesign --force -s - "$app"
-  echo "signed: ad-hoc (Accessibility must be granted again after every rebuild; see just local-cert)"
+  echo "signed: ad-hoc"
 fi
 codesign -v "$app"
 echo "built: $app ($version)"
