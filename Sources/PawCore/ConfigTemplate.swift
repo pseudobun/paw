@@ -1,0 +1,98 @@
+/// The commented config paw writes to `~/.config/paw/config.json5` on first launch
+/// (`paw config template` prints it). Every value here is the default.
+public enum ConfigTemplate {
+    public static let text = """
+    // paw configuration (JSON5: comments and trailing commas are fine).
+    // Saved changes apply immediately. Delete a key to use its default.
+    {
+      hint: {
+        // cmd, ctrl, alt/opt, shift or hyper, plus a key; "" turns the hotkey off
+        // (`paw hint` still works, e.g. from skhd).
+        hotkey: "cmd+shift+space",
+        // Keys labels are made of, best first. Fewer keys means longer labels.
+        charset: "asdfghjkl;",
+        // "auto" labels the menu bar / Dock unless macOS hides it; true or false to force.
+        menuBar: "auto",
+        menuBarExtras: false,
+        dock: "auto",
+        // Type the last key twice within this many ms for a double click.
+        doubleTapMs: 250,
+        // Put the pointer back after a click paw had to simulate.
+        restoreCursor: true,
+        maxElements: 800,
+        // Chromium browsers (Chrome, Arc, Brave…) hide web content from accessibility until
+        // AXEnhancedUserInterface is on; it can stop yabai from animating their windows.
+        enhancedUI: true,
+      },
+
+      search: {
+        hotkey: "cmd+shift+alt+space",
+        width: 440,
+        maxResults: 40,
+      },
+
+      scroll: {
+        hotkey: "cmd+shift+j",
+        // Pixels per millisecond while h/j/k/l is held; shift multiplies it.
+        speed: 1.6,
+        fastMultiplier: 3,
+        rampMs: 140,
+        // Seconds without a key before scroll mode closes; 0 keeps it open.
+        idleTimeout: 5,
+        invert: false,
+      },
+
+      appearance: {
+        font: "GeistMono Nerd Font", // falls back to SF Mono
+        appFont: "sketchybar-app-font",
+        fontSize: 11,
+        fontWeight: "bold",
+        labelHeight: 18,
+        labelRadius: 6,
+        labelPaddingX: 5,
+        // "topLeft", "left" or "center" of the element
+        labelAnchor: "topLeft",
+        islandHeight: 28,
+        islandRadius: 9,
+        // From the top of the screen; 46 clears a 40 pt sketchybar.
+        islandTop: 46,
+        islandFontSize: 12,
+        appIconSize: 14,
+        borderWidth: 1,
+        shadow: true,
+        fadeMs: 80,
+        unmatchedOpacity: 0,
+        // The island with the app's icon and the mode at the top of the screen
+        appIsland: true,
+        // 0xAARRGGBB like sketchybar's colors.lua, or "#RRGGBB" / "#RRGGBBAA"
+        colors: {
+          island: "0xeb1d1d16",
+          islandHi: "0xff2b2b22",
+          border: "0x1affffff",
+          fg: "0xfffbfbf9",
+          muted: "0xffabab9c",
+          dim: "0xff5f5f52",
+          accent: "0xffead186",
+          wave: "0xff8698eb",
+          good: "0xff43d58f",
+          bad: "0xffff6467",
+        },
+      },
+
+      icons: {
+        // sketchybar's app → glyph map; paw's built-in copy is used when it's missing.
+        map: "~/.config/sketchybar/helpers/app_icons.lua",
+        overrides: {
+          // "My App": ":code:",
+        },
+      },
+
+      // Bundle ids or app names where paw stays out of the way.
+      excludedApps: [],
+      openAtLogin: false,
+      // Seconds to wait for a slow app before skipping it.
+      axTimeout: 0.25,
+    }
+
+    """
+}
