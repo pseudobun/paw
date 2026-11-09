@@ -194,6 +194,8 @@ struct CommandTests {
         #expect(try Command.parse("move-to next") == .moveTo(.next, follow: false))
         #expect(try Command.parse("display 2") == .focusDisplay(.index(2)))
         #expect(try Command.parse("exec open -a 'Alacritty'") == .exec("open -a 'Alacritty'"))
+        #expect(try Command.parse("mode resize") == .mode("resize"))
+        #expect(try Command.parse("mode exit") == .mode(nil))
         #expect(try Command.parseAll("toggle float; grid 4:4:1:1:2:2").count == 2)
         #expect(throws: ConfigProblem.self) { try Command.parse("focus sideways") }
         #expect(throws: ConfigProblem.self) { try Command.parse("teleport") }

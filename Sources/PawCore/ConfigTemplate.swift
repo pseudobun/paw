@@ -12,7 +12,7 @@ public enum ConfigTemplate {
         let cmd = Defaults.bindings[key] ?? ""
         let verb = cmd.split(separator: " ").first.map(String.init) ?? ""
         let rank = ["focus", "swap", "stack", "warp", "unstack", "layout", "toggle", "grid", "balance", "rotate", "resize",
-                    "workspace", "move-to", "recover", "exec"].firstIndex(of: verb) ?? 99
+                    "workspace", "move-to", "mode", "recover", "exec"].firstIndex(of: verb) ?? 99
         let num = Int(cmd.split(separator: " ").dropFirst().first ?? "") ?? 0
         return String(format: "%02d %03d %@ %@", rank, num, cmd, key)
     }
@@ -118,11 +118,13 @@ public enum ConfigTemplate {
       },
 
       // Shell commands with $PAW_WORKSPACE / $PAW_PREV_WORKSPACE, $PAW_APP / $PAW_WINDOW;
-      // windowsChanged runs when windows open, close or change workspace (read `paw query --json`)
+      // windowsChanged runs when windows open, close or change workspace (read `paw query --json`);
+      // modeChanged when a mode turns on or off ($PAW_MODE, "" for off)
       hooks: {
         workspaceChanged: "",
         windowFocused: "",
         windowsChanged: "",
+        modeChanged: "",
       },
 
       // `paw initiate` ("Initiate workspace"): opens the apps, waits for their windows, then
@@ -141,13 +143,26 @@ public enum ConfigTemplate {
       //   layout bsp|stack|float   toggle float|zoom|split   balance   rotate 90|180|270
       //   resize <dir> <points>   grid rows:cols:x:y:w:h   workspace <n>|next|prev|last|new|close
       //   move-to <n>|next|prev [--follow]   display <dir>|next|n   move-to-display <dir> [--follow]
-      //   arrange [workspace]   retile   recover   reload   exec <shell command>
+      //   arrange [workspace|all]   initiate   mode <name>|exit   retile   recover   reload   exec <shell command>
       // Setting bindings replaces this whole list.
       bindings: {
 
     """
 
     static let tail = """
+      },
+
+      // While a mode is on (`mode resize`, hyper+r), its keys come before the bindings above and an
+      // island at the top of the screen says so. resize <dir> <points> moves that edge.
+      modes: {
+        resize: {
+          "left": "resize west 40", "right": "resize east 40", "up": "resize north 40", "down": "resize south 40",
+          "h": "resize west 40", "l": "resize east 40", "k": "resize north 40", "j": "resize south 40",
+          "shift+left": "resize west -40", "shift+right": "resize east -40", "shift+up": "resize north -40", "shift+down": "resize south -40",
+          "shift+h": "resize west -40", "shift+l": "resize east -40", "shift+k": "resize north -40", "shift+j": "resize south -40",
+          "e": "balance",
+          "escape": "mode exit", "return": "mode exit", "hyper+r": "mode exit",
+        },
       },
     }
 

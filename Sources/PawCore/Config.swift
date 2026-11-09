@@ -7,6 +7,8 @@ public struct PawConfig: Codable, Equatable, Sendable {
     public var animation = Animation()
     /// Key → command(s), e.g. "ctrl+left": "focus west". Replaces the defaults when set.
     public var bindings: [String: String] = Defaults.bindings
+    /// Key maps for modes: while `mode <name>` is on, its keys come first ("escape": "mode exit").
+    public var modes: [String: [String: String]] = Defaults.modes
     /// Workspace presets by name: layout and which apps go in which tile.
     public var workspaces: [String: WorkspacePreset] = [:]
     public var rules: [Rule] = Defaults.rules
@@ -124,6 +126,8 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var workspaceChanged = ""
         /// After focus moves to another window ($PAW_APP, $PAW_WINDOW).
         public var windowFocused = ""
+        /// After a mode turns on or off ($PAW_MODE, "" when it's off).
+        public var modeChanged = ""
         /// After windows open, close or move between workspaces, or workspaces come and go
         /// (debounced; for a bar's app icons: read `paw query --json`).
         public var windowsChanged = ""
@@ -209,11 +213,11 @@ struct Fields<K: CodingKey> {
 
 extension PawConfig {
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case layout, focus, animation, bindings, workspaces, rules, indicator, appearance, icons, hooks, initiate, openAtLogin
+        case layout, focus, animation, bindings, modes, workspaces, rules, indicator, appearance, icons, hooks, initiate, openAtLogin
     }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.layout, &layout); try f(.focus, &focus); try f(.animation, &animation); try f(.bindings, &bindings)
+        try f(.layout, &layout); try f(.focus, &focus); try f(.animation, &animation); try f(.bindings, &bindings); try f(.modes, &modes)
         try f(.workspaces, &workspaces); try f(.rules, &rules); try f(.indicator, &indicator); try f(.appearance, &appearance)
         try f(.icons, &icons); try f(.hooks, &hooks); try f(.initiate, &initiate); try f(.openAtLogin, &openAtLogin)
     }
@@ -254,11 +258,11 @@ extension PawConfig.Initiate {
 }
 
 extension PawConfig.Hooks {
-    enum CodingKeys: String, CodingKey, CaseIterable { case workspaceChanged, windowFocused, windowsChanged }
+    enum CodingKeys: String, CodingKey, CaseIterable { case workspaceChanged, windowFocused, windowsChanged, modeChanged }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.workspaceChanged, &workspaceChanged); try f(.windowFocused, &windowFocused)
-        try f(.windowsChanged, &windowsChanged)
+        try f(.windowsChanged, &windowsChanged); try f(.modeChanged, &modeChanged)
     }
 }
 

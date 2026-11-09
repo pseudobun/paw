@@ -47,6 +47,7 @@ enum CLI {
           workspace <n>|next|prev|last|new|close      move-to <n>|next|prev [--follow]
           display <dir>|next|prev|<n>                 move-to-display <dir>|<n> [--follow]
           arrange [workspace|all]     put windows where the workspace presets say
+          mode <name>|exit    turn a key mode on/off (config `modes`, e.g. resize)
           initiate            open the preset apps (config `initiate`) and arrange every workspace
           retile | recover | reload | exec <shell command>
 

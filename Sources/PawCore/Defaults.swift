@@ -21,6 +21,7 @@ public enum Defaults {
             "ctrl+alt+c": "toggle float; grid 4:4:1:1:2:2",
             "ctrl+alt+u": "unstack",
             "hyper+e": "balance",
+            "hyper+r": "mode resize",
             "shift+alt+a": "resize west 40",
             "shift+alt+s": "resize south 40",
             "shift+alt+w": "resize north 40",
@@ -46,6 +47,20 @@ public enum Defaults {
         }
         return b
     }()
+
+    /// Key maps that apply while a mode (`mode <name>`) is on, before the normal bindings.
+    public static let modes: [String: [String: String]] = [
+        "resize": {
+            var m: [String: String] = ["escape": "mode exit", "return": "mode exit", "hyper+r": "mode exit", "e": "balance"]
+            for (keys, dir) in [(["left", "h"], "west"), (["right", "l"], "east"), (["up", "k"], "north"), (["down", "j"], "south")] {
+                for k in keys {
+                    m[k] = "resize \(dir) 40"
+                    m["shift+\(k)"] = "resize \(dir) -40"
+                }
+            }
+            return m
+        }(),
+    ]
 
     public static let rules: [PawConfig.Rule] = [
         .init(app: "/^(System Settings|System Information|Calculator|Archive Utility|Raycast|Alfred|CleanShot X|1Password)$/", float: true),

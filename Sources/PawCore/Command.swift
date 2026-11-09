@@ -29,6 +29,8 @@ public enum Command: Equatable, Sendable {
     case moveToDisplay(DisplayTarget, follow: Bool)
     case arrange(String?)
     case initiate
+    /// Turns a mode on (again: off); nil turns any mode off.
+    case mode(String?)
     case exec(String)
     case retile
     case recover
@@ -118,6 +120,9 @@ public enum Command: Equatable, Sendable {
         case "move-to-display": return .moveToDisplay(try display(0), follow: follow)
         case "arrange": return .arrange(args.first)
         case "initiate", "init": return .initiate
+        case "mode":
+            let name = try arg(0)
+            return ["exit", "off", "default", "none"].contains(name.lowercased()) ? .mode(nil) : .mode(name)
         case "retile": return .retile
         case "recover": return .recover
         case "reload": return .reload

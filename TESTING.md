@@ -22,6 +22,7 @@
 - [ ] `ctrl+alt+u` unstacks; `paw unstack all` splits the whole stack
 - [ ] Click / scroll / hover on the indicator
 - [ ] `shift+alt+wasd` / `shift+ctrl+wasd` resize; `hyper+e` balance; `alt+r` rotate
+- [ ] `hyper+r` → RESIZE island at the top; arrows/hjkl grow, shift shrinks, `esc` leaves (island goes)
 - [ ] `ctrl+alt+return` zoom; `ctrl+alt+space` float (centred, 2/3); `ctrl+alt+c` float in the middle cell; `ctrl+shift+return` floats full size
 - [ ] Drag a tiled window onto another tile and let go → they swap; drop elsewhere → snaps back
 - [ ] Animations: smooth? Try `animation.curve: "spring"`, `durationMs: 250`, `resize: "animate"`, `enabled: false`

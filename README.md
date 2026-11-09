@@ -31,10 +31,12 @@ app: no yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift + AppKit.
   and how sizes change
 - **Stack indicators**: a vertical island next to each stack with one app icon per window; click
   focuses, scroll cycles, hover shows the title
+- **Modes**: `hyper+r` turns on resize mode (arrows or hjkl grow, with shift shrink, `esc`
+  leaves) with an island at the top of the screen; define your own key modes in `modes`
 - **Rules**: float or ignore apps and windows by name/title, send apps to workspaces
 - **Key bindings** in the config (left/right modifiers like `ralt` work, `hyper` = ⌘⌃⌥⇧), and
   the same commands on the CLI: `paw focus west`, `paw workspace 3`
-- **Hooks** for status bars: `workspaceChanged`, `windowFocused`, `windowsChanged`, plus
+- **Hooks** for status bars: `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged`, plus
   `paw query --json` ([sketchybar example](examples/sketchybar/paw_spaces.lua))
 
 ## Requirements
@@ -131,13 +133,14 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false) |
 | `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
 | `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |
+| `modes` | `"name": { "key": "command" }`; while `mode <name>` is on its keys come first. Default: `resize` |
 | `workspaces` | `"name": { layout, axis, tiles: [{ apps: ["Discord", "Spotify"], size: 1 }, …], display: "main" }` |
 | `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
 | `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
 | `indicator` | `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
 | `appearance` | `font`, `fontSize`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `borderWidth`, `shadow`, `colors {island islandHi border fg muted dim accent wave good bad}` |
 | `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`) |
-| `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged` (shell commands with `PAW_*` variables) |
+| `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged` (shell commands with `PAW_*` variables) |
 | `openAtLogin` | |
 
 App names are what macOS shows in the menu bar (`paw query` lists the open ones); `/regex/`
@@ -160,6 +163,7 @@ matches by pattern.
 | `hyper+w/s/f` | layout bsp / stack / float |
 | `shift+alt+wasd`, `shift+ctrl+wasd` | grow / shrink |
 | `hyper+e`, `alt+r` | balance, rotate |
+| `hyper+r` | resize mode: `←↑→↓`/`hjkl` grow, `shift+` shrink, `e` balance, `esc`/`return` done |
 | `ctrl+alt+return` | zoom |
 | `ctrl+alt+space`, `ctrl+alt+c` | float, float in the middle |
 | `ctrl+shift+return` | float full size |
@@ -203,6 +207,7 @@ Bindings and the CLI take the same commands; chain several with `;`
 | `move-to-display <dir>\|<n> [--follow]` | Send the window to a display's workspace |
 | `arrange [workspace\|all]` | Apply the preset(s), pulling their apps from other workspaces |
 | `initiate` | Open the preset apps and arrange every workspace |
+| `mode <name>\|exit` | Turn a key mode on (again: off) or off |
 | `retile`, `recover`, `reload` | |
 | `exec <shell command>` | Run something (`exec open -a Terminal`) |
 

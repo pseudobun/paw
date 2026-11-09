@@ -27,6 +27,8 @@ final class WindowManager {
     private var dragTimer: Timer?
     private var saveWork: DispatchWorkItem?
     private var windowsHookWork: DispatchWorkItem?
+    private(set) var mode: String?
+    private let modePanel = TitlePanel()
     private var lastWindowsSignature = ""
     private var mouseMonitor: Any?
     private var lastHover = Date.distantPast
@@ -84,7 +86,8 @@ final class WindowManager {
     }
 
     func configChanged() {
-        hotkeys.set(config.bindings)
+        hotkeys.set(config.bindings, modes: config.modes)
+        if let m = mode, config.modes[m] == nil { setMode(nil) }
         for p in hotkeys.problems { Log.app.warning("bindings: \(p, privacy: .public)") }
         indicators.configChanged()
         updateFocusFollowsMouse()
@@ -485,6 +488,35 @@ final class WindowManager {
         }
     }
 
+    /// Turns a key mode on or off: its keys go first, an island at the top of the focused
+    /// display shows it, and hooks.modeChanged runs.
+    func setMode(_ name: String?) {
+        let name = name.flatMap { config.modes[$0] != nil ? $0 : nil }
+        guard name != mode else { return }
+        mode = name
+        hotkeys.mode = name
+        updateModeIsland()
+        runHook(config.hooks.modeChanged, ["PAW_MODE": name ?? ""])
+    }
+
+    private func updateModeIsland() {
+        guard let mode, displays.indices.contains(focusedDisplay) else { modePanel.orderOut(nil); return }
+        let style = indicators.style
+        let c = style.colors
+        var segs: [Island.Segment] = [.init(text: style.text(mode.uppercased(), c.accent, font: style.bold), gapAfter: 10)]
+        if mode == "resize" {
+            segs.append(.init(text: style.text("←↑→↓ grow  ⇧ shrink  e balance  esc done", c.muted)))
+        } else {
+            segs.append(.init(text: style.text("esc done", c.muted)))
+        }
+        let l = Island.make(segs, style: style, scale: NSScreen.main?.backingScaleFactor ?? 2)
+        let area = displays[focusedDisplay].area
+        let w = l.bounds.width, h = l.bounds.height
+        let ax = CGRect(x: (area.midX - w / 2).rounded(), y: area.minY + 8, width: w, height: h)
+        let primary = NSScreen.screens.first?.frame.height ?? 0
+        modePanel.show(l, at: ScreenGeometry.cocoa(fromAX: ax, primaryHeight: primary))
+    }
+
     /// Shows a stack's new top window: puts it back on its tile even when it was left parked in
     /// a corner (the cached frame can't be trusted then), then focuses it.
     private func bringForward(_ id: WindowID, in ws: Workspace) {
@@ -677,6 +709,8 @@ final class WindowManager {
             if let id = fid, let di = displayTarget(t) { moveWindow(id, to: displays[di].workspace, follow: follow) }
         case .initiate:
             initiate()
+        case .mode(let name):
+            setMode(name == mode ? nil : name)
         case .arrange(let name):
             let names = name == "all" ? config.workspaces.keys.sorted() : [name ?? ws.name]
             for n in names { arrange(n) }
@@ -755,6 +789,7 @@ final class WindowManager {
             }
         }
         indicators.apply(stacks)
+        if mode != nil { updateModeIsland() }
     }
 
     private func runHook(_ cmd: String, _ env: [String: String]) {
