@@ -4,34 +4,42 @@ import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = Settings()
-    private var controller: Controller!
-    private var hotkeys: [Controller.Kind: GlobalHotkey] = [:]
+    private var controller: StackController!
     private var observers: [NSObjectProtocol] = []
+    private var poll: Timer?
+    private var signalSources: [DispatchSourceSignal] = []
+    private var signalsInstalled = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if isAlreadyRunning() {
             Log.app.info("another paw is running; exiting")
             exit(0)
         }
+        installSignalHandlers()
         settings.start()
-        controller = Controller(settings: settings)
+        controller = StackController(settings: settings)
         settings.onChange = { [weak self] in self?.apply() }
 
-        let distributed = DistributedNotificationCenter.default()
-        observers.append(distributed.addObserver(forName: AppPaths.commandNotification, object: nil, queue: .main) { [weak self] note in
+        observers.append(DistributedNotificationCenter.default().addObserver(forName: AppPaths.commandNotification, object: nil,
+                                                                             queue: .main) { [weak self] note in
             self?.command(note.object as? String ?? "")
         })
+        let ws = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification,
+                     NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification,
+                     NSWorkspace.didTerminateApplicationNotification, NSWorkspace.didWakeNotification] {
+            observers.append(ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.controller.refresh() })
+        }
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                                 object: nil, queue: .main) { [weak self] _ in
-            self?.controller.screensChanged()
+            self?.controller.refresh()
         })
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
-                                                                           object: nil, queue: .main) { [weak self] _ in
-            self?.controller.dismiss()
-        })
-        if !AX.isTrusted { AX.requestTrust() }
         apply()
-        Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
+        Log.app.info("paw \(AppPaths.version, privacy: .public) ready")
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if signalsInstalled { controller.yabai.removeSignals() }
     }
 
     private func isAlreadyRunning() -> Bool {
@@ -40,25 +48,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return NSRunningApplication.runningApplications(withBundleIdentifier: id).contains { $0.processIdentifier != me }
     }
 
+    /// SIGTERM (pkill, launchd) and SIGINT quit through AppKit so the yabai signals get removed.
+    private func installSignalHandlers() {
+        for sig in [SIGTERM, SIGINT] {
+            signal(sig, SIG_IGN)
+            let s = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            s.setEventHandler { NSApp.terminate(nil) }
+            s.resume()
+            signalSources.append(s)
+        }
+    }
+
     private func apply() {
-        controller.configChanged()
         let c = settings.config
-        for (kind, text) in [(Controller.Kind.hint, c.hint.hotkey), (.search, c.search.hotkey), (.scroll, c.scroll.hotkey)] {
-            hotkeys[kind]?.unregister()
-            hotkeys[kind] = nil
-            guard !text.isEmpty else { continue }
-            guard let spec = HotkeySpec.parse(text) else {
-                Log.app.error("\(kind.rawValue, privacy: .public).hotkey: “\(text, privacy: .public)” is not a hotkey")
-                continue
-            }
-            let hk = GlobalHotkey { [weak self] in self?.controller.toggle(kind) }
-            if hk.register(spec) { hotkeys[kind] = hk } else {
-                Log.app.error("\(kind.rawValue, privacy: .public).hotkey \(text, privacy: .public) is taken")
+        controller.configChanged()
+        poll?.invalidate()
+        poll = nil
+        if c.yabai.pollSeconds > 0 {
+            poll = Timer.scheduledTimer(withTimeInterval: max(0.5, c.yabai.pollSeconds), repeats: true) { [weak self] _ in
+                self?.controller.refresh()
             }
         }
-        if let e = settings.error { controller.notice("Config: \(e)", color: controller.style.colors.bad) }
+        updateSignals(c.yabai.signals)
+        if let e = settings.error { Log.app.error("config: \(e, privacy: .public)") }
         for w in settings.warnings { Log.app.warning("config: \(w, privacy: .public)") }
         updateLoginItem(c.openAtLogin)
+    }
+
+    private func updateSignals(_ on: Bool) {
+        let client = controller.yabai
+        let action = "\(AppPaths.cliPath) refresh"
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            if on {
+                let n = client.addSignals(action: action)
+                Log.app.info("yabai signals: \(n)/\(YabaiClient.signalEvents.count) added")
+                DispatchQueue.main.async { self?.signalsInstalled = n > 0 }
+            } else {
+                client.removeSignals()
+                DispatchQueue.main.async { self?.signalsInstalled = false }
+            }
+        }
     }
 
     private func updateLoginItem(_ on: Bool) {
@@ -72,39 +101,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Commands from the CLI (`paw hint`, `paw reload`…).
-    private func command(_ text: String) {
-        let parts = text.split(separator: " ").map(String.init)
-        guard let name = parts.first else { return }
+    /// Commands from the CLI (`paw refresh`, `paw reload`…).
+    private func command(_ name: String) {
         switch name {
-        case "hint", "search", "scroll":
-            controller.toggle(Controller.Kind(rawValue: name)!)
+        case "refresh":
+            controller.refresh()
+        case "hide":
+            controller.hideAll()
+        case "show":
+            controller.showAll()
         case "reload":
             settings.load()
             reply("reload", ["error": settings.error ?? "", "warnings": settings.warnings.joined(separator: "\n")])
         case "quit":
             NSApp.terminate(nil)
         case "status":
-            reply("status", ["trusted": AX.isTrusted ? "yes" : "no", "version": AppPaths.version, "pid": "\(ProcessInfo.processInfo.processIdentifier)",
-                             "config": settings.url.path, "error": settings.error ?? ""])
-        case "dump":
-            dump(purpose: parts.dropFirst().first ?? "hint")
+            let stacks = controller.snapshot
+            reply("status", ["version": AppPaths.version, "pid": "\(ProcessInfo.processInfo.processIdentifier)",
+                             "config": settings.url.path, "error": settings.error ?? controller.lastError ?? "",
+                             "stacks": "\(stacks.count) (\(stacks.map { "\($0.items.count)" }.joined(separator: ", ")))",
+                             "signals": signalsInstalled ? "on" : "off",
+                             "iconFont": controller.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok"])
         default:
             Log.app.error("unknown command \(name, privacy: .public)")
-        }
-    }
-
-    /// Collects the frontmost app like a mode would and writes what it found to a file.
-    private func dump(purpose: String) {
-        guard let front = NSWorkspace.shared.frontmostApplication else { return }
-        let p: Collector.Purpose = purpose == "search" ? .search : purpose == "scroll" ? .scroll : .hint
-        let options = controller.collectorOptions(p)
-        controller.collector.collect(pid: front.processIdentifier, bundleID: front.bundleIdentifier, options: options) { [weak self] r in
-            let out = Dump.json(r, app: front, purpose: p)
-            let url = AppPaths.cacheDir.appending(path: "dump.json")
-            try? FileManager.default.createDirectory(at: AppPaths.cacheDir, withIntermediateDirectories: true)
-            try? out.write(to: url)
-            self?.reply("dump", ["path": url.path])
         }
     }
 

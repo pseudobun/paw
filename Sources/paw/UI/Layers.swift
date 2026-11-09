@@ -37,28 +37,6 @@ class TextLayer: CALayer {
     }
 }
 
-/// One hint label: an island-styled pill with its code.
-final class LabelLayer: TextLayer {
-    var code = ""
-
-    func update(style: Style, typed: Int) {
-        text = style.code(code, typed: typed)
-    }
-
-    static func make(code: String, style: Style, scale: CGFloat) -> LabelLayer {
-        let l = LabelLayer()
-        l.code = code
-        l.contentsScale = scale
-        l.centered = true
-        l.text = style.code(code, typed: 0)
-        let a = style.a
-        let w = max(a.labelHeight, (l.text.size().width + a.labelPaddingX * 2).rounded(.up))
-        l.bounds = CGRect(x: 0, y: 0, width: w, height: a.labelHeight)
-        style.decorate(l, radius: a.labelRadius)
-        return l
-    }
-}
-
 /// A sketchybar island: segments of text side by side on a rounded fill.
 enum Island {
     struct Segment {
@@ -71,7 +49,7 @@ enum Island {
 
     static func make(_ segments: [Segment], style: Style, scale: CGFloat, width: CGFloat? = nil,
                      trailing: NSAttributedString? = nil, fill: ARGB? = nil, border: ARGB? = nil) -> CALayer {
-        let h = style.a.islandHeight
+        let h = style.islandHeight
         let root = CALayer()
         root.contentsScale = scale
         var x = edge
@@ -96,7 +74,7 @@ enum Island {
             total = w
         }
         root.bounds = CGRect(x: 0, y: 0, width: max(width ?? 0, total), height: h)
-        style.decorate(root, radius: style.a.islandRadius, fill: fill, border: border)
+        style.decorate(root, radius: style.a.radius, fill: fill, border: border)
         return root
     }
 }

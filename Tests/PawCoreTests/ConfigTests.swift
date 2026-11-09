@@ -7,54 +7,41 @@ struct ConfigTests {
 
     @Test func emptyIsDefault() throws {
         #expect(try load("") == PawConfig())
-        #expect(try load("{}") == PawConfig())
         #expect(try load("// nothing\n{ }") == PawConfig())
     }
 
     @Test func partialJSON5KeepsDefaults() throws {
         let c = try load("""
-        // comment
         {
-          hint: { charset: 'fjdksla', menuBar: false, },
-          appearance: { colors: { accent: 0xff8698eb, island: "#1d1d16", bad: "0xffff0000" }, labelAnchor: "center" },
-          excludedApps: ["com.apple.Terminal"],
+          indicator: { side: 'inside-right', width: 32, },
+          appearance: { colors: { accent: 0xff8698eb, island: "#1d1d16" } },
+          excludedApps: ["Finder"],
         }
         """)
-        #expect(c.hint.charset == "fjdksla")
-        #expect(c.hint.menuBar == .off)
-        #expect(c.hint.hotkey == "cmd+shift+space")
+        #expect(c.indicator.side == .insideRight)
+        #expect(c.indicator.width == 32)
+        #expect(c.indicator.cellHeight == 22)
         #expect(c.appearance.colors.accent == ARGB(0xff86_98eb))
         #expect(c.appearance.colors.island == ARGB(0xff1d_1d16))
-        #expect(c.appearance.colors.bad == ARGB(0xffff_0000))
         #expect(c.appearance.colors.fg == ARGB(0xfffb_fbf9))
-        #expect(c.appearance.labelAnchor == .center)
-        #expect(c.excludedApps == ["com.apple.Terminal"])
+        #expect(c.yabai.path == "/opt/homebrew/bin/yabai")
+        #expect(c.excludedApps == ["Finder"])
     }
 
     @Test func errorsNameThePath() {
-        #expect(throws: ConfigProblem.self) { try load("{ hint: { maxElements: 'lots' } }") }
         do {
             _ = try load("{ appearance: { colors: { fg: 'purple' } } }")
             Issue.record("expected an error")
         } catch let p as ConfigProblem {
             #expect(p.message.contains("appearance.colors.fg"))
         } catch { Issue.record("\(error)") }
-        #expect(throws: ConfigProblem.self) { try load("{ hint: ") }
+        #expect(throws: ConfigProblem.self) { try load("{ indicator: { side: 'top' } }") }
+        #expect(throws: ConfigProblem.self) { try load("{ yabai: ") }
     }
 
     @Test func unknownKeysAreReported() {
-        let keys = ConfigLoader.unknownKeys(Data("{ hnit: {}, hint: { charst: 'a' }, appearance: { colors: { gold: 1 } }, icons: { overrides: { Any: ':x:' } } }".utf8))
-        #expect(keys == ["appearance.colors.gold", "hint.charst", "hnit"])
-    }
-
-    @Test func warnings() throws {
-        var c = PawConfig()
-        #expect(ConfigLoader.warnings(c).isEmpty)
-        c.hint.hotkey = "cmd+nope"
-        c.search.hotkey = ""
-        c.hint.charset = "aaa"
-        let w = ConfigLoader.warnings(c)
-        #expect(w.count == 2)
+        let keys = ConfigLoader.unknownKeys(Data("{ yabi: {}, indicator: { sid: 'left' }, appearance: { colors: { gold: 1 } }, icons: { overrides: { Any: ':x:' } } }".utf8))
+        #expect(keys == ["appearance.colors.gold", "indicator.sid", "yabi"])
     }
 
     @Test func templateParsesToDefaults() throws {
@@ -62,11 +49,10 @@ struct ConfigTests {
         #expect(ConfigLoader.unknownKeys(Data(ConfigTemplate.text.utf8)).isEmpty)
     }
 
-    @Test func hotkeys() throws {
-        let h = try #require(HotkeySpec.parse("cmd+shift+space"))
-        #expect(h.hasCommand && h.hasShift && !h.hasOption)
-        #expect(HotkeySpec.parse("space") == nil)
-        #expect(HotkeySpec.parse("f13") != nil)
-        #expect(HotkeySpec.parse("hyper+j") != nil)
+    @Test func warnings() {
+        var c = PawConfig()
+        c.indicator.titles = "always"
+        c.yabai.path = "/nonexistent/yabai"
+        #expect(ConfigLoader.warnings(c).count == 2)
     }
 }

@@ -12,7 +12,7 @@ default: build
 build:
     swift build
 
-# Unit tests (labels, geometry, fuzzy match, config, icon map)
+# Unit tests (yabai parsing, stack grouping, placement, config, icon map)
 test:
     swift test
 
@@ -22,7 +22,7 @@ bundle:
 
 # Release build → /Applications/paw.app, CLI → /opt/homebrew/bin/paw, relaunch
 install: bundle
-    -pkill -x paw
+    -paw quit 2>/dev/null; pkill -x paw
     @for i in $(seq 1 30); do pgrep -x paw >/dev/null || break; sleep 0.1; done
     rm -rf "{{app_dir}}/paw.app"
     cp -R build/paw.app "{{app_dir}}/paw.app"
@@ -31,11 +31,11 @@ install: bundle
     @echo "installed {{app_dir}}/paw.app, CLI at {{cli_link}}"
 
 uninstall:
-    -pkill -x paw
+    -paw quit 2>/dev/null; pkill -x paw
     -launchctl bootout gui/$(id -u) "{{launch_agent}}" 2>/dev/null
     rm -rf "{{app_dir}}/paw.app" "{{cli_link}}" "{{launch_agent}}"
 
-# Self-signed code-signing certificate so the Accessibility grant survives rebuilds
+# Self-signed code-signing certificate (stable signature across rebuilds)
 local-cert:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -59,7 +59,7 @@ launchd: install
 icons path="":
     scripts/gen-app-icons.sh {{path}}
 
-# Render labels and islands with your config to a PNG
+# Render the indicators with your config to a PNG
 preview out="build/preview.png":
     swift build -q
     mkdir -p "$(dirname "{{out}}")"
@@ -69,6 +69,6 @@ preview out="build/preview.png":
 examples: build
     .build/debug/paw config template > examples/config.json5
 
-# Follow paw's log (timings per activation)
+# Follow paw's log
 log:
     log stream --level info --predicate 'subsystem == "dev.paw.app"'
