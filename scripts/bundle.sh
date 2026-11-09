@@ -11,13 +11,15 @@ bundle_id="${PAW_BUNDLE_ID:-dev.paw.app}"
 version="$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)"
 short="$(echo "$version" | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' || echo 0.1.0)"
 
-swift build -c release --arch arm64 -q
-bin="$(swift build -c release --arch arm64 --show-bin-path)/paw"
+# dead_strip + strip -x: about half the size (local symbols aren't needed to run)
+swift build -c release --arch arm64 -q -Xlinker -dead_strip
+bin="$(swift build -c release --arch arm64 -Xlinker -dead_strip --show-bin-path)/paw"
 
 app="$out/paw.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/paw"
+strip -x "$app/Contents/MacOS/paw"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

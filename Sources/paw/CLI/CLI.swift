@@ -106,7 +106,8 @@ enum CLI {
         DistributedNotificationCenter.default().postNotificationName(AppPaths.commandNotification, object: command,
                                                                      userInfo: nil, deliverImmediately: true)
         let deadline = Date().addingTimeInterval(timeout)
-        while !got, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
+        // run(mode:before:) returns as soon as the reply notification is handled.
+        while !got, Date() < deadline { _ = RunLoop.current.run(mode: .default, before: deadline) }
         guard got, let data = try? Data(contentsOf: url),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             fputs("paw did not answer\n", stderr)
