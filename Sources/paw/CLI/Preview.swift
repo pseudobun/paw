@@ -2,7 +2,7 @@ import AppKit
 import PawCore
 import QuartzCore
 
-/// `paw preview out.png`: draws two tiled yabai stacks with paw's indicators (one focused,
+/// `paw preview out.png`: draws two tiled stacks with paw's indicators (one focused,
 /// one hovered) under a mock sketchybar, using the current config.
 enum Preview {
     static func run(_ args: [String]) -> Int32 {
@@ -70,7 +70,7 @@ enum Preview {
         let clock = Island.make([.init(text: style.text("09 Nov  15:12", c.fg, font: style.bold))], style: style, scale: scale)
         place(clock, CGRect(origin: CGPoint(x: screen.width - 12 - clock.bounds.width, y: 6), size: clock.bounds.size))
 
-        // Two tiled windows with yabai padding, each the top of a stack.
+        // Two tiled windows with the default padding, each the top of a stack.
         let left = CGRect(x: 44, y: 46, width: 660, height: 760)
         let right = CGRect(x: 716, y: 46, width: 680, height: 760)
         for (f, name) in [(left, "Discord"), (right, "Safari")] {
@@ -94,12 +94,12 @@ enum Preview {
 
         let stacks = [
             Stack(space: 1, frame: left, items: [
-                .init(id: 1, app: "Discord", title: "#household | Lutra Labs", isActive: true, hasFocus: true),
+                .init(id: 1, app: "Discord", title: "#general", isActive: true, hasFocus: true),
                 .init(id: 2, app: "Spotify", title: "Spotify Premium", isActive: false, hasFocus: false),
                 .init(id: 3, app: "Ghostty", title: "~/repos/paw", isActive: false, hasFocus: false),
             ]),
             Stack(space: 1, frame: right, items: [
-                .init(id: 4, app: "Safari", title: "pseudobun.dev", isActive: true, hasFocus: false),
+                .init(id: 4, app: "Safari", title: "Apple", isActive: true, hasFocus: false),
                 .init(id: 5, app: "Zed", title: "paw — StackController.swift", isActive: false, hasFocus: false),
                 .init(id: 6, app: "Obsidian", title: "Repos", isActive: false, hasFocus: false),
                 .init(id: 7, app: "Mail", title: "Inbox", isActive: false, hasFocus: false),

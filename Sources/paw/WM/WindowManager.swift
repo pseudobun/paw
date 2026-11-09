@@ -26,6 +26,8 @@ final class WindowManager {
     private var suppressMoves: [WindowID: Date] = [:]
     private var dragTimer: Timer?
     private var saveWork: DispatchWorkItem?
+    private var windowsHookWork: DispatchWorkItem?
+    private var lastWindowsSignature = ""
     private var mouseMonitor: Any?
     private var lastHover = Date.distantPast
     private var observers: [NSObjectProtocol] = []
@@ -58,7 +60,10 @@ final class WindowManager {
         observers.append(ws.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             // Give the app a moment to make its first window.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self?.adopt(app, state: nil) }
+            // Some (Brave) make it after a window-created notification could reach paw; look again.
+            for delay in [0.4, 1.5, 4.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.adopt(app, state: nil) }
+            }
         })
         observers.append(ws.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
@@ -108,6 +113,17 @@ final class WindowManager {
         ScreenGeometry.axFrame(ofScreen: r, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
     }
 
+    /// Screen padding widened so a stack indicator outside its window fits between the window
+    /// and the screen edge, with `indicator.offsetX` on both sides of it.
+    private func indicatorPadding(_ p: Padding) -> Padding {
+        let i = config.indicator
+        let room = i.width + 2 * i.offsetX
+        var p = p
+        if [.auto, .left].contains(i.side) { p.left = max(p.left, room) }
+        if [.auto, .right].contains(i.side) { p.right = max(p.right, room) }
+        return p
+    }
+
     private func rebuildDisplays() {
         let old = displays
         let l = config.layout
@@ -116,7 +132,7 @@ final class WindowManager {
             let id = (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? CGDirectDisplayID(i)
             let frame = Self.axFrame(s.frame)
             let area = TreeLayout.area(screen: frame, visible: Self.axFrame(s.visibleFrame), barTop: l.barTop, barBottom: l.barBottom,
-                                       padding: l.padding)
+                                       padding: indicatorPadding(l.padding))
             var ws = old.first { $0.id == id }?.workspace ?? ""
             if used.contains(ws) { ws = "" }
             if !ws.isEmpty { used.insert(ws) }
@@ -469,6 +485,65 @@ final class WindowManager {
         }
     }
 
+    /// Shows a stack's new top window: puts it back on its tile even when it was left parked in
+    /// a corner (the cached frame can't be trusted then), then focuses it.
+    private func bringForward(_ id: WindowID, in ws: Workspace) {
+        if let w = windows[id] {
+            _ = w.readFrame()
+            if !displays.contains(where: { $0.area.intersects(w.frame.insetBy(dx: 20, dy: 20)) }) { w.isHidden = true }
+        }
+        layout(ws, animated: false)
+        focusWindow(id, warp: false)
+    }
+
+    /// "Initiate workspace": opens the preset apps that aren't running, waits until each has a
+    /// window (or the timeout), then arranges every preset workspace.
+    private func initiate() {
+        let cfg = config.initiate
+        let apps = cfg.appsToOpen(config.workspaces)
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.localizedName))
+        for app in apps where !running.contains(app) { Shell.run("open -g -a \(Self.shellQuote(app))", env: [:]) }
+        let deadline = Date().addingTimeInterval(cfg.timeout)
+        func check() {
+            for app in NSWorkspace.shared.runningApplications where apps.contains(app.localizedName ?? "") { adopt(app, state: nil) }
+            let have = Set(windows.values.map(\.app))
+            if apps.allSatisfy({ have.contains($0) }) || Date() > deadline {
+                execute(.arrange("all"))
+                if !cfg.focus.isEmpty { show(cfg.focus) }
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { check() }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { check() }
+    }
+
+    static func shellQuote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+
+    /// Applies a workspace preset: pulls its apps' tiled windows from other workspaces, then
+    /// rebuilds the tiles in preset order.
+    private func arrange(_ name: String) {
+        guard let preset = config.workspaces[name] else { return }
+        let target = workspace(name)
+        var touched: [Workspace] = []
+        for other in workspaces.values where other !== target {
+            let ids = other.allWindows.filter { id in
+                !other.isFloating(id) && windows[id].map { preset.slot(for: $0.app) != nil } == true
+            }
+            guard !ids.isEmpty else { continue }
+            for id in ids {
+                other.remove(id)
+                target.insert(id, area: area(of: target))
+                if displayShowing(name) == nil, let w = windows[id] { hide(w, from: target) }
+            }
+            touched.append(other)
+        }
+        let list = target.allWindows.compactMap { id in windows[id].map { (id: id, app: $0.app) } }
+        target.arrange(preset, windows: list, area: area(of: target))
+        layout(target, animated: true)
+        for other in touched { layout(other, animated: true) }
+        scheduleSave()
+    }
+
     private func moveWindow(_ id: WindowID, to name: String, follow: Bool) {
         guard let from = workspaceOf(id), from.name != name, let w = windows[id] else { return }
         let floating = from.isFloating(id)
@@ -515,8 +590,8 @@ final class WindowManager {
         case .focus(let target):
             switch target {
             case .dir(let d): focus(direction: d)
-            case .stackNext: if let id = fid, let n = ws.cycleStack(id, by: 1) { focusWindow(n, warp: false) }
-            case .stackPrev: if let id = fid, let n = ws.cycleStack(id, by: -1) { focusWindow(n, warp: false) }
+            case .stackNext: if let id = fid, let n = ws.cycleStack(id, by: 1) { bringForward(n, in: ws) }
+            case .stackPrev: if let id = fid, let n = ws.cycleStack(id, by: -1) { bringForward(n, in: ws) }
             case .stackFirst: if let id = fid, let t = ws.tile(of: id), let n = t.windows.first { focusWindow(n, warp: false) }
             case .stackLast: if let id = fid, let t = ws.tile(of: id), let n = t.windows.last { focusWindow(n, warp: false) }
             }
@@ -600,12 +675,11 @@ final class WindowManager {
             }
         case .moveToDisplay(let t, let follow):
             if let id = fid, let di = displayTarget(t) { moveWindow(id, to: displays[di].workspace, follow: follow) }
+        case .initiate:
+            initiate()
         case .arrange(let name):
-            let target = workspace(name ?? ws.name)
-            guard let preset = config.workspaces[target.name] else { return }
-            let list = target.allWindows.compactMap { id in windows[id].map { (id: id, app: $0.app) } }
-            target.arrange(preset, windows: list, area: self.area(of: target))
-            layout(target, animated: true)
+            let names = name == "all" ? config.workspaces.keys.sorted() : [name ?? ws.name]
+            for n in names { arrange(n) }
         case .exec(let cmd):
             Shell.run(cmd, env: [:])
         case .retile:
@@ -688,7 +762,25 @@ final class WindowManager {
         Shell.run(cmd, env: env)
     }
 
+    /// Runs hooks.windowsChanged shortly after the workspace → apps picture changes.
+    private func scheduleWindowsHook() {
+        guard !config.hooks.windowsChanged.isEmpty else { return }
+        windowsHookWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let sig = orderedNames.map { name in
+                name + ":" + self.workspace(name).allWindows.compactMap { self.windows[$0]?.app }.sorted().joined(separator: ",")
+            }.joined(separator: "|")
+            guard sig != lastWindowsSignature else { return }
+            lastWindowsSignature = sig
+            runHook(config.hooks.windowsChanged, [:])
+        }
+        windowsHookWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
     private func scheduleSave() {
+        scheduleWindowsHook()
         saveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }

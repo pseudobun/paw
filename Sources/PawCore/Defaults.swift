@@ -1,8 +1,8 @@
-/// Bunny's yabai + skhd setup, as paw defaults (dotfiles yabai/.skhdrc and .yabairc).
+/// Default key bindings and window rules (an skhd/yabai-style setup). Setting `bindings` or
+/// `rules` in the config replaces these.
 public enum Defaults {
     public static let bindings: [String: String] = {
         var b: [String: String] = [
-            "hyper+0x18": "exec open -a Alacritty",
             "hyper+w": "layout bsp",
             "hyper+s": "layout stack",
             "hyper+f": "layout float",
@@ -48,8 +48,7 @@ public enum Defaults {
     }()
 
     public static let rules: [PawConfig.Rule] = [
-        .init(app: "/^(iTerm2|He3|System Settings|Parallels Desktop|CleanShot X|Raycast|Perplexity)$/", float: true),
-        .init(app: "Raycast Beta", title: "/^AI Chat$/", float: true),
+        .init(app: "/^(System Settings|System Information|Calculator|Archive Utility|Raycast|Alfred|CleanShot X|1Password)$/", float: true),
         // Browser popups float; their main windows (title ends in the browser name) tile.
         .init(app: "Google Chrome", unlessTitle: "Google Chrome", float: true),
         .init(app: "Brave Browser", unlessTitle: "Brave", float: true),

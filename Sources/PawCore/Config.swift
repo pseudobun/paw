@@ -14,6 +14,8 @@ public struct PawConfig: Codable, Equatable, Sendable {
     public var appearance = Appearance()
     public var icons = Icons()
     public var hooks = Hooks()
+    /// `paw initiate`: open the preset apps and arrange every workspace.
+    public var initiate = Initiate()
     /// Start paw when you log in (only for the installed paw.app).
     public var openAtLogin = false
 
@@ -24,8 +26,9 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var `default` = LayoutKind.stack
         public var gap = 10.0
         public var padding = Padding()
-        /// Space kept free for sketchybar (like yabai's external_bar).
-        public var barTop = 41.0
+        /// Extra space kept free at the top/bottom for a status bar such as sketchybar (like
+        /// yabai's external_bar); the menu bar and Dock are already left out.
+        public var barTop = 0.0
         public var barBottom = 0.0
         /// How many workspaces exist from the start (1…N); more come with `workspace new`.
         public var workspaces = 10
@@ -92,12 +95,38 @@ public struct PawConfig: Codable, Equatable, Sendable {
         }
     }
 
+    public struct Initiate: Codable, Equatable, Sendable {
+        /// Apps to open (names as in /Applications). Empty: every plain (non-/regex/) app name
+        /// in the workspace presets.
+        public var apps: [String] = []
+        /// Workspace to show when done; "" stays where you are.
+        public var focus = ""
+        /// Seconds to wait for the apps' windows before arranging anyway.
+        public var timeout = 15.0
+        public init() {}
+
+        /// The apps `initiate` opens for these presets.
+        public func appsToOpen(_ presets: [String: WorkspacePreset]) -> [String] {
+            if !apps.isEmpty { return apps }
+            var out: [String] = []
+            for name in presets.keys.sorted(by: { (Int($0) ?? .max, $0) < (Int($1) ?? .max, $1) }) {
+                for t in presets[name]!.tiles {
+                    for a in t.apps where !(a.hasPrefix("/") && a.hasSuffix("/") && a.count > 1) && !out.contains(a) { out.append(a) }
+                }
+            }
+            return out
+        }
+    }
+
     /// Shell commands paw runs on events, with PAW_* variables set.
     public struct Hooks: Codable, Equatable, Sendable {
         /// After the focused workspace changes ($PAW_WORKSPACE, $PAW_PREV_WORKSPACE).
         public var workspaceChanged = ""
         /// After focus moves to another window ($PAW_APP, $PAW_WINDOW).
         public var windowFocused = ""
+        /// After windows open, close or move between workspaces, or workspaces come and go
+        /// (debounced; for a bar's app icons: read `paw query --json`).
+        public var windowsChanged = ""
         public init() {}
     }
 
@@ -143,7 +172,7 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public init() {}
     }
 
-    /// sketchybar palette (~/.config/sketchybar/colors.lua), shared with olympus-dashboard and hop.
+    /// Indicator colours (a dark sketchybar-style palette by default).
     public struct Colors: Codable, Equatable, Sendable {
         public var island = ARGB(0xeb1d_1d16)
         public var islandHi = ARGB(0xff2b_2b22)
@@ -180,13 +209,13 @@ struct Fields<K: CodingKey> {
 
 extension PawConfig {
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case layout, focus, animation, bindings, workspaces, rules, indicator, appearance, icons, hooks, openAtLogin
+        case layout, focus, animation, bindings, workspaces, rules, indicator, appearance, icons, hooks, initiate, openAtLogin
     }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.layout, &layout); try f(.focus, &focus); try f(.animation, &animation); try f(.bindings, &bindings)
         try f(.workspaces, &workspaces); try f(.rules, &rules); try f(.indicator, &indicator); try f(.appearance, &appearance)
-        try f(.icons, &icons); try f(.hooks, &hooks); try f(.openAtLogin, &openAtLogin)
+        try f(.icons, &icons); try f(.hooks, &hooks); try f(.initiate, &initiate); try f(.openAtLogin, &openAtLogin)
     }
 }
 
@@ -216,11 +245,20 @@ extension PawConfig.Animation {
     }
 }
 
+extension PawConfig.Initiate {
+    enum CodingKeys: String, CodingKey, CaseIterable { case apps, focus, timeout }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.apps, &apps); try f(.focus, &focus); try f(.timeout, &timeout)
+    }
+}
+
 extension PawConfig.Hooks {
-    enum CodingKeys: String, CodingKey, CaseIterable { case workspaceChanged, windowFocused }
+    enum CodingKeys: String, CodingKey, CaseIterable { case workspaceChanged, windowFocused, windowsChanged }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.workspaceChanged, &workspaceChanged); try f(.windowFocused, &windowFocused)
+        try f(.windowsChanged, &windowsChanged)
     }
 }
 
@@ -323,6 +361,7 @@ public enum ConfigLoader {
             "focus": Set(PawConfig.Focus.CodingKeys.allCases.map(\.rawValue)),
             "animation": Set(PawConfig.Animation.CodingKeys.allCases.map(\.rawValue)),
             "hooks": Set(PawConfig.Hooks.CodingKeys.allCases.map(\.rawValue)),
+            "initiate": Set(PawConfig.Initiate.CodingKeys.allCases.map(\.rawValue)),
             "indicator": Set(PawConfig.Indicator.CodingKeys.allCases.map(\.rawValue)),
             "appearance": Set(PawConfig.Appearance.CodingKeys.allCases.map(\.rawValue)),
             "icons": Set(PawConfig.Icons.CodingKeys.allCases.map(\.rawValue)),

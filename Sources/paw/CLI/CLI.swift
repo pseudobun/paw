@@ -1,7 +1,7 @@
 import AppKit
 import PawCore
 
-/// `paw <command>`: the app binary doubles as its CLI (yabai signals run `paw refresh`).
+/// `paw <command>`: the app binary doubles as its CLI.
 enum CLI {
     static let commands: [String: ([String]) -> Int32] = [
         "help": { _ in help() }, "--help": { _ in help() }, "-h": { _ in help() },
@@ -46,7 +46,8 @@ enum CLI {
           resize <dir> <points>       grid rows:cols:x:y:w:h
           workspace <n>|next|prev|last|new|close      move-to <n>|next|prev [--follow]
           display <dir>|next|prev|<n>                 move-to-display <dir>|<n> [--follow]
-          arrange [workspace] put windows where the workspace preset says
+          arrange [workspace|all]     put windows where the workspace presets say
+          initiate            open the preset apps (config `initiate`) and arrange every workspace
           retile | recover | reload | exec <shell command>
 
         paw itself:

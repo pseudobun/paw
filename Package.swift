@@ -10,7 +10,7 @@ let package = Package(
     targets: [
         // Pure logic (labels, geometry, fuzzy match, config, icon map): no AppKit, unit tested.
         .target(name: "PawCore"),
-        // The app and its CLI: one binary, like hop.
+        // The app and its CLI: one binary.
         .executableTarget(
             name: "paw",
             dependencies: ["PawCore"],

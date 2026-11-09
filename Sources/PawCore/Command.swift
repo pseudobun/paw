@@ -28,6 +28,7 @@ public enum Command: Equatable, Sendable {
     case focusDisplay(DisplayTarget)
     case moveToDisplay(DisplayTarget, follow: Bool)
     case arrange(String?)
+    case initiate
     case exec(String)
     case retile
     case recover
@@ -116,6 +117,7 @@ public enum Command: Equatable, Sendable {
         case "display": return .focusDisplay(try display(0))
         case "move-to-display": return .moveToDisplay(try display(0), follow: follow)
         case "arrange": return .arrange(args.first)
+        case "initiate", "init": return .initiate
         case "retile": return .retile
         case "recover": return .recover
         case "reload": return .reload

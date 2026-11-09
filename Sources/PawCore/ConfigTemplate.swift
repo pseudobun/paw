@@ -7,7 +7,7 @@ public enum ConfigTemplate {
         return head + bindings + "\n" + tail
     }
 
-    /// Groups bindings by command so the file reads like the skhdrc did.
+    /// Groups bindings by command so the file reads like an skhdrc.
     static func order(_ key: String) -> String {
         let cmd = Defaults.bindings[key] ?? ""
         let verb = cmd.split(separator: " ").first.map(String.init) ?? ""
@@ -26,8 +26,8 @@ public enum ConfigTemplate {
         default: "stack",
         gap: 10,
         padding: { top: 2, bottom: 2, left: 24, right: 24 },
-        // Kept free for sketchybar (yabai's external_bar)
-        barTop: 41,
+        // Extra room for a status bar such as sketchybar (41 for a 40 pt bar); menu bar and Dock are already left out
+        barTop: 0,
         barBottom: 0,
         // Workspaces 1…N exist from the start; "workspace new" adds more
         workspaces: 10,
@@ -65,8 +65,7 @@ public enum ConfigTemplate {
       // app: name or /regex/; title / unlessTitle: substring or /regex/
       // manage: false leaves windows alone, float: true floats them, workspace: where they open
       rules: [
-        { app: "/^(iTerm2|He3|System Settings|Parallels Desktop|CleanShot X|Raycast|Perplexity)$/", float: true },
-        { app: "Raycast Beta", title: "/^AI Chat$/", float: true },
+        { app: "/^(System Settings|System Information|Calculator|Archive Utility|Raycast|Alfred|CleanShot X|1Password)$/", float: true },
         { app: "Google Chrome", unlessTitle: "Google Chrome", float: true },
         { app: "Brave Browser", unlessTitle: "Brave", float: true },
         { app: "Zen", unlessTitle: "Zen", float: true },
@@ -118,10 +117,20 @@ public enum ConfigTemplate {
         overrides: {},
       },
 
-      // Shell commands with $PAW_WORKSPACE / $PAW_PREV_WORKSPACE, $PAW_APP / $PAW_WINDOW
+      // Shell commands with $PAW_WORKSPACE / $PAW_PREV_WORKSPACE, $PAW_APP / $PAW_WINDOW;
+      // windowsChanged runs when windows open, close or change workspace (read `paw query --json`)
       hooks: {
         workspaceChanged: "",
         windowFocused: "",
+        windowsChanged: "",
+      },
+
+      // `paw initiate` ("Initiate workspace"): opens the apps, waits for their windows, then
+      // arranges every preset. apps: [] means every plain app name in the presets.
+      initiate: {
+        apps: [],
+        focus: "",
+        timeout: 15,
       },
 
       openAtLogin: false,

@@ -75,12 +75,23 @@ struct PresetConfigTests {
         #expect(c.animation.curve == .spring)
     }
 
-    @Test func defaultRulesMatchYabairc() {
+    @Test func defaultRulesFloatUtilitiesAndPopups() {
         let rules = PawConfig().rules
         func floats(_ app: String, _ title: String) -> Bool { rules.contains { $0.matches(app: app, title: title) && $0.float == true } }
         #expect(floats("System Settings", "Wi-Fi"))
         #expect(floats("Brave Browser", "Bitwarden"))
         #expect(!floats("Brave Browser", "GitHub - Brave"))
         #expect(!floats("Discord", "#general"))
+    }
+
+    @Test func initiateOpensPresetApps() throws {
+        let c = try ConfigLoader.decode(Data("""
+        { workspaces: { "2": { tiles: [ { apps: ["Mail", "/^T3/"] } ] }, "10": { tiles: [ { apps: ["Finder"] } ] },
+                        "1": { tiles: [ { apps: ["Safari", "Mail"] } ] } } }
+        """.utf8))
+        #expect(c.initiate.appsToOpen(c.workspaces) == ["Safari", "Mail", "Finder"])
+        var i = c.initiate
+        i.apps = ["Slack"]
+        #expect(i.appsToOpen(c.workspaces) == ["Slack"])
     }
 }

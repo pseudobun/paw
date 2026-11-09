@@ -26,17 +26,6 @@ enum AppPaths {
         return Bundle(url: app) ?? .main
     }()
 
-    /// What yabai signals run: the PATH symlink when `just install` made one, else this binary.
-    static var cliPath: String {
-        let link = "/opt/homebrew/bin/paw"
-        if let dest = try? FileManager.default.destinationOfSymbolicLink(atPath: link),
-           URL(fileURLWithPath: dest, relativeTo: URL(fileURLWithPath: "/opt/homebrew/bin")).resolvingSymlinksInPath().path
-            == URL(fileURLWithPath: executablePath).resolvingSymlinksInPath().path {
-            return link
-        }
-        return executablePath
-    }
-
     static var executablePath: String { Bundle.main.executablePath ?? CommandLine.arguments[0] }
 
     static var isAppBundle: Bool { appBundle.bundleURL.pathExtension == "app" }
