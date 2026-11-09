@@ -901,7 +901,8 @@ final class WindowManager {
                     "display": displayShowing(name).map { $0 + 1 } ?? 0, "layout": ws.layout.rawValue,
                     "windows": ws.allWindows.compactMap { id -> [String: Any]? in
                         guard let w = windows[id] else { return nil }
-                        return ["id": Int(id), "app": w.app, "title": w.title, "floating": ws.isFloating(id),
+                        let color = AppColors.shared.color(for: w.app, icons: config.icons)?.description ?? ""
+                        return ["id": Int(id), "app": w.app, "title": w.title, "color": color, "floating": ws.isFloating(id),
                                 "stacked": (ws.tile(of: id)?.windows.count ?? 0) > 1, "focused": ws.focused == id]
                     }]
         }

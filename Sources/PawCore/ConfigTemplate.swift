@@ -117,6 +117,9 @@ public enum ConfigTemplate {
       icons: {
         map: "~/.config/sketchybar/helpers/app_icons.lua",
         overrides: {},
+        // Each icon in the app's own colour (picked from its app icon); colors fixes single apps
+        brandColors: true,
+        colors: {},
       },
 
       // Shell commands with $PAW_WORKSPACE / $PAW_PREV_WORKSPACE, $PAW_APP / $PAW_WINDOW;

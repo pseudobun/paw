@@ -14,6 +14,7 @@ enum CLI {
         "query": query,
         "config": config,
         "icon": icon,
+        "color": color,
         "preview": Preview.run,
     ]
 
@@ -58,6 +59,7 @@ enum CLI {
           reload              reload ~/.config/paw/config.json5 and print problems
           config path | check | show | template
           icon <app name>     the sketchybar-app-font glyph for an app
+          color <app name>    the app's colour (0xAARRGGBB, from its icon or icons.colors)
           preview <out.png> [--fonts=DIR]   render stack indicators with your config
           quit                quit (puts hidden windows back on screen)
           version
@@ -174,6 +176,14 @@ enum CLI {
         let name = args.joined(separator: " ")
         guard !name.isEmpty else { fputs("paw icon <app name>\n", stderr); return 64 }
         print(Settings(url: Settings.defaultURL).icons.glyph(for: name))
+        return 0
+    }
+
+    static func color(_ args: [String]) -> Int32 {
+        let name = args.joined(separator: " ")
+        guard !name.isEmpty else { fputs("paw color <app name>\n", stderr); return 64 }
+        guard let c = AppColors.shared.color(for: name, icons: Settings(url: Settings.defaultURL).config.icons) else { return 1 }
+        print(c)
         return 0
     }
 }

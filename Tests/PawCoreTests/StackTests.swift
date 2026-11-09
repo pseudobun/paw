@@ -101,3 +101,23 @@ struct IconTests {
         #expect(m.merging(["Zed": ":code:"]).glyph(for: "Zed") == ":code:")
     }
 }
+
+struct BrandColorTests {
+    func pixels(_ list: [(UInt8, UInt8, UInt8, Int)]) -> [UInt8] {
+        list.flatMap { p in (0..<p.3).flatMap { _ in [p.0, p.1, p.2, 255] } }
+    }
+
+    @Test func picksTheMainHueOverWhiteAndBlack() {
+        let c = BrandColor.pick(rgba: pixels([(30, 215, 96, 300), (255, 255, 255, 400), (0, 0, 0, 300)]))
+        #expect(c != nil && c!.green > c!.red && c!.green > c!.blue)
+    }
+
+    @Test func greyIconsHaveNoColour() {
+        #expect(BrandColor.pick(rgba: pixels([(128, 128, 128, 500), (240, 240, 240, 500)])) == nil)
+    }
+
+    @Test func darkBlueIsLiftedToReadOnDark() {
+        let c = BrandColor.pick(rgba: pixels([(20, 30, 200, 500)]))!
+        #expect(0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue >= 0.4)
+    }
+}

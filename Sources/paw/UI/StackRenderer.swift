@@ -27,7 +27,13 @@ enum StackRenderer {
                 bg.backgroundColor = (item.isActive ? c.islandHi : c.islandHi.withAlpha(0.5)).cg
                 root.addSublayer(bg)
             }
-            let color: ARGB = item.hasFocus ? c.accent : item.isActive ? c.fg : (focused ? c.muted : c.dim)
+            let color: ARGB
+            if let brand = AppColors.shared.color(for: item.app, icons: config.icons) {
+                // The app's colour, full on the window on top, faded on the ones behind it.
+                color = brand.withAlpha(item.isActive ? 1 : (focused ? 0.55 : 0.35))
+            } else {
+                color = item.hasFocus ? c.accent : item.isActive ? c.fg : (focused ? c.muted : c.dim)
+            }
             let t = TextLayer()
             t.contentsScale = scale
             t.centered = true

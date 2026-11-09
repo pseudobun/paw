@@ -199,6 +199,10 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var map = "~/.config/sketchybar/helpers/app_icons.lua"
         /// App name → ligature, e.g. { "MyApp": ":code:" }.
         public var overrides: [String: String] = [:]
+        /// Colour each app's icon with its own colour, taken from its app icon.
+        public var brandColors = true
+        /// App name → colour when the picked one is wrong, e.g. { "Brave Browser": "#fb542b" }.
+        public var colors: [String: ARGB] = [:]
         public init() {}
     }
 }
@@ -303,10 +307,10 @@ extension PawConfig.Colors {
 }
 
 extension PawConfig.Icons {
-    enum CodingKeys: String, CodingKey, CaseIterable { case map, overrides }
+    enum CodingKeys: String, CodingKey, CaseIterable { case map, overrides, brandColors, colors }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.map, &map); try f(.overrides, &overrides)
+        try f(.map, &map); try f(.overrides, &overrides); try f(.brandColors, &brandColors); try f(.colors, &colors)
     }
 }
 
