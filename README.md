@@ -3,71 +3,186 @@
 <h1>paw</h1>
 
 A tiling window manager for macOS with stack indicators, in the style of sketchybar.
-bsp and stack layouts, virtual workspaces, key bindings and a CLI in one app: no yabai,
-no skhd, no Hammerspoon, no SIP changes. Pure Swift + AppKit. Sibling of [hop](https://github.com/pseudobun/hop).
+bsp and stack layouts, virtual workspaces, workspace presets, key bindings and a CLI in one
+app: no yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift + AppKit.
 
 </div>
 
 ## Features
 
 - **Layouts** per workspace: `bsp` (binary splits, wide tiles split side by side), `stack`
-  (every window in one stack), `float`. Gaps, padding and room for sketchybar (`layout.barTop`)
+  (every window in one stack), `float`. Gaps, padding and optional room for a status bar
+  (`layout.barTop`)
 - **Stacks**: any tile can hold several windows. `stack <dir>` puts the focused window on the
   stack that way (merging stacks), `unstack` takes it out into its own tile, `unstack all` splits
   the whole stack; `focus stack.next|prev` goes through it
-- **Moving**: `focus`, `swap`, `warp` in four directions (at the edge they go to the next display,
-  like the old `|| display --focus`), `resize`, `balance`, `rotate`, `toggle float|zoom|split`,
-  `grid`; dragging a tiled window onto another tile swaps them
+- **Moving**: `focus`, `swap`, `warp` in four directions (at the screen edge they go to the next
+  display), `resize`, `balance`, `rotate`, `toggle float|zoom|split`, `grid`; dragging a tiled
+  window onto another tile swaps them
 - **Mouse follows focus** (and optional focus follows mouse)
-- **Workspaces** like AeroSpace: 1–10 from the start, `workspace new|close|next|prev|last`,
-  `move-to <n> [--follow]`; one workspace per display, a hidden workspace's windows wait in a
-  screen corner, so switching is instant and needs no Mission Control or SIP. ⌘Tab to a window on a
-  hidden workspace switches to it
-- **Presets**: `workspaces` in the config says which apps share which tile; new windows of those
-  apps land there, `arrange` puts everything back
+- **Virtual workspaces** (like AeroSpace): `layout.workspaces` exist from the start,
+  `workspace new|close|next|prev|last`, `move-to <n> [--follow]`. A hidden workspace's windows
+  wait in a screen corner, so switching is instant and needs no Mission Control or SIP. ⌘Tab to a
+  window on a hidden workspace switches to it
+- **Presets**: `workspaces` in the config says which apps share which tile on which workspace;
+  new windows of those apps land there, `arrange` puts everything back, `initiate` opens the apps
+  and arranges every workspace in one go
 - **Animations** for window moves: duration, curve (`easeOutCubic`, `spring`, `easeOutBack`…),
-  and how sizes change, all in the config
-- **Stack indicators**: a vertical island next to each stack with one sketchybar-app-font icon per
-  window (same glyphs as the bar); click focuses, scroll cycles, hover shows the title
+  and how sizes change
+- **Stack indicators**: a vertical island next to each stack with one app icon per window; click
+  focuses, scroll cycles, hover shows the title
 - **Rules**: float or ignore apps and windows by name/title, send apps to workspaces
-- **Key bindings** in the config (left/right modifiers like `ralt` work), the same commands on
-  the CLI: `paw focus west`, `paw workspace 3`; defaults are the old skhdrc
-- **Hooks** for sketchybar: `hooks.workspaceChanged` runs with `$PAW_WORKSPACE`; `paw query --json`
+- **Key bindings** in the config (left/right modifiers like `ralt` work, `hyper` = ⌘⌃⌥⇧), and
+  the same commands on the CLI: `paw focus west`, `paw workspace 3`
+- **Hooks** for status bars: `workspaceChanged`, `windowFocused`, `windowsChanged`, plus
+  `paw query --json` ([sketchybar example](examples/sketchybar/paw_spaces.lua))
 
-Requires macOS 14+ on Apple Silicon and the **Accessibility** permission. Use one native Space per
-display (paw's workspaces replace them).
+## Requirements
+
+- macOS 14+ on Apple Silicon
+- Xcode or the Command Line Tools (Swift 6), [`just`](https://github.com/casey/just)
+- The **Accessibility** permission
+- One native Space per display (paw's workspaces replace Spaces); in System Settings → Desktop &
+  Dock, turn off "Automatically rearrange Spaces based on most recent use"
+- Optional: [sketchybar-app-font](https://github.com/kvndrsslr/sketchybar-app-font) in
+  `~/Library/Fonts` for app icons in the indicators (without it they show the app's initial), and
+  a Nerd Font such as `brew install --cask font-geist-mono-nerd-font` for their text
+- Optional: something that turns Caps Lock into a **hyper key** (⌘⌃⌥⇧), e.g.
+  [Karabiner-Elements](https://karabiner-elements.pqrs.org) or [Hyperkey](https://hyperkey.app),
+  since several default bindings use `hyper`. Rebind them if you don't have one
 
 ## Install
 
 ```sh
-git clone git@github.com:pseudobun/paw.git && cd paw
-just local-cert   # once: a stable signature, so Accessibility survives rebuilds
-just install      # → /Applications/paw.app, CLI → /opt/homebrew/bin/paw
+git clone https://github.com/pseudobun/paw.git && cd paw
+just local-cert   # once: a self-signed certificate, so Accessibility survives rebuilds
+just install      # → /Applications/paw.app, CLI → /opt/homebrew/bin/paw, then starts paw
 ```
 
-Then System Settings → Privacy & Security → Accessibility → paw. paw waits for the grant and
-starts managing windows right after.
+Then System Settings → Privacy & Security → Accessibility → enable paw. paw waits for the grant
+and starts managing windows right after. `paw status` should show `trusted: yes` and
+`bindings: ok`.
 
-Before the first start, stop the old tools so they don't fight over windows:
+If you have an Apple Development certificate, `just install` signs with it instead of the
+self-signed one (or set `PAW_SIGN_IDENTITY`). Without either it signs ad hoc, and macOS asks for
+Accessibility again after every rebuild.
 
-```sh
-yabai --stop-service; skhd --stop-service
-# Hammerspoon: quit it (it only ran stackline)
-```
+Stop other window managers and hotkey daemons first so they don't fight over windows, e.g.
+`yabai --stop-service; skhd --stop-service`, and quit AeroSpace, Amethyst, Rectangle and the like.
 
-Fonts: `brew install --cask font-geist-mono-nerd-font` and sketchybar-app-font in
-`~/Library/Fonts` (both come with the dotfiles).
+Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
+again (it remembers which workspace each window was on) or run `paw recover`.
 
-Quitting paw (`paw quit`, `pkill paw`) brings every hidden window back on screen. After a crash,
-start paw again (it remembers which workspace each window was on) or run `paw recover`.
+Uninstall: `just uninstall`.
 
 ### Start at login
 
-`openAtLogin: true` in the config, or `just launchd` (LaunchAgent, restarted after a crash).
+`openAtLogin: true` in the config, or `just launchd` (a LaunchAgent that restarts paw after a
+crash).
+
+## Configure
+
+On first launch paw writes `~/.config/paw/config.json5` (or `$PAW_CONFIG`) with every default and
+a comment for each key; the same file is [`examples/config.json5`](examples/config.json5). Saving
+applies it at once. A broken file keeps the last good config, and `paw config check` prints the
+problem. Every key is optional: delete one to get its default.
+
+A typical setup: presets for the apps you always use, a status bar, and a key to set it all up:
+
+```json5
+{
+  layout: {
+    workspaces: 7,
+    barTop: 41, // with a 40 pt sketchybar
+  },
+
+  // Which apps go where. Apps in one tile stack, in this order (the first one on top).
+  workspaces: {
+    "1": { layout: "stack", tiles: [ { apps: ["Safari"] } ] },
+    "2": { layout: "bsp", tiles: [ { apps: ["Ghostty"] }, { apps: ["Zed"], size: 1.5 } ] },
+    "3": { layout: "stack", tiles: [ { apps: ["Discord", "Spotify"] } ] },
+    "6": { layout: "stack", tiles: [ { apps: ["Mail", "Calendar"] } ] },
+    "9": { tiles: [ { apps: ["Slack"] } ], display: "secondary" },
+  },
+
+  // `paw initiate`: opens these apps (default: every app named in the presets), waits for their
+  // windows and arranges every workspace, then shows `focus`.
+  initiate: { apps: [], focus: "1", timeout: 15 },
+
+  hooks: {
+    workspaceChanged: "sketchybar --trigger paw_workspace_change",
+    windowsChanged: "sketchybar --trigger paw_windows_change",
+  },
+
+  rules: [
+    { app: "/^(System Settings|Calculator|Raycast)$/", float: true },
+    { app: "Brave Browser", unlessTitle: "Brave", float: true }, // extension popups float
+    { app: "Telegram", workspace: "5" },
+  ],
+}
+```
+
+Setting `bindings` or `rules` replaces the default list, so start from the ones in
+`examples/config.json5` and change what you need.
+
+| Section | Keys |
+|---|---|
+| `layout` | `default` (`stack`), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10) |
+| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false) |
+| `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
+| `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |
+| `workspaces` | `"name": { layout, axis, tiles: [{ apps: ["Discord", "Spotify"], size: 1 }, …], display: "main" }` |
+| `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
+| `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
+| `indicator` | `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
+| `appearance` | `font`, `fontSize`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `borderWidth`, `shadow`, `colors {island islandHi border fg muted dim accent wave good bad}` |
+| `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`) |
+| `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged` (shell commands with `PAW_*` variables) |
+| `openAtLogin` | |
+
+App names are what macOS shows in the menu bar (`paw query` lists the open ones); `/regex/`
+matches by pattern.
+
+### Default bindings
+
+| Keys | |
+|---|---|
+| `ctrl+←↑→↓` | focus |
+| `ctrl+alt+←↑→↓` | swap |
+| `ctrl+shift+←↑→↓` | stack onto the neighbour |
+| `cmd+shift+ctrl+←↑→↓` | warp |
+| `hyper+←/→` | previous / next window in the stack |
+| `ctrl+1…0`, `ralt+1…0` | workspace 1–10 |
+| `ralt+shift+1…0` | send the window to a workspace |
+| `cmd+ctrl+1…0` | send and follow |
+| `ralt+a/d` | previous / next workspace |
+| `hyper+n`, `hyper+d` | new / close workspace |
+| `hyper+w/s/f` | layout bsp / stack / float |
+| `shift+alt+wasd`, `shift+ctrl+wasd` | grow / shrink |
+| `hyper+e`, `alt+r` | balance, rotate |
+| `ctrl+alt+return` | zoom |
+| `ctrl+alt+space`, `ctrl+alt+c` | float, float in the middle |
+| `ctrl+shift+return` | float full size |
+| `ctrl+alt+u` | unstack |
+| `cmd+alt+r` | recover |
+
+### Several displays
+
+Each display shows one workspace; the workspaces themselves are shared. Switching to a workspace
+shows it on the focused display, or focuses the display that already shows it. `focus`/`swap`
+past the screen edge go to the next display, `display <dir>` and `move-to-display` move between
+them, and a preset's `display` (`"main"`, `"secondary"`, `2`…) says where that workspace opens.
+
+### Status bar
+
+`paw query --json` lists every workspace with its windows, and the hooks tell the bar when to read
+it again. [`examples/sketchybar/paw_spaces.lua`](examples/sketchybar/paw_spaces.lua) is a
+complete sketchybar setup.
 
 ## Commands
 
-Bindings and the CLI take the same commands; chain several with `;`.
+Bindings and the CLI take the same commands; chain several with `;`
+(`paw 'workspace 3; layout bsp'`).
 
 | Command | |
 |---|---|
@@ -82,46 +197,17 @@ Bindings and the CLI take the same commands; chain several with `;`.
 | `resize <dir> <points>` | Move that edge (negative shrinks) |
 | `balance`, `rotate 90\|180\|270` | |
 | `grid rows:cols:x:y:w:h` | Float the window into a grid cell |
-| `workspace <n>\|next\|prev\|last\|new\|close` | Switch, add, close (windows go to the previous one) |
+| `workspace <n>\|next\|prev\|last\|new\|close` | Switch, add, close (its windows go to the previous one) |
 | `move-to <n>\|next\|prev [--follow]` | Send the window to a workspace |
 | `display <dir>\|next\|prev\|<n>` | Focus a display |
 | `move-to-display <dir>\|<n> [--follow]` | Send the window to a display's workspace |
-| `arrange [workspace]` | Apply the workspace's preset |
+| `arrange [workspace\|all]` | Apply the preset(s), pulling their apps from other workspaces |
+| `initiate` | Open the preset apps and arrange every workspace |
 | `retile`, `recover`, `reload` | |
-| `exec <shell command>` | Run something (`exec open -a Alacritty`) |
+| `exec <shell command>` | Run something (`exec open -a Terminal`) |
 
 paw itself: `paw status`, `paw query [--json]`, `paw hide|show` (indicators), `paw reload`,
 `paw config path|check|show|template`, `paw icon <app>`, `paw preview out.png`, `paw quit`.
-
-## Config
-
-`~/.config/paw/config.json5` (or `$PAW_CONFIG`), written with every default on first launch; the
-same file is [`examples/config.json5`](examples/config.json5). Saving applies it at once; a broken
-file keeps the last good one (`paw reload` prints the error). Every key is optional.
-
-| Section | Keys |
-|---|---|
-| `layout` | `default` (`stack`), `gap` (10), `padding {top bottom left right}` (2/2/24/24), `barTop` (41), `barBottom` (0), `workspaces` (10) |
-| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false) |
-| `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
-| `bindings` | `"key": "command"`; keys are `cmd ctrl alt shift fn hyper meh`, `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, key names or `0x18`. Setting it replaces the defaults (your skhdrc) |
-| `workspaces` | `"1": { layout, axis, tiles: [{ apps: ["Discord", "Spotify"], size: 1 }, …], display: "main" }` |
-| `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/`. Defaults are the old yabairc rules |
-| `indicator` | `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
-| `appearance` | `font`, `fontSize`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `borderWidth`, `shadow`, `colors {island islandHi border fg muted dim accent wave good bad}` |
-| `icons` | `map` (sketchybar's `app_icons.lua`), `overrides` |
-| `hooks` | `workspaceChanged`, `windowFocused` (shell, with `PAW_*` variables) |
-| `openAtLogin` | |
-
-A preset example:
-
-```json5
-workspaces: {
-  "1": { layout: "bsp", tiles: [ { apps: ["Discord", "Spotify"] }, { apps: ["Ghostty"], size: 1.5 } ] },
-  "2": { layout: "stack", tiles: [ { apps: ["Safari", "Zed"] } ] },
-  "9": { tiles: [ { apps: ["Slack"] } ], display: "secondary" },
-},
-```
 
 ## Development
 
@@ -132,4 +218,5 @@ just build | test | preview | log
 `Sources/PawCore` is pure logic and unit tested: layout tree (insert, remove, swap, warp, stack,
 unstack, resize, rotate, presets), geometry and neighbours, commands, key specs, easing, config.
 `Sources/paw`: `WM/` (accessibility, tracking, animator, bindings, workspaces), `Stacks/` and `UI/`
-(indicators), `CLI/`. Manual checks: [TESTING.md](TESTING.md).
+(indicators), `CLI/`. `just examples` regenerates `examples/config.json5` from the built-in
+template. Manual checks: [TESTING.md](TESTING.md).

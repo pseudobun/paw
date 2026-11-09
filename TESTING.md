@@ -1,19 +1,19 @@
-# Testing paw on sanctum
+# Testing paw by hand
 
-olympus builds and unit-tests paw; a window manager needs a real desktop. Keep `just log` open.
+`just test` covers the layout logic; a window manager also needs a real desktop. Keep `just log` open.
 
 ## Switch over
 
-- [ ] `yabai --stop-service; skhd --stop-service`; quit Hammerspoon
+- [ ] Stop other window managers / hotkey daemons (`yabai --stop-service; skhd --stop-service`)
 - [ ] One native Space per display (Mission Control)
 - [ ] `just local-cert` (once), `just install`, grant Accessibility; `paw status` → `trusted: yes`,
       `bindings: ok`, `iconFont: ok`, windows counted
 
 ## Layout and stacks
 
-- [ ] Existing windows tile on workspace 1 in stack layout (default, like yabairc); indicator island beside it
+- [ ] Existing windows tile on workspace 1 in stack layout (the default); indicator island beside it
 - [ ] `hyper+w` → bsp; `hyper+s` → stack; `hyper+f` → float (windows stay where they are)
-- [ ] In bsp: new window splits the focused one (wide → side by side, tall → top/bottom), with the 10 pt gap and 24 pt side padding, below sketchybar
+- [ ] In bsp: new window splits the focused one (wide → side by side, tall → top/bottom), with the gap and side padding, below `layout.barTop`
 - [ ] `ctrl+arrows` focus moves; pointer jumps into the window; at the screen edge it goes to the other display
 - [ ] `ctrl+alt+arrows` swap; at the edge the window goes to the other display
 - [ ] `cmd+shift+ctrl+arrows` warp
@@ -40,7 +40,8 @@ olympus builds and unit-tests paw; a window manager needs a real desktop. Keep `
 ## Presets and rules
 
 - [ ] Add a `workspaces` preset (README example), then `paw arrange 1` → apps in the right tiles and sizes
-- [ ] Quit and reopen Spotify → it lands in Discord's stack
+- [ ] Quit the preset apps, `paw initiate` → they open and land on their workspaces, `initiate.focus` is shown
+- [ ] Quit and reopen an app from a preset → it lands in its tile
 - [ ] System Settings, Raycast, CleanShot float; a Brave extension popup floats, the main Brave window tiles
 - [ ] `rules: [{ app: "Slack", workspace: "9" }]` → new Slack window opens on 9 without stealing focus
 

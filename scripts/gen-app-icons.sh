@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 src="${1:-}"
 if [ -z "$src" ]; then
-  for c in "$HOME/.config/sketchybar/helpers/app_icons.lua" "$HOME/repos/dotfiles/sketchybar/helpers/app_icons.lua"; do
+  for c in "$HOME/.config/sketchybar/helpers/app_icons.lua"; do
     [ -f "$c" ] && { src="$c"; break; }
   done
 fi
