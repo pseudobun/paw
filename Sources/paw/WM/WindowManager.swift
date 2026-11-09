@@ -154,14 +154,12 @@ final class WindowManager {
     /// Displays come and go in bursts of notifications; act once they settle.
     /// macOS brings displays up one after another (a dock's two monitors ~2 s apart): wait until
     /// they have settled, so windows move once, for the final setup, not once per display.
-    /// Unplugging needs no such wait.
+    /// Unplugging is staggered the same way.
     private func scheduleDisplaysChanged() {
         displaysWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.displaysChanged() }
         displaysWork = work
-        // Unplugging settles at once; plugging in takes a while.
-        let delay = NSScreen.screens.count < displays.count ? 0.8 : 2.5
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
     }
 
     /// A display was plugged in or out, or rearranged: give every display a workspace, park the
