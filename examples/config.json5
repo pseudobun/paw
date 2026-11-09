@@ -1,5 +1,6 @@
 // paw configuration (JSON5: comments and trailing commas are fine).
 // Saved changes apply immediately. Delete a key to use its default.
+// The settings window (paw settings, or the menu bar icon) writes this file too.
 {
   layout: {
     // New workspaces: "bsp", "stack" or "float"
@@ -11,6 +12,9 @@
     barBottom: 0,
     // Workspaces 1…N exist from the start; "workspace new" adds more
     workspaces: 10,
+    // Where initiate and setup switches put windows of apps no preset or rule places:
+// a workspace ("4"), or "" to leave them on the workspace they're on
+    unassignedWorkspace: "",
   },
 
   focus: {
@@ -31,16 +35,32 @@
     maxWindows: 12,
   },
 
-  // Presets: which apps go in which tile. "arrange" (or opening the app) puts them there.
+  // Presets: which apps go in which tile. initiate, arrange (or opening the app) puts them there.
+  // Used when no setup below matches the connected displays.
   workspaces: {
     // "1": {
     //   layout: "bsp",
     //   axis: "horizontal",           // tiles side by side; "vertical" stacks them
     //   tiles: [
-    //     { apps: ["Discord", "Spotify"], size: 1 },   // one stack
+    //     { apps: ["Discord", "Spotify"], size: 1 },   // one stack, first app on top
     //     { apps: ["Ghostty", "/^Alacritty$/"], size: 1 },
     //   ],
-    //   display: "main",              // or "secondary", or 1, 2…
+    //   display: "builtin",           // pin: "builtin", "external", "main", "secondary", 1, 2… or a name ("DELL")
+    // },
+  },
+
+  // Presets per display arrangement. When the connected displays match a setup's `displays`
+  // (one entry each: "builtin", "external" or part of a name), its workspaces replace the ones
+  // above, every display shows its pinned workspace and windows move where the presets say.
+  setups: {
+    // home: {
+    //   displays: ["builtin", "DELL", "Gigabyte"],
+    //   focus: "9",
+    //   workspaces: {
+    //     "1": { display: "builtin" },
+    //     "8": { display: "DELL", layout: "stack", tiles: [ { apps: ["Discord", "Spotify"] } ] },
+    //     "9": { display: "Gigabyte", layout: "bsp", tiles: [ { apps: ["Safari"], size: 2 }, { apps: ["Zed"] } ] },
+    //   },
     // },
   },
 
@@ -80,6 +100,7 @@
     cellRadius: 7,
     borderWidth: 1,
     shadow: true,
+    // 0xAARRGGBB or "#RRGGBB"
     colors: {
       island: "0xeb1d1d16",
       islandHi: "0xff2b2b22",
@@ -95,6 +116,7 @@
   },
 
   icons: {
+    // sketchybar's app → glyph map; paw's built-in copy is used when it's missing
     map: "~/.config/sketchybar/helpers/app_icons.lua",
     overrides: {},
     // Each icon in the app's own colour (picked from its app icon); colors fixes single apps
@@ -112,8 +134,8 @@
     modeChanged: "",
   },
 
-  // `paw initiate` ("Initiate workspace"): opens the apps, waits for their windows, then
-  // arranges every preset. apps: [] means every plain app name in the presets.
+  // `paw initiate` (also `paw reset`): opens the apps, waits for their windows, then arranges
+  // every preset. apps: [] means every plain app name in the presets.
   initiate: {
     apps: [],
     focus: "",
@@ -230,12 +252,26 @@
   // island at the top of the screen says so. resize <dir> <points> moves that edge.
   modes: {
     resize: {
-      "left": "resize west 40", "right": "resize east 40", "up": "resize north 40", "down": "resize south 40",
-      "h": "resize west 40", "l": "resize east 40", "k": "resize north 40", "j": "resize south 40",
-      "shift+left": "resize west -40", "shift+right": "resize east -40", "shift+up": "resize north -40", "shift+down": "resize south -40",
-      "shift+h": "resize west -40", "shift+l": "resize east -40", "shift+k": "resize north -40", "shift+j": "resize south -40",
       "e": "balance",
-      "escape": "mode exit", "return": "mode exit", "hyper+r": "mode exit",
+      "shift+l": "resize east -40",
+      "shift+right": "resize east -40",
+      "l": "resize east 40",
+      "right": "resize east 40",
+      "shift+k": "resize north -40",
+      "shift+up": "resize north -40",
+      "k": "resize north 40",
+      "up": "resize north 40",
+      "shift+down": "resize south -40",
+      "shift+j": "resize south -40",
+      "down": "resize south 40",
+      "j": "resize south 40",
+      "shift+h": "resize west -40",
+      "shift+left": "resize west -40",
+      "h": "resize west 40",
+      "left": "resize west 40",
+      "escape": "mode exit",
+      "hyper+r": "mode exit",
+      "return": "mode exit",
     },
   },
 }

@@ -94,4 +94,28 @@ struct PresetConfigTests {
         i.apps = ["Slack"]
         #expect(i.appsToOpen(c.workspaces) == ["Slack"])
     }
+
+    @Test func renderRoundTrips() throws {
+        let c = try ConfigLoader.decode(Data("""
+        { layout: { unassignedWorkspace: "4", barTop: 41 },
+          workspaces: { "1": { layout: "stack", tiles: [ { apps: ["Brave Browser"] } ] } },
+          setups: { home: { displays: ["builtin", "DELL"], focus: "9",
+            workspaces: { "1": { display: "builtin" },
+                          "8": { display: "DELL", layout: "stack", tiles: [ { apps: ["Discord", "Spotify"] } ] },
+                          "9": { layout: "bsp", axis: "vertical", tiles: [ { apps: ["Brave Browser"], size: 2 }, { apps: ["/^T3/"] } ] } } } },
+          rules: [ { app: "Slack", workspace: "9", title: "say \\"hi\\"" } ],
+          icons: { colors: { "Brave Browser": "#fb542b" } },
+          bindings: { "hyper+i": "initiate" } }
+        """.utf8))
+        let text = ConfigTemplate.render(c)
+        #expect(try ConfigLoader.decode(Data(text.utf8)) == c)
+        #expect(ConfigLoader.unknownKeys(Data(text.utf8)).isEmpty)
+    }
+
+    @Test func setupMatchesDisplays() throws {
+        let s = PawConfig.Setup(displays: ["builtin", "DELL", "external"])
+        #expect(s.matches([("Built-in Retina Display", true), ("Gigabyte M32U", false), ("DELL U2717D", false)]))
+        #expect(!s.matches([("Built-in Retina Display", true), ("DELL U2717D", false)]))
+        #expect(!s.matches([("Built-in Retina Display", true), ("LG", false), ("Gigabyte", false)]))
+    }
 }

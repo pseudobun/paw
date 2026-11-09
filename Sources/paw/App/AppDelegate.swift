@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var observers: [NSObjectProtocol] = []
     private var signalSources: [DispatchSourceSignal] = []
     private var trustTimer: Timer?
+    private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if isAlreadyRunning() {
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         updateLoginItem(settings.config.openAtLogin)
+        setUpStatusItem()
         Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
     }
 
@@ -72,6 +74,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateLoginItem(settings.config.openAtLogin)
     }
 
+    // MARK: - Menu bar
+
+    private func setUpStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(systemSymbolName: "rectangle.3.group", accessibilityDescription: "paw")
+        let menu = NSMenu()
+        menu.delegate = self
+        item.menu = menu
+        statusItem = item
+    }
+
+    @objc private func openSettings() {
+        MainActor.assumeIsolated { SettingsWindowController.shared.show(settings: settings) }
+    }
+
+    @objc private func pickSetup(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        wm.run([.initiate(name)])
+    }
+
+    @objc private func initiateCurrent() { wm.run([.initiate(nil)]) }
+    @objc private func reloadConfig() { settings.load() }
+    @objc private func openConfig() { NSWorkspace.shared.open(settings.url) }
+    @objc private func quit() { NSApp.terminate(nil) }
+
     private func updateLoginItem(_ on: Bool) {
         guard AppPaths.isAppBundle else { return }
         let service = SMAppService.mainApp
@@ -96,8 +123,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reply("reload", ["error": settings.error ?? "", "warnings": settings.warnings.joined(separator: "\n")])
         case "quit":
             NSApp.terminate(nil)
+        case "settings":
+            openSettings()
         case "status":
-            let names = wm.displays.map(\.workspace).joined(separator: ", ")
+            let names = wm.displays.map { wm.label($0.workspace) }.joined(separator: ", ")
             reply("status", ["version": AppPaths.version, "pid": "\(ProcessInfo.processInfo.processIdentifier)",
                              "trusted": AX.isTrusted ? "yes" : "no", "windows": "\(wm.windows.count)",
                              "workspaces": names, "stacks": "\(wm.indicators.snapshot.count)",
@@ -118,5 +147,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let data = try? JSONSerialization.data(withJSONObject: info, options: [.sortedKeys]) { try? data.write(to: url) }
         DistributedNotificationCenter.default().postNotificationName(AppPaths.replyNotification, object: command, userInfo: nil,
                                                                      deliverImmediately: true)
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    /// Built when it opens, so setups and the active one are current.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let setups = settings.config.setups.keys.sorted()
+        if !setups.isEmpty {
+            menu.addItem(NSMenuItem(title: "Set Workspace", action: nil, keyEquivalent: ""))
+            for name in setups {
+                let item = NSMenuItem(title: "  " + name.capitalized, action: #selector(pickSetup(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = name
+                item.state = wm?.activeSetup == name ? .on : .off
+                menu.addItem(item)
+            }
+            menu.addItem(.separator())
+        }
+        for (title, action, key) in [("Arrange Apps", #selector(initiateCurrent), ""), ("Settings…", #selector(openSettings), ","),
+                                     ("Open Config File", #selector(openConfig), ""), ("Reload Config", #selector(reloadConfig), "r")] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.target = self
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "Quit paw", action: #selector(quit), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
     }
 }

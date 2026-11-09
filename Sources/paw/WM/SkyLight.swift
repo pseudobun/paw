@@ -19,6 +19,18 @@ enum SkyLight {
         return unsafeBitCast(p, to: T.self)
     }
 
+    private typealias MainConnection = @convention(c) () -> Int32
+    private typealias CopyManagedDisplays = @convention(c) (Int32) -> Unmanaged<CFArray>?
+    private static let mainConnection: MainConnection? = sym("SLSMainConnectionID", in: handle)
+    private static let copyManagedDisplays: CopyManagedDisplays? = sym("SLSCopyManagedDisplays", in: handle)
+
+    /// Display UUIDs in the window server's order, the order sketchybar numbers displays in
+    /// (its arrangement-id is the 1-based position here).
+    static func managedDisplayUUIDs() -> [String] {
+        guard let mainConnection, let copyManagedDisplays, let list = copyManagedDisplays(mainConnection())?.takeRetainedValue() else { return [] }
+        return (list as? [String]) ?? []
+    }
+
     static var available: Bool { setFront != nil && post != nil && getPSN != nil }
 
     /// Focuses and raises one window. Falls back to activating the app.

@@ -31,6 +31,20 @@ final class WindowManager {
     private var saveWork: DispatchWorkItem?
     private var windowsHookWork: DispatchWorkItem?
     private var displaysWork: DispatchWorkItem?
+    /// The `setups` entry matching the connected displays; nil uses `workspaces`.
+    private(set) var activeSetup: String?
+    private var setupChanged = false
+    /// Set by `initiate <setup>`: that setup stays until the displays change.
+    private var forcedSetup: String?
+    private var lastDisplayIDs: [String] = []
+    /// Workspaces made with `workspace new` on a display that has pinned workspaces: they belong
+    /// to that display and are numbered after its other workspaces (yabai's space order).
+    private var extraPins: [String: CGDirectDisplayID] = [:]
+    private var extraSeq = 0
+    /// When paw last switched a display's workspace itself.
+    private var lastSwitch = Date.distantPast
+    /// The workspace presets in effect: the active setup's, else `workspaces`.
+    var presets: [String: WorkspacePreset] { activeSetup.flatMap { config.setups[$0]?.workspaces } ?? config.workspaces }
     /// The workspace each display showed last, so one plugged in again gets its workspace back.
     private var workspaceByDisplay: [CGDirectDisplayID: String] = [:]
     private(set) var mode: String?
@@ -89,6 +103,7 @@ final class WindowManager {
             self?.scheduleDisplaysChanged()
         })
         layoutAll(animated: false)
+        if setupChanged { applySetup() }
         if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier { syncFocus(pid, force: true) }
         Log.app.info("managing \(self.windows.count) windows on \(self.displays.count) displays")
     }
@@ -102,6 +117,7 @@ final class WindowManager {
         if !displays.isEmpty {
             rebuildDisplays()
             layoutAll(animated: true)
+            if setupChanged { applySetup() }
         }
     }
 
@@ -170,6 +186,7 @@ final class WindowManager {
             }
         }
         layoutAll(animated: false)
+        if setupChanged { applySetup() }
         if before != after {
             runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": focusedWorkspace.name, "PAW_PREV_WORKSPACE": focusedWorkspace.name])
         }
@@ -191,9 +208,23 @@ final class WindowManager {
             if !ws.isEmpty { used.insert(ws) }
             return Display(id: id, name: s.localizedName, builtin: CGDisplayIsBuiltin(id) != 0, frame: frame, area: area, workspace: ws)
         }
+        let displaysNow = displays.map { "\($0.id)" }
+        if !lastDisplayIDs.isEmpty, displaysNow != lastDisplayIDs { forcedSetup = nil }
+        lastDisplayIDs = displaysNow
+        let match = forcedSetup.flatMap { n in config.setups[n].map { (name: n, setup: $0) } }
+            ?? config.setup(for: displays.map { (name: $0.name, builtin: $0.builtin) })
+        if match?.name != activeSetup {
+            activeSetup = match?.name
+            setupChanged = true
+            // A new arrangement: every display gets its pinned workspace again.
+            used = []
+            for i in displays.indices { displays[i].workspace = "" }
+            Log.app.info("setup: \(match?.name ?? "default", privacy: .public)")
+        }
         for n in 1...max(1, l.workspaces) { _ = workspace("\(n)") }
+        for name in presets.keys { _ = workspace(name) }
         for i in displays.indices where displays[i].workspace.isEmpty {
-            let preset = config.workspaces.first { displayIndex(for: $0.value.display) == i && !used.contains($0.key) }?.key
+            let preset = presets.keys.sorted(by: Self.nameOrder).first { displayIndex(for: presets[$0]?.display) == i && !used.contains($0) }
             let name = preset ?? orderedNames.first { !used.contains($0) } ?? "\(displays.count + i)"
             displays[i].workspace = name
             used.insert(name)
@@ -218,19 +249,28 @@ final class WindowManager {
     @discardableResult
     func workspace(_ name: String) -> Workspace {
         if let w = workspaces[name] { return w }
-        let w = Workspace(name: name, layout: config.workspaces[name]?.layout ?? config.layout.default)
+        let w = Workspace(name: name, layout: presets[name]?.layout ?? config.layout.default)
         workspaces[name] = w
         return w
     }
 
-    var orderedNames: [String] {
-        workspaces.keys.sorted { a, b in
-            switch (Int(a), Int(b)) {
-            case let (x?, y?): return x < y
-            case (_?, nil): return true
-            case (nil, _?): return false
-            default: return a < b
-            }
+    var orderedNames: [String] { workspaces.keys.sorted(by: Self.nameOrder) }
+
+    /// sketchybar's arrangement-id for a display: its 1-based position among the window server's
+    /// managed displays (NSScreen.screens and CGGetActiveDisplayList use other orders).
+    static func arrangement(of id: CGDirectDisplayID) -> Int {
+        guard let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(),
+              let text = CFUUIDCreateString(nil, uuid) as String? else { return 0 }
+        return SkyLight.managedDisplayUUIDs().firstIndex { $0.caseInsensitiveCompare(text) == .orderedSame }.map { $0 + 1 } ?? 0
+    }
+
+    /// Numbers in order, then names.
+    static func nameOrder(_ a: String, _ b: String) -> Bool {
+        switch (Int(a), Int(b)) {
+        case let (x?, y?): return x < y
+        case (_?, nil): return true
+        case (nil, _?): return false
+        default: return a < b
         }
     }
 
@@ -274,14 +314,14 @@ final class WindowManager {
         tracker.watch(window: el, pid: pid)
 
         let float = rules.contains { $0.float == true } || subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute)
-        let presetName = config.workspaces.first { $0.value.slot(for: appName) != nil }?.key
+        let presetName = presets.first { $0.value.slot(for: appName) != nil }?.key
         var name = state?[id] ?? rules.first(where: { $0.workspace != nil })?.workspace ?? presetName
         if name == nil, initial, let di = displays.indices.first(where: { displays[$0].frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }) {
             name = displays[di].workspace
         }
         let ws = workspace(name ?? focusedWorkspace.name)
         if float { w.floatFrame = frame }
-        ws.insert(id, area: area(of: ws), floating: float, slot: config.workspaces[ws.name]?.slot(for: appName))
+        ws.insert(id, area: area(of: ws), floating: float, slot: presets[ws.name]?.slot(for: appName))
         if !initial || ws.focused == nil { ws.focused = id }
         if displayShowing(ws.name) == nil { hide(w, from: ws) }
         if !initial { layout(ws, animated: true) }
@@ -366,6 +406,9 @@ final class WindowManager {
             updateIndicators()
             runHook(config.hooks.windowFocused, ["PAW_WINDOW": "\(id)", "PAW_APP": windows[id]?.app ?? ""])
         } else {
+            // Right after paw switches (to an empty workspace, say), macOS hands focus to some
+            // window it just hid; following that would switch straight back.
+            guard force || Date().timeIntervalSince(lastSwitch) > 1.5 else { return }
             ws.focused = id
             show(ws.name)
         }
@@ -527,25 +570,66 @@ final class WindowManager {
             focusWindow(ws.focused ?? ws.allWindows.first, warp: true)
             return
         }
-        let di = displayIndex(for: config.workspaces[name]?.display) ?? focusedDisplay
+        let di = homeDisplay(name) ?? focusedDisplay
         guard displays.indices.contains(di) else { return }
         let old = displays[di].workspace
         ignoreFocus(0.5)
         for id in workspace(old).allWindows { if let w = windows[id], !w.isHidden { hide(w, from: workspace(old)) } }
         displays[di].workspace = name
         focusedDisplay = di
+        lastSwitch = Date()
         if old != name { lastWorkspace = old }
         layout(ws, animated: false)
         if let f = ws.focused ?? ws.allWindows.first { focusWindow(f, warp: true) } else { updateIndicators() }
-        runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": name, "PAW_PREV_WORKSPACE": old])
+        runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": label(name), "PAW_PREV_WORKSPACE": label(old)])
         scheduleSave()
     }
 
-    private func resolve(_ t: Command.WorkspaceTarget) -> String? {
+    /// The display a workspace belongs to: its preset's pin or the display it was made on.
+    func homeDisplay(_ name: String) -> Int? {
+        displayIndex(for: presets[name]?.display) ?? extraPins[name].flatMap { id in displays.firstIndex { $0.id == id } }
+    }
+
+    /// Workspaces in the order their numbers go: display by display (the display whose first
+    /// workspace has the lowest number first), new ones after the rest of their display. Without
+    /// pinned workspaces this is just the names in order.
+    var numbered: [String] {
         let names = orderedNames
+        guard names.contains(where: { homeDisplay($0) != nil }) else { return names }
+        func group(_ n: String) -> String { homeDisplay(n).map { "d\($0)" } ?? "w\(n)" }
+        var first: [String: String] = [:]
+        for n in names where extraPins[n] == nil {
+            let g = group(n)
+            if first[g].map({ Self.nameOrder(n, $0) }) ?? true { first[g] = n }
+        }
+        func key(_ n: String) -> (String, Int, String) {
+            let g = group(n)
+            return (first[g] ?? n, extraPins[n] == nil ? 0 : 1, n)
+        }
+        return names.sorted { a, b in
+            let ka = key(a), kb = key(b)
+            if ka.0 != kb.0 { return Self.nameOrder(ka.0, kb.0) }
+            if ka.1 != kb.1 { return ka.1 < kb.1 }
+            return ka.1 == 1 ? (Int(ka.2.dropFirst()) ?? 0) < (Int(kb.2.dropFirst()) ?? 0) : Self.nameOrder(ka.2, kb.2)
+        }
+    }
+
+    /// The number a workspace shows (sketchybar, `workspace N`): its place in `numbered` when
+    /// workspaces are pinned, else its name.
+    func label(_ name: String) -> String {
+        guard extraPins.isEmpty == false || orderedNames.contains(where: { homeDisplay($0) != nil }) else { return name }
+        return numbered.firstIndex(of: name).map { "\($0 + 1)" } ?? name
+    }
+
+    private func resolve(_ t: Command.WorkspaceTarget) -> String? {
+        let names = numbered
         let cur = focusedWorkspace.name
         switch t {
-        case .name(let n): return n
+        case .name(let n):
+            if let i = Int(n), names.contains(where: { homeDisplay($0) != nil }) {
+                return names.indices.contains(i - 1) ? names[i - 1] : nil
+            }
+            return n
         case .last: return lastWorkspace
         case .next, .prev:
             guard let i = names.firstIndex(of: cur), names.count > 1 else { return nil }
@@ -596,9 +680,14 @@ final class WindowManager {
 
     /// "Initiate workspace": opens the preset apps that aren't running, waits until each has a
     /// window (or the timeout), then arranges every preset workspace.
-    private func initiate() {
+    private func initiate(setup: String? = nil) {
+        if let setup {
+            guard config.setups[setup] != nil else { Log.app.error("no setup \(setup, privacy: .public)"); return }
+            forcedSetup = setup
+            rebuildDisplays()
+        }
         let cfg = config.initiate
-        let apps = cfg.appsToOpen(config.workspaces)
+        let apps = cfg.appsToOpen(presets)
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.localizedName))
         for app in apps where !running.contains(app) { Shell.run("open -g -a \(Self.shellQuote(app))", env: [:]) }
         let deadline = Date().addingTimeInterval(cfg.timeout)
@@ -606,8 +695,7 @@ final class WindowManager {
             for app in NSWorkspace.shared.runningApplications where apps.contains(app.localizedName ?? "") { adopt(app, state: nil) }
             let have = Set(windows.values.map(\.app))
             if apps.allSatisfy({ have.contains($0) }) || Date() > deadline {
-                execute(.arrange("all"))
-                if !cfg.focus.isEmpty { show(cfg.focus) }
+                applySetup()
                 return
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { check() }
@@ -615,12 +703,62 @@ final class WindowManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { check() }
     }
 
+    /// Puts everything where the presets in effect say: every preset workspace arranged, windows
+    /// of other apps on `layout.unassignedWorkspace`, each display on its pinned workspace, then
+    /// the setup's (or initiate's) focus.
+    func applySetup() {
+        setupChanged = false
+        arrangeAll()
+        for i in displays.indices {
+            let pinned = presets.keys.sorted(by: Self.nameOrder).first { displayIndex(for: presets[$0]?.display) == i }
+            if let pinned, pinned != displays[i].workspace {
+                focusedDisplay = i
+                show(pinned)
+            }
+        }
+        let focus = activeSetup.flatMap { config.setups[$0]?.focus }.flatMap { $0.isEmpty ? nil : $0 } ?? config.initiate.focus
+        if !focus.isEmpty { show(focus) }
+        layoutAll(animated: false)
+        runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": focusedWorkspace.name, "PAW_PREV_WORKSPACE": focusedWorkspace.name])
+    }
+
+    /// Every preset arranged, the rest on the unassigned workspace, leftover empty extras closed.
+    private func arrangeAll() {
+        for name in presets.keys.sorted(by: Self.nameOrder) { arrange(name) }
+        placeUnassigned()
+        let keep = Set(presets.keys).union((1...max(1, config.layout.workspaces)).map(String.init)).union(displays.map(\.workspace))
+        for (name, ws) in workspaces where ws.allWindows.isEmpty && !keep.contains(name) {
+            workspaces[name] = nil
+            extraPins[name] = nil
+        }
+        scheduleSave()
+    }
+
+    /// Windows of apps that no preset or rule places go to `layout.unassignedWorkspace`.
+    private func placeUnassigned() {
+        let target = config.layout.unassignedWorkspace
+        guard !target.isEmpty else { return }
+        let to = workspace(target)
+        for ws in workspaces.values where ws !== to {
+            for id in ws.allWindows {
+                guard let w = windows[id] else { continue }
+                let placed = presets.values.contains { $0.slot(for: w.app) != nil }
+                    || config.rules.contains { $0.workspace != nil && $0.matches(app: w.app, title: w.title) }
+                guard !placed else { continue }
+                let floating = ws.isFloating(id)
+                ws.remove(id)
+                to.insert(id, area: area(of: to), floating: floating, slot: nil)
+                if displayShowing(target) == nil { hide(w, from: to) }
+            }
+        }
+    }
+
     static func shellQuote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
     /// Applies a workspace preset: pulls its apps' tiled windows from other workspaces, then
     /// rebuilds the tiles in preset order.
     private func arrange(_ name: String) {
-        guard let preset = config.workspaces[name] else { return }
+        guard let preset = presets[name] else { return }
         let target = workspace(name)
         var touched: [Workspace] = []
         for other in workspaces.values where other !== target {
@@ -647,7 +785,7 @@ final class WindowManager {
         let floating = from.isFloating(id)
         from.remove(id)
         let to = workspace(name)
-        to.insert(id, area: area(of: to), floating: floating, slot: config.workspaces[name]?.slot(for: w.app))
+        to.insert(id, area: area(of: to), floating: floating, slot: presets[name]?.slot(for: w.app))
         to.focused = id
         if displayShowing(name) != nil { layout(to, animated: true) } else { hide(w, from: to) }
         if displayShowing(from.name) != nil { layout(from, animated: true) }
@@ -670,6 +808,7 @@ final class WindowManager {
     // MARK: - Commands
 
     func run(_ cmds: [Command]) {
+        Log.app.debug("run \(String(describing: cmds), privacy: .public) on \(self.focusedWorkspace.name, privacy: .public) focused \(String(describing: self.focusedID), privacy: .public)")
         for c in cmds { execute(c) }
     }
 
@@ -758,9 +897,18 @@ final class WindowManager {
         case .workspace(let t):
             if let n = resolve(t) { show(n) }
         case .workspaceNew:
-            var n = 1
-            while let w = workspaces["\(n)"], !w.isEmpty || displayShowing(w.name) != nil { n += 1 }
-            show("\(n)")
+            if displays.indices.contains(focusedDisplay), orderedNames.contains(where: { homeDisplay($0) == focusedDisplay }) {
+                // On this display, numbered after its workspaces; later displays' numbers move up.
+                extraSeq += 1
+                let name = "+\(extraSeq)"
+                extraPins[name] = displays[focusedDisplay].id
+                _ = workspace(name)
+                show(name)
+            } else {
+                var n = 1
+                while let w = workspaces["\(n)"], !w.isEmpty || displayShowing(w.name) != nil { n += 1 }
+                show("\(n)")
+            }
         case .workspaceClose:
             closeWorkspace(ws)
         case .moveTo(let t, let follow):
@@ -773,13 +921,12 @@ final class WindowManager {
             }
         case .moveToDisplay(let t, let follow):
             if let id = fid, let di = displayTarget(t) { moveWindow(id, to: displays[di].workspace, follow: follow) }
-        case .initiate:
-            initiate()
+        case .initiate(let setup):
+            initiate(setup: setup)
         case .mode(let name):
             setMode(name == mode ? nil : name)
         case .arrange(let name):
-            let names = name == "all" ? config.workspaces.keys.sorted() : [name ?? ws.name]
-            for n in names { arrange(n) }
+            if name == "all" { arrangeAll() } else { arrange(name ?? ws.name) }
         case .exec(let cmd):
             Shell.run(cmd, env: [:])
         case .retile:
@@ -807,9 +954,12 @@ final class WindowManager {
     }
 
     private func closeWorkspace(_ ws: Workspace) {
-        let names = orderedNames
+        let names = numbered
         guard names.count > 1 else { return }
-        let fallback = lastWorkspace.flatMap { $0 != ws.name && workspaces[$0] != nil ? $0 : nil }
+        // Another workspace of the same display first.
+        let sameDisplay = names.filter { $0 != ws.name && homeDisplay($0) != nil && homeDisplay($0) == homeDisplay(ws.name) }
+        let fallback = sameDisplay.last(where: { Self.nameOrder($0, ws.name) || extraPins[$0] != nil }) ?? sameDisplay.first
+            ?? lastWorkspace.flatMap { $0 != ws.name && workspaces[$0] != nil ? $0 : nil }
             ?? names[(names.firstIndex(of: ws.name)! + names.count - 1) % names.count]
         let target = workspace(fallback)
         for id in ws.allWindows {
@@ -818,7 +968,10 @@ final class WindowManager {
             target.insert(id, area: self.area(of: target), floating: floating)
         }
         show(fallback)
-        if Int(ws.name).map({ $0 > config.layout.workspaces }) ?? true { workspaces[ws.name] = nil }
+        if Int(ws.name).map({ $0 > config.layout.workspaces }) ?? true, presets[ws.name] == nil {
+            workspaces[ws.name] = nil
+            extraPins[ws.name] = nil
+        }
         layoutAll(animated: true)
     }
 
@@ -895,9 +1048,13 @@ final class WindowManager {
 
     /// Workspaces for `paw query`.
     func query() -> [[String: Any]] {
-        orderedNames.map { name in
+        numbered.map { name in
             let ws = workspace(name)
-            return ["name": name, "visible": displayShowing(name) != nil, "focused": name == focusedWorkspace.name,
+            let pinned = homeDisplay(name)
+            let home = pinned ?? displayShowing(name)
+            return ["name": label(name), "id": name, "visible": displayShowing(name) != nil, "focused": name == focusedWorkspace.name,
+                    "displayID": home.map { Int(displays[$0].id) } ?? 0, "pinned": pinned != nil,
+                    "arrangement": home.map { Self.arrangement(of: displays[$0].id) } ?? 0,
                     "display": displayShowing(name).map { $0 + 1 } ?? 0, "layout": ws.layout.rawValue,
                     "windows": ws.allWindows.compactMap { id -> [String: Any]? in
                         guard let w = windows[id] else { return nil }

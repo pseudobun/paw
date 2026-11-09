@@ -85,6 +85,24 @@ struct TreeTests {
         #expect(ws.tiles.count == 3)
     }
 
+    @Test func warpOutOfAStackWithNothingThatWay() {
+        let ws = Workspace(name: "w", layout: .stack)
+        for id: WindowID in [1, 2] { ws.insert(id, area: area) }
+        #expect(ws.warp(2, .west, area: area))
+        #expect(ws.tiles.count == 2 && ws.layout == .bsp)
+        let frames = TreeLayout.windowFrames(ws, in: area, gap: 0)
+        #expect(frames[2]!.minX < frames[1]!.minX)
+    }
+
+    @Test func bspAgainSplitsStacks() {
+        let ws = Workspace(name: "b", layout: .bsp)
+        for id: WindowID in [1, 2, 3] { ws.insert(id, area: area) }
+        #expect(ws.stack(3, .west, area: area))
+        #expect(ws.tiles.count == 2)
+        ws.setLayout(.bsp, area: area)
+        #expect(ws.tiles.count == 3 && ws.tiles.allSatisfy { $0.windows.count == 1 })
+    }
+
     @Test func cycleStackStopsOrWraps() {
         let ws = Workspace(name: "s", layout: .stack)
         for id: WindowID in [1, 2, 3] { ws.insert(id, area: area) }
@@ -253,5 +271,14 @@ struct EasingTests {
         #expect(Easing.easeOutCubic.value(0.5) > 0.5)
         #expect(Easing.lerp(CGRect(x: 0, y: 0, width: 100, height: 100), CGRect(x: 100, y: 0, width: 200, height: 100), 0.5)
                 == CGRect(x: 50, y: 0, width: 150, height: 100))
+    }
+}
+
+struct TilesTextTests {
+    @Test func roundTrips() {
+        var p = WorkspacePreset(layout: .bsp, tiles: [.init(apps: ["Brave Browser"], size: 2), .init(apps: ["T3 Code (Beta)", "Zed"])])
+        #expect(p.tilesText == "Brave Browser *2 | T3 Code (Beta), Zed")
+        p.tilesText = " Discord , Spotify | Ghostty *1.5 | "
+        #expect(p.tiles == [.init(apps: ["Discord", "Spotify"]), .init(apps: ["Ghostty"], size: 1.5)])
     }
 }

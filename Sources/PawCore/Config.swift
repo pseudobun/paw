@@ -9,8 +9,13 @@ public struct PawConfig: Codable, Equatable, Sendable {
     public var bindings: [String: String] = Defaults.bindings
     /// Key maps for modes: while `mode <name>` is on, its keys come first ("escape": "mode exit").
     public var modes: [String: [String: String]] = Defaults.modes
-    /// Workspace presets by name: layout and which apps go in which tile.
+    /// Workspace presets by name: layout and which apps go in which tile. Used when no setup in
+    /// `setups` matches the connected displays.
     public var workspaces: [String: WorkspacePreset] = [:]
+    /// Presets per display arrangement ("home": laptop + DELL + Gigabyte). The first setup whose
+    /// `displays` match the connected displays replaces `workspaces`; paw switches by itself
+    /// when displays come and go.
+    public var setups: [String: Setup] = [:]
     public var rules: [Rule] = Defaults.rules
     public var indicator = Indicator()
     public var appearance = Appearance()
@@ -34,6 +39,9 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var barBottom = 0.0
         /// How many workspaces exist from the start (1…N); more come with `workspace new`.
         public var workspaces = 10
+        /// Where `initiate` and setup switches put windows of apps no preset or rule places:
+        /// a workspace name, or "" to leave them on the workspace they're on.
+        public var unassignedWorkspace = ""
         public init() {}
     }
 
@@ -97,6 +105,48 @@ public struct PawConfig: Codable, Equatable, Sendable {
             }
             return s.localizedCaseInsensitiveContains(pattern)
         }
+    }
+
+    public struct Setup: Codable, Equatable, Sendable {
+        /// One entry per display: "builtin", "external", "main", or (part of) its name ("DELL").
+        public var displays: [String] = []
+        /// Presets as in `workspaces`; `display` pins a workspace to one of these displays.
+        public var workspaces: [String: WorkspacePreset] = [:]
+        /// Workspace to focus after switching to this setup; "" keeps `initiate.focus`.
+        public var focus = ""
+        public init(displays: [String] = [], workspaces: [String: WorkspacePreset] = [:], focus: String = "") {
+            self.displays = displays
+            self.workspaces = workspaces
+            self.focus = focus
+        }
+
+        /// Whether these displays (names, built-in or not) are exactly the ones `displays` asks for.
+        public func matches(_ connected: [(name: String, builtin: Bool)]) -> Bool {
+            guard connected.count == displays.count else { return false }
+            var free = Array(connected.indices)
+            // Specific names first, so "external" doesn't take the display "DELL" needs.
+            let generic: Set<String> = ["builtin", "internal", "laptop", "external", "main", "primary", "secondary"]
+            for spec in displays.sorted(by: { !generic.contains($0.lowercased()) && generic.contains($1.lowercased()) }) {
+                guard let k = free.firstIndex(where: { Self.spec(spec, matches: connected[$0], index: $0) }) else { return false }
+                free.remove(at: k)
+            }
+            return true
+        }
+
+        static func spec(_ spec: String, matches d: (name: String, builtin: Bool), index: Int) -> Bool {
+            switch spec.lowercased() {
+            case "builtin", "internal", "laptop": return d.builtin
+            case "external": return !d.builtin
+            case "main", "primary": return index == 0
+            case "secondary": return index == 1
+            default: return d.name.localizedCaseInsensitiveContains(spec)
+            }
+        }
+    }
+
+    /// The setup for these displays, if one matches.
+    public func setup(for connected: [(name: String, builtin: Bool)]) -> (name: String, setup: Setup)? {
+        setups.sorted { $0.key < $1.key }.first { $0.value.matches(connected) }.map { ($0.key, $0.value) }
     }
 
     public struct Initiate: Codable, Equatable, Sendable {
@@ -219,22 +269,22 @@ struct Fields<K: CodingKey> {
 
 extension PawConfig {
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case layout, focus, animation, bindings, modes, workspaces, rules, indicator, appearance, icons, hooks, initiate, openAtLogin
+        case layout, focus, animation, bindings, modes, workspaces, setups, rules, indicator, appearance, icons, hooks, initiate, openAtLogin
     }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.layout, &layout); try f(.focus, &focus); try f(.animation, &animation); try f(.bindings, &bindings); try f(.modes, &modes)
-        try f(.workspaces, &workspaces); try f(.rules, &rules); try f(.indicator, &indicator); try f(.appearance, &appearance)
+        try f(.workspaces, &workspaces); try f(.setups, &setups); try f(.rules, &rules); try f(.indicator, &indicator); try f(.appearance, &appearance)
         try f(.icons, &icons); try f(.hooks, &hooks); try f(.initiate, &initiate); try f(.openAtLogin, &openAtLogin)
     }
 }
 
 extension PawConfig.Layout {
-    enum CodingKeys: String, CodingKey, CaseIterable { case `default`, gap, padding, barTop, barBottom, workspaces }
+    enum CodingKeys: String, CodingKey, CaseIterable { case `default`, gap, padding, barTop, barBottom, workspaces, unassignedWorkspace }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.default, &`default`); try f(.gap, &gap); try f(.padding, &padding); try f(.barTop, &barTop)
-        try f(.barBottom, &barBottom); try f(.workspaces, &workspaces)
+        try f(.barBottom, &barBottom); try f(.workspaces, &workspaces); try f(.unassignedWorkspace, &unassignedWorkspace)
     }
 }
 
@@ -252,6 +302,14 @@ extension PawConfig.Animation {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.enabled, &enabled); try f(.durationMs, &durationMs); try f(.curve, &curve); try f(.resize, &resize)
         try f(.maxWindows, &maxWindows)
+    }
+}
+
+extension PawConfig.Setup {
+    enum CodingKeys: String, CodingKey, CaseIterable { case displays, workspaces, focus }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.displays, &displays); try f(.workspaces, &workspaces); try f(.focus, &focus)
     }
 }
 

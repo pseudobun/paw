@@ -65,6 +65,7 @@ final class Hotkeys {
     private func handle(_ event: CGEvent) -> Bool {
         let code = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags.rawValue
+        if code >= 123 && code <= 126 { Log.app.debug("key \(code) flags 0x\(String(flags, radix: 16), privacy: .public)") }
         let modeList = mode.flatMap { modeKeys[$0]?[code] } ?? []
         for (spec, cmds) in modeList + (byKey[code] ?? []) where spec.matches(keyCode: code, flags: flags) {
             // Key repeat of a binding (holding the key) runs it again, like skhd.

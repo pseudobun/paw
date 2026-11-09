@@ -164,8 +164,10 @@ public final class Workspace {
     // MARK: Layout changes
 
     /// bsp ↔ stack ↔ float, keeping the window order.
+    /// Switches the layout. bsp again re-tiles from scratch: every window gets its own tile,
+    /// stacks included.
     public func setLayout(_ kind: LayoutKind, area: CGRect) {
-        guard kind != layout else { return }
+        guard kind != layout || kind == .bsp else { return }
         let order = tiledWindows + (layout == .float ? floating : [])
         let keepFloating = layout == .float ? [] : floating
         let focus = focused
@@ -259,7 +261,11 @@ public final class Workspace {
     /// Moves the window out of its tile and splits the tile in `dir` with it, on that side.
     @discardableResult
     public func warp(_ w: WindowID, _ dir: Direction, area: CGRect) -> Bool {
-        guard let t = tile(of: w), let n = neighbor(of: t, dir, area: area) else { return false }
+        guard let t = tile(of: w) else { return false }
+        guard let n = neighbor(of: t, dir, area: area) else {
+            // Nothing that way: a stacked window leaves its stack to that side (yabai's warp).
+            return t.windows.count > 1 && unstack(w, area: area, toward: dir)
+        }
         if t.windows.count == 1, t.parent === n.parent, t.parent?.axis == dir.axis {
             // Two siblings: warping is a swap of places.
             return swap(w, dir, area: area)
@@ -288,14 +294,18 @@ public final class Workspace {
 
     /// Takes the window out of its stack into its own tile next to it.
     @discardableResult
-    public func unstack(_ w: WindowID, area: CGRect) -> Bool {
+    public func unstack(_ w: WindowID, area: CGRect, toward dir: Direction? = nil) -> Bool {
         guard let t = tile(of: w), t.windows.count > 1 else { return false }
         if layout == .stack { layout = .bsp }
-        t.windows.removeAll { $0 == w }
-        t.clampActive()
         let frames = TreeLayout.tileFrames(self, in: area, gap: 0)
         let f = frames[ObjectIdentifier(t)] ?? area
-        split(t, with: Node(windows: [w]), axis: f.width >= f.height ? .horizontal : .vertical, newFirst: false)
+        t.windows.removeAll { $0 == w }
+        t.clampActive()
+        if let dir {
+            split(t, with: Node(windows: [w]), axis: dir.axis, newFirst: dir.isFirst)
+        } else {
+            split(t, with: Node(windows: [w]), axis: f.width >= f.height ? .horizontal : .vertical, newFirst: false)
+        }
         return true
     }
 
@@ -306,7 +316,6 @@ public final class Workspace {
         }
     }
 
-    /// The window `offset` places further in its stack (wrapping), and makes it the visible one.
     /// The next window in `w`'s stack; at either end nil, or round to the other end with `wrap`.
     public func cycleStack(_ w: WindowID, by offset: Int, wrap: Bool = false) -> WindowID? {
         guard let t = tile(of: w), t.windows.count > 1, let i = t.windows.firstIndex(of: w) else { return nil }
@@ -359,7 +368,7 @@ public final class Workspace {
         root = nil
         floating = floating.filter { all.contains($0) }
         let tiled = windows.filter { !floating.contains($0.id) }
-        layout = preset.layout
+        if let l = preset.layout { layout = l }
         var placed = Set<WindowID>()
         var nodes: [Node] = []
         for (i, t) in preset.tiles.enumerated() {
@@ -373,7 +382,7 @@ public final class Workspace {
             }
             nodes.append(n)
         }
-        if preset.layout == .stack {
+        if layout == .stack {
             let t = Node(windows: nodes.flatMap(\.windows))
             root = t.windows.isEmpty ? nil : t
         } else {
@@ -411,13 +420,14 @@ public struct WorkspacePreset: Codable, Equatable, Sendable {
         }
     }
 
-    public var layout: LayoutKind = .bsp
+    /// nil: the workspace keeps its layout (`layout.default` for a new one).
+    public var layout: LayoutKind?
     public var axis: Axis = .horizontal
     public var tiles: [Tile] = []
     /// Display this workspace opens on: "main", "secondary" or a 1-based index.
     public var display: String?
 
-    public init(layout: LayoutKind = .bsp, axis: Axis = .horizontal, tiles: [Tile] = [], display: String? = nil) {
+    public init(layout: LayoutKind? = .bsp, axis: Axis = .horizontal, tiles: [Tile] = [], display: String? = nil) {
         self.layout = layout
         self.axis = axis
         self.tiles = tiles
@@ -443,5 +453,31 @@ public enum AppMatcher {
             return app.range(of: re, options: [.regularExpression, .caseInsensitive]) != nil
         }
         return pattern.caseInsensitiveCompare(app) == .orderedSame
+    }
+}
+
+extension WorkspacePreset {
+    /// The tiles as one line for a text field: tiles split by " | ", apps in a tile by ", ", a
+    /// size as " *2" after the tile: `Brave Browser *2 | T3 Code (Beta)`.
+    public var tilesText: String {
+        get {
+            tiles.map { t in
+                t.apps.joined(separator: ", ") + (t.size.map { " *" + ($0 == $0.rounded() ? String(Int($0)) : String($0)) } ?? "")
+            }.joined(separator: " | ")
+        }
+        set { tiles = Self.parseTiles(newValue) }
+    }
+
+    public static func parseTiles(_ text: String) -> [Tile] {
+        text.split(separator: "|").compactMap { part in
+            var s = part.trimmingCharacters(in: .whitespaces)
+            var size: Double?
+            if let star = s.lastIndex(of: "*"), let v = Double(s[s.index(after: star)...].trimmingCharacters(in: .whitespaces)) {
+                size = v
+                s = String(s[..<star]).trimmingCharacters(in: .whitespaces)
+            }
+            let apps = s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            return apps.isEmpty ? nil : Tile(apps: apps, size: size)
+        }
     }
 }

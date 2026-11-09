@@ -27,10 +27,17 @@ app: no yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift + AppKit.
 - **Presets**: `workspaces` in the config says which apps share which tile on which workspace;
   new windows of those apps land there, `arrange` puts everything back, `initiate` opens the apps
   and arranges every workspace in one go
+- **Setups** per display arrangement (laptop only, home, work…): paw picks the one matching the
+  connected displays by itself, pins each workspace to its display and numbers them display by
+  display like yabai (`workspace new` on a display numbers it after that display's others).
+  `paw initiate <setup>` (or the menu bar icon, or hop's "Set Workspace") forces one
+- **Settings window** (menu bar icon → Settings…, or `paw settings`) for every key; it writes the
+  same commented JSON5 file, so people and agents can keep editing the file too
 - **Animations** for window moves: duration, curve (`easeOutCubic`, `spring`, `easeOutBack`…),
   and how sizes change
-- **Stack indicators**: a vertical island next to each stack with one app icon per window; click
-  focuses, scroll cycles, hover shows the title
+- **Stack indicators**: a vertical island next to each stack with one app icon per window, each
+  in the app's own colour (picked from its app icon); click focuses, scroll cycles, hover shows
+  the title
 - **Modes**: `hyper+r` turns on resize mode (arrows or hjkl grow, with shift shrink, `esc`
   leaves) with an island at the top of the screen; define your own key modes in `modes`
 - **Rules**: float or ignore apps and windows by name/title, send apps to workspaces
@@ -107,6 +114,19 @@ A typical setup: presets for the apps you always use, a status bar, and a key to
     "9": { tiles: [ { apps: ["Slack"] } ], display: "secondary" },
   },
 
+  // Per display arrangement; the first whose displays match replaces `workspaces` above.
+  setups: {
+    home: {
+      displays: ["builtin", "DELL", "Gigabyte"], // "builtin", "external" or part of a display's name
+      focus: "9",
+      workspaces: {
+        "1": { display: "builtin" },
+        "8": { display: "DELL", layout: "stack", tiles: [ { apps: ["Discord", "Spotify"] } ] },
+        "9": { display: "Gigabyte", layout: "bsp", tiles: [ { apps: ["Safari"], size: 2 }, { apps: ["Zed"] } ] },
+      },
+    },
+  },
+
   // `paw initiate`: opens these apps (default: every app named in the presets), waits for their
   // windows and arranges every workspace, then shows `focus`.
   initiate: { apps: [], focus: "1", timeout: 15 },
@@ -129,17 +149,18 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 
 | Section | Keys |
 |---|---|
-| `layout` | `default` (`stack`), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10) |
-| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false) |
+| `layout` | `default` (`stack`), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10), `unassignedWorkspace` ("": windows of apps no preset places stay put; or a workspace) |
+| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends) |
 | `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
 | `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |
 | `modes` | `"name": { "key": "command" }`; while `mode <name>` is on its keys come first. Default: `resize` |
-| `workspaces` | `"name": { layout, axis, tiles: [{ apps: ["Discord", "Spotify"], size: 1 }, …], display: "main" }` |
+| `workspaces` | `"name": { layout, axis, tiles: [{ apps: ["Discord", "Spotify"], size: 1 }, …], display: "builtin" }` |
+| `setups` | `"name": { displays: ["builtin", "DELL"], focus, workspaces: { … } }` |
 | `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
 | `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
 | `indicator` | `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
 | `appearance` | `font`, `fontSize`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `borderWidth`, `shadow`, `colors {island islandHi border fg muted dim accent wave good bad}` |
-| `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`) |
+| `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`), `brandColors` (true), `colors` (`"App": "#RRGGBB"`) |
 | `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged` (shell commands with `PAW_*` variables) |
 | `openAtLogin` | |
 
@@ -153,7 +174,7 @@ matches by pattern.
 | `ctrl+←↑→↓` | focus |
 | `ctrl+alt+←↑→↓` | swap |
 | `ctrl+shift+←↑→↓` | stack onto the neighbour |
-| `cmd+shift+ctrl+←↑→↓` | warp |
+| `cmd+shift+ctrl+←↑→↓` | warp; a stacked window with nothing that way leaves its stack to that side |
 | `hyper+←/→` | previous / next window in the stack |
 | `ctrl+1…0`, `ralt+1…0` | workspace 1–10 |
 | `ralt+shift+1…0` | send the window to a workspace |
@@ -172,10 +193,12 @@ matches by pattern.
 
 ### Several displays
 
-Each display shows one workspace; the workspaces themselves are shared. Switching to a workspace
-shows it on the focused display, or focuses the display that already shows it. `focus`/`swap`
-past the screen edge go to the next display, `display <dir>` and `move-to-display` move between
-them, and a preset's `display` (`"main"`, `"secondary"`, `2`…) says where that workspace opens.
+Each display shows one workspace. Without setups the workspaces are shared: switching shows one on
+the focused display, or focuses the display that already shows it. With a setup, its presets pin
+workspaces to displays (`display: "DELL"`), every bar shows only its display's workspaces, and
+numbers run display by display. Plugging displays in or out switches setups and retiles
+everything. `focus`/`swap` past the screen edge go to the next display, `display <dir>` and
+`move-to-display` move between them.
 
 ### Status bar
 
@@ -206,13 +229,14 @@ Bindings and the CLI take the same commands; chain several with `;`
 | `display <dir>\|next\|prev\|<n>` | Focus a display |
 | `move-to-display <dir>\|<n> [--follow]` | Send the window to a display's workspace |
 | `arrange [workspace\|all]` | Apply the preset(s), pulling their apps from other workspaces |
-| `initiate` | Open the preset apps and arrange every workspace |
+| `initiate [setup]` | Open the preset apps and arrange every workspace (also `reset`); with a setup, use that one |
 | `mode <name>\|exit` | Turn a key mode on (again: off) or off |
 | `retile`, `recover`, `reload` | |
 | `exec <shell command>` | Run something (`exec open -a Terminal`) |
 
-paw itself: `paw status`, `paw query [--json]`, `paw hide|show` (indicators), `paw reload`,
-`paw config path|check|show|template`, `paw icon <app>`, `paw preview out.png`, `paw quit`.
+paw itself: `paw status`, `paw query [--json]`, `paw setups [--json]`, `paw settings`,
+`paw hide|show` (indicators), `paw reload`, `paw config path|check|show|template|format`,
+`paw icon <app>`, `paw color <app>`, `paw preview out.png`, `paw quit`.
 
 ## Development
 

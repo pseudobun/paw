@@ -28,7 +28,9 @@ public enum Command: Equatable, Sendable {
     case focusDisplay(DisplayTarget)
     case moveToDisplay(DisplayTarget, follow: Bool)
     case arrange(String?)
-    case initiate
+    /// Open the preset apps and arrange everything; with a name, use that setup whatever
+    /// displays are connected.
+    case initiate(String?)
     /// Turns a mode on (again: off); nil turns any mode off.
     case mode(String?)
     case exec(String)
@@ -119,7 +121,7 @@ public enum Command: Equatable, Sendable {
         case "display": return .focusDisplay(try display(0))
         case "move-to-display": return .moveToDisplay(try display(0), follow: follow)
         case "arrange": return .arrange(args.first)
-        case "initiate", "init": return .initiate
+        case "initiate", "init", "reset": return .initiate(args.first)
         case "mode":
             let name = try arg(0)
             return ["exit", "off", "default", "none"].contains(name.lowercased()) ? .mode(nil) : .mode(name)
