@@ -1,40 +1,50 @@
 # Testing paw on sanctum
 
-olympus builds and runs the unit tests; this needs your desktop with yabai.
+olympus builds and unit-tests paw; a window manager needs a real desktop. Keep `just log` open.
 
-## Setup
+## Switch over
 
-- [ ] stackline off: comment out `require("stackline")` in `~/.hammerspoon/init.lua`, reload Hammerspoon
-- [ ] `just install`; `paw status` → stacks count, `signals: on`, `iconFont: ok`
-- [ ] `paw signals list` → `paw_window_focused` … ; `paw config check` → `ok`
+- [ ] `yabai --stop-service; skhd --stop-service`; quit Hammerspoon
+- [ ] One native Space per display (Mission Control)
+- [ ] `just local-cert` (once), `just install`, grant Accessibility; `paw status` → `trusted: yes`,
+      `bindings: ok`, `iconFont: ok`, windows counted
 
-## Indicators
+## Layout and stacks
 
-- [ ] Stack two windows (`yabai -m window --stack next`): island appears next to the window within ~0.2 s
-- [ ] Icons are the same glyphs as in sketchybar's spaces; top window has the island_hi cell,
-      focused window's icon is gold
-- [ ] Left-half window → island on the left; right-half → on the right; full width → left
-- [ ] `yabai -m window --focus stack.next` → highlight follows
-- [ ] Focus another (unstacked) window → stack island fades to 0.6
-- [ ] Add a third window to the stack / unstack one → island grows / shrinks; last unstack removes it
-- [ ] Click an icon → that window comes forward; paw doesn't steal focus from it
-- [ ] Scroll over the island → moves through the stack
-- [ ] Hover an icon → title island beside it; moving away hides it
-- [ ] Switch spaces → islands go with their space, the other space's stacks show
-- [ ] Two displays: each display's visible space gets its stacks, on the right screen
-- [ ] Drag/resize a stacked window → island follows without flicker storms (`just log` stays calm)
-- [ ] Minimise / hide an app in a stack → its icon disappears
-- [ ] Native full-screen app: no stray islands
-- [ ] Mission Control / app switcher: islands don't get in the way
+- [ ] Existing windows tile on workspace 1 in stack layout (default, like yabairc); indicator island beside it
+- [ ] `hyper+w` → bsp; `hyper+s` → stack; `hyper+f` → float (windows stay where they are)
+- [ ] In bsp: new window splits the focused one (wide → side by side, tall → top/bottom), with the 10 pt gap and 24 pt side padding, below sketchybar
+- [ ] `ctrl+arrows` focus moves; pointer jumps into the window; at the screen edge it goes to the other display
+- [ ] `ctrl+alt+arrows` swap; at the edge the window goes to the other display
+- [ ] `cmd+shift+ctrl+arrows` warp
+- [ ] `ctrl+shift+arrows` stacks the window onto its neighbour; indicator appears with both icons
+- [ ] `hyper+left/right` cycles the stack; gold icon follows
+- [ ] `ctrl+alt+u` unstacks; `paw unstack all` splits the whole stack
+- [ ] Click / scroll / hover on the indicator
+- [ ] `shift+alt+wasd` / `shift+ctrl+wasd` resize; `hyper+e` balance; `alt+r` rotate
+- [ ] `ctrl+alt+return` zoom; `ctrl+alt+space` float (centred, 2/3); `ctrl+alt+c` float in the middle cell; `ctrl+shift+return` floats full size
+- [ ] Drag a tiled window onto another tile and let go → they swap; drop elsewhere → snaps back
+- [ ] Animations: smooth? Try `animation.curve: "spring"`, `durationMs: 250`, `resize: "animate"`, `enabled: false`
 
-## Config, CLI, lifecycle
+## Workspaces
 
-- [ ] `indicator.side: "insideRight"` → island moves inside the window, live on save
-- [ ] `appearance.colors.accent: "0xff8698eb"` → focused icon turns wave blue
-- [ ] Broken config → `paw reload` prints the error, indicators keep the old style
-- [ ] `paw stacks` matches what's on screen
-- [ ] `paw hide` / `paw show`
-- [ ] `paw quit` → indicators gone, `paw signals list` empty
-- [ ] `openAtLogin: true` → in Login Items; or `just launchd`, `kill -9` paw → restarted, signals back
+- [ ] `ctrl+1…0` and `ralt+1…0` switch instantly; windows of other workspaces are out of sight (one pixel in the bottom-right corner)
+- [ ] `ralt+shift+N` sends a window, `cmd+ctrl+N` sends and follows
+- [ ] `ralt+a/d` prev/next; `hyper+n` new; `hyper+d` closes (windows go to the previous workspace)
+- [ ] ⌘Tab to an app whose window is on another workspace → paw switches there
+- [ ] Two displays: each shows its own workspace; `workspace N` for one shown on the other display just focuses it
+- [ ] Close a window → focus stays on the same workspace (doesn't jump to another window of that app elsewhere)
+- [ ] Minimise / ⌘H an app → its tile closes; restore → it comes back
+- [ ] `paw quit` → every window back on screen; start again → windows return to their workspaces
 
-Report: anything misplaced (screenshot + `paw stacks --json`), and whether it updates fast enough.
+## Presets and rules
+
+- [ ] Add a `workspaces` preset (README example), then `paw arrange 1` → apps in the right tiles and sizes
+- [ ] Quit and reopen Spotify → it lands in Discord's stack
+- [ ] System Settings, Raycast, CleanShot float; a Brave extension popup floats, the main Brave window tiles
+- [ ] `rules: [{ app: "Slack", workspace: "9" }]` → new Slack window opens on 9 without stealing focus
+
+## Report
+
+What felt slow (`just log`), anything that flickered, apps that misbehaved (Electron, Chrome, Finder,
+JetBrains), and which defaults you'd change.

@@ -6,14 +6,12 @@ enum CLI {
     static let commands: [String: ([String]) -> Int32] = [
         "help": { _ in help() }, "--help": { _ in help() }, "-h": { _ in help() },
         "version": { _ in print(AppPaths.version); return 0 }, "--version": { _ in print(AppPaths.version); return 0 },
-        "refresh": { _ in post("refresh") },
         "hide": { _ in post("hide") },
         "show": { _ in post("show") },
         "quit": { _ in post("quit") },
         "reload": reload,
         "status": status,
-        "stacks": stacks,
-        "signals": signals,
+        "query": query,
         "config": config,
         "icon": icon,
         "preview": Preview.run,
@@ -21,43 +19,67 @@ enum CLI {
 
     static func runIfRequested(_ argv: [String]) {
         guard argv.count > 1 else { return }
-        guard let command = commands[argv[1]] else {
-            // Launch arguments macOS passes to apps (-NSDocumentRevisionsDebugMode, -psn_…) are not commands.
-            if argv[1].hasPrefix("-") { return }
-            fputs("paw: unknown command “\(argv[1])”; see paw help\n", stderr)
-            exit(64)
+        // Launch arguments macOS passes to apps (-NSDocumentRevisionsDebugMode, -psn_…) are not commands.
+        if argv[1].hasPrefix("-"), commands[argv[1]] == nil { return }
+        let code: Int32
+        if let command = commands[argv[1]] {
+            code = command(Array(argv.dropFirst(2)))
+        } else {
+            code = runWM(Array(argv.dropFirst()))
         }
-        let code = command(Array(argv.dropFirst(2)))
         fflush(stdout)
         exit(code)
     }
 
     static func help() -> Int32 {
         print("""
-        paw: yabai stack indicators in the style of sketchybar. Usage: paw <command> [options]
+        paw: tiling window manager with stack indicators, in the style of sketchybar.
+        Usage: paw <command> [options]
 
-          refresh                  Redraw now (what paw's yabai signals run); quiet when paw isn't running
-          hide | show              Hide all indicators / show them again
-          reload                   Reload ~/.config/paw/config.json5 and print problems
-          status                   Version, stacks on screen, signals, icon font
-          stacks [--json]          The stacks paw sees right now (queries yabai itself)
-          signals list | add | remove   paw's yabai signals (paw adds them on launch, removes on quit)
-          config path | check | show | template   The config file; template prints the defaults
-          icon <app name>          The sketchybar-app-font glyph paw shows for an app
-          preview <out.png> [--fonts=DIR] [--scale=2]   Render indicators with your config
-          quit                     Quit the running paw
+        Window commands (the same as in config bindings; chain with ";"):
+          focus west|east|north|south|stack.next|stack.prev|stack.first|stack.last
+          swap <dir>          swap with the window that way (another display when there is none)
+          warp <dir>          move the window into that tile's place, splitting it
+          stack <dir>         put the window on the stack that way
+          unstack [all]       take the window (or every window) out of its stack
+          layout bsp|stack|float      toggle float|zoom|split      balance      rotate 90|180|270
+          resize <dir> <points>       grid rows:cols:x:y:w:h
+          workspace <n>|next|prev|last|new|close      move-to <n>|next|prev [--follow]
+          display <dir>|next|prev|<n>                 move-to-display <dir>|<n> [--follow]
+          arrange [workspace] put windows where the workspace preset says
+          retile | recover | reload | exec <shell command>
+
+        paw itself:
+          status              version, windows, workspaces per display, binding problems
+          query [--json]      workspaces and their windows (for sketchybar)
+          hide | show         hide / show the stack indicators
+          reload              reload ~/.config/paw/config.json5 and print problems
+          config path | check | show | template
+          icon <app name>     the sketchybar-app-font glyph for an app
+          preview <out.png> [--fonts=DIR]   render stack indicators with your config
+          quit                quit (puts hidden windows back on screen)
           version
         """)
         return 0
+    }
+
+    static func runWM(_ words: [String]) -> Int32 {
+        let text = words.joined(separator: " ")
+        do { _ = try Command.parseAll(text) } catch {
+            fputs("paw: \(error); see paw help\n", stderr)
+            return 64
+        }
+        guard isRunning else { fputs("paw is not running (open -a paw)\n", stderr); return 1 }
+        return post("run \(text)")
     }
 
     // MARK: - Talking to the running app
 
     static var isRunning: Bool { !NSRunningApplication.runningApplications(withBundleIdentifier: AppPaths.bundleID).isEmpty }
 
-    /// Fire and forget; paw not running is fine (signals call this all the time).
+    /// Fire and forget.
     static func post(_ command: String) -> Int32 {
-        guard isRunning else { return 0 }
+        guard isRunning else { fputs("paw is not running (open -a paw)\n", stderr); return 1 }
         DistributedNotificationCenter.default().postNotificationName(AppPaths.commandNotification, object: command,
                                                                      userInfo: nil, deliverImmediately: true)
         return 0
@@ -94,7 +116,7 @@ enum CLI {
 
     static func status(_ args: [String]) -> Int32 {
         guard let r = request("status", timeout: 3) else { return 1 }
-        for k in ["version", "pid", "stacks", "signals", "iconFont", "config", "error"] {
+        for k in ["version", "pid", "trusted", "windows", "workspaces", "stacks", "bindings", "iconFont", "config", "error"] {
             if let v = r[k] as? String, !v.isEmpty { print("\(k): \(v)") }
         }
         return 0
@@ -102,41 +124,15 @@ enum CLI {
 
     // MARK: - Local commands
 
-    static func stacks(_ args: [String]) -> Int32 {
-        let s = Settings(url: Settings.defaultURL)
-        let client = YabaiClient(path: s.config.yabai.path)
-        guard let r = client.query() else { fputs("yabai did not answer (\(s.config.yabai.path))\n", stderr); return 1 }
-        let excluded = Set(s.config.excludedApps.map { $0.lowercased() })
-        let stacks = StackBuilder.stacks(windows: r.windows.filter { !excluded.contains($0.app.lowercased()) }, spaces: r.spaces,
-                                         fuzz: s.config.yabai.fuzz)
-        if args.contains("--json") {
-            let list = stacks.map { st -> [String: Any] in
-                ["space": st.space, "frame": [st.frame.minX, st.frame.minY, st.frame.width, st.frame.height].map { Int($0) },
-                 "windows": st.items.map { ["id": $0.id, "app": $0.app, "title": $0.title, "glyph": s.icons.glyph(for: $0.app),
-                                            "active": $0.isActive, "focus": $0.hasFocus] as [String: Any] }]
-            }
-            let data = (try? JSONSerialization.data(withJSONObject: list, options: [.prettyPrinted, .sortedKeys])) ?? Data()
-            print(String(decoding: data, as: UTF8.self))
-            return 0
-        }
-        if stacks.isEmpty { print("no stacks on visible spaces") }
-        for st in stacks {
-            print("space \(st.space) @ \(Int(st.frame.minX)),\(Int(st.frame.minY)) \(Int(st.frame.width))×\(Int(st.frame.height))")
-            for i in st.items {
-                let mark = i.hasFocus ? "●" : i.isActive ? "○" : " "
-                print("  \(mark) \(i.app)  \(s.icons.glyph(for: i.app))  \(i.title)")
-            }
-        }
-        return 0
-    }
-
-    static func signals(_ args: [String]) -> Int32 {
-        let client = YabaiClient(path: Settings(url: Settings.defaultURL).config.yabai.path)
-        switch args.first ?? "list" {
-        case "list": client.listSignals().forEach { print($0) }
-        case "add": print("\(client.addSignals(action: "\(AppPaths.cliPath) refresh"))/\(YabaiClient.signalEvents.count) added")
-        case "remove": client.removeSignals(); print("removed")
-        default: fputs("paw signals list | add | remove\n", stderr); return 64
+    static func query(_ args: [String]) -> Int32 {
+        guard let r = request("query", timeout: 3), let json = r["json"] as? String else { return 1 }
+        if args.contains("--json") { print(json); return 0 }
+        guard let list = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]] else { return 1 }
+        for ws in list {
+            let wins = ws["windows"] as? [[String: Any]] ?? []
+            if wins.isEmpty, ws["visible"] as? Bool != true { continue }
+            let mark = ws["focused"] as? Bool == true ? "●" : (ws["visible"] as? Bool == true ? "○" : " ")
+            print("\(mark) \(ws["name"] ?? "")  \(ws["layout"] ?? "")  \(wins.map { "\($0["app"] ?? "")" }.joined(separator: ", "))")
         }
         return 0
     }

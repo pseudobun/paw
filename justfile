@@ -12,7 +12,7 @@ default: build
 build:
     swift build
 
-# Unit tests (yabai parsing, stack grouping, placement, config, icon map)
+# Unit tests (layout tree, commands, key bindings, placement, config, icon map)
 test:
     swift test
 

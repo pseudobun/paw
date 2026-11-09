@@ -1,20 +1,16 @@
 import AppKit
 import PawCore
 
-/// Queries yabai on every change (debounced), groups windows into stacks and keeps one
-/// indicator panel per stack in place.
-final class StackController {
+/// Keeps one indicator panel per stack, placed next to its tile.
+final class IndicatorController {
     let settings: Settings
     private(set) var style: Style
     private var panels: [String: IndicatorPanel] = [:]
     private var stacks: [Stack] = []
     private let title = TitlePanel()
-    private let queue = DispatchQueue(label: "dev.paw.yabai", qos: .userInitiated)
-    private var pending = false
-    private var again = false
-    private(set) var lastError: String?
-    private(set) var lastRefresh: Date?
     private var hidden = false
+    /// Focus a window (click on its icon, scrolling).
+    var onFocus: ((WindowID) -> Void)?
 
     init(settings: Settings) {
         self.settings = settings
@@ -22,59 +18,29 @@ final class StackController {
     }
 
     var config: PawConfig { settings.config }
-    var yabai: YabaiClient { YabaiClient(path: config.yabai.path) }
 
     func configChanged() {
         style = Style(config.appearance)
         let old = stacks
         stacks = []
         apply(old, force: true)
-        refresh()
     }
 
-    /// Coalesces bursts (a window drag sends dozens of signals) into one query at a time.
-    func refresh() {
-        if pending { again = true; return }
-        pending = true
-        let client = yabai
-        let fuzz = config.yabai.fuzz
-        let excluded = Set(config.excludedApps.map { $0.lowercased() })
-        queue.asyncAfter(deadline: .now() + .milliseconds(30)) { [weak self] in
-            let result = client.query()
-            let stacks = result.map { r in
-                StackBuilder.stacks(windows: r.windows.filter { !excluded.contains($0.app.lowercased()) }, spaces: r.spaces, fuzz: fuzz)
-            }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                pending = false
-                lastRefresh = Date()
-                if let stacks {
-                    lastError = nil
-                    apply(stacks, force: false)
-                } else {
-                    lastError = "yabai did not answer (\(config.yabai.path))"
-                }
-                if again { again = false; refresh() }
-            }
+    func setHidden(_ h: Bool) {
+        hidden = h
+        if h {
+            for p in panels.values { p.orderOut(nil) }
+            title.orderOut(nil)
+        } else {
+            let old = stacks
+            stacks = []
+            apply(old, force: true)
         }
-    }
-
-    func hideAll() {
-        hidden = true
-        for p in panels.values { p.orderOut(nil) }
-        title.orderOut(nil)
-    }
-
-    func showAll() {
-        hidden = false
-        refresh()
     }
 
     var snapshot: [Stack] { stacks }
 
-    // MARK: - Drawing
-
-    private func apply(_ new: [Stack], force: Bool) {
+    func apply(_ new: [Stack], force: Bool = false) {
         if !force, new == stacks, panels.count == new.count { return }
         stacks = new
         guard !hidden else { return }
@@ -96,8 +62,8 @@ final class StackController {
             panel.setFrame(ScreenGeometry.cocoa(fromAX: axRect, primaryHeight: primary), display: false)
             configure(panel.view, stack: stack, side: side, axRect: axRect, scale: screens[si].backingScaleFactor)
             panel.view.redraw()
-            let target = stack.hasFocus ? 1 : CGFloat(config.indicator.unfocusedOpacity)
             if isNew { panel.orderFrontRegardless() }
+            let target = stack.hasFocus ? 1 : CGFloat(config.indicator.unfocusedOpacity)
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = fade
                 panel.animator().alphaValue = target
@@ -123,16 +89,12 @@ final class StackController {
         }
         v.onClick = { [weak self] i in
             guard let self, config.indicator.clickToFocus else { return }
-            let id = stack.items[i].id
-            queue.async { [client = yabai] in client.focus(window: id) }
-            refresh()
+            onFocus?(WindowID(stack.items[i].id))
         }
         v.onScroll = { [weak self] dir in
             guard let self, config.indicator.scrollToCycle, let current = stack.activeIndex else { return }
             let n = stack.items.count
-            let id = stack.items[(current + dir + n) % n].id
-            queue.async { [client = yabai] in client.focus(window: id) }
-            refresh()
+            onFocus?(WindowID(stack.items[(current + dir + n) % n].id))
         }
         v.onHover = { [weak self] i in
             guard let self else { return }
@@ -141,7 +103,6 @@ final class StackController {
             let cell = IndicatorLayout.cell(i, metrics: config.indicator.metrics)
             let h = l.bounds.height, w = l.bounds.width
             let y = axRect.minY + cell.midY - h / 2
-            // Beside the indicator, towards the window.
             let toRight = side == .left || side == .insideLeft
             let x = toRight ? axRect.maxX + 6 : axRect.minX - 6 - w
             let primary = NSScreen.screens.first?.frame.height ?? 0

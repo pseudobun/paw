@@ -4,11 +4,10 @@ import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = Settings()
-    private var controller: StackController!
+    private var wm: WindowManager!
     private var observers: [NSObjectProtocol] = []
-    private var poll: Timer?
     private var signalSources: [DispatchSourceSignal] = []
-    private var signalsInstalled = false
+    private var trustTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if isAlreadyRunning() {
@@ -17,29 +16,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         installSignalHandlers()
         settings.start()
-        controller = StackController(settings: settings)
+        wm = WindowManager(settings: settings)
         settings.onChange = { [weak self] in self?.apply() }
-
         observers.append(DistributedNotificationCenter.default().addObserver(forName: AppPaths.commandNotification, object: nil,
                                                                              queue: .main) { [weak self] note in
             self?.command(note.object as? String ?? "")
         })
-        let ws = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification,
-                     NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification,
-                     NSWorkspace.didTerminateApplicationNotification, NSWorkspace.didWakeNotification] {
-            observers.append(ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.controller.refresh() })
+        // Window management needs Accessibility; wait for the grant instead of quitting.
+        if AX.isTrusted {
+            wm.start()
+        } else {
+            AX.requestTrust()
+            trustTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] t in
+                guard AX.isTrusted else { return }
+                t.invalidate()
+                self?.wm.start()
+            }
         }
-        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
-                                                                object: nil, queue: .main) { [weak self] _ in
-            self?.controller.refresh()
-        })
-        apply()
-        Log.app.info("paw \(AppPaths.version, privacy: .public) ready")
+        updateLoginItem(settings.config.openAtLogin)
+        Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if signalsInstalled { controller.yabai.removeSignals() }
+        wm?.restoreAll()
     }
 
     private func isAlreadyRunning() -> Bool {
@@ -48,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return NSRunningApplication.runningApplications(withBundleIdentifier: id).contains { $0.processIdentifier != me }
     }
 
-    /// SIGTERM (pkill, launchd) and SIGINT quit through AppKit so the yabai signals get removed.
+    /// SIGTERM (pkill, launchd) and SIGINT quit through AppKit, so hidden windows come back.
     private func installSignalHandlers() {
         for sig in [SIGTERM, SIGINT] {
             signal(sig, SIG_IGN)
@@ -60,34 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func apply() {
-        let c = settings.config
-        controller.configChanged()
-        poll?.invalidate()
-        poll = nil
-        if c.yabai.pollSeconds > 0 {
-            poll = Timer.scheduledTimer(withTimeInterval: max(0.5, c.yabai.pollSeconds), repeats: true) { [weak self] _ in
-                self?.controller.refresh()
-            }
-        }
-        updateSignals(c.yabai.signals)
+        wm.configChanged()
         if let e = settings.error { Log.app.error("config: \(e, privacy: .public)") }
         for w in settings.warnings { Log.app.warning("config: \(w, privacy: .public)") }
-        updateLoginItem(c.openAtLogin)
-    }
-
-    private func updateSignals(_ on: Bool) {
-        let client = controller.yabai
-        let action = "\(AppPaths.cliPath) refresh"
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            if on {
-                let n = client.addSignals(action: action)
-                Log.app.info("yabai signals: \(n)/\(YabaiClient.signalEvents.count) added")
-                DispatchQueue.main.async { self?.signalsInstalled = n > 0 }
-            } else {
-                client.removeSignals()
-                DispatchQueue.main.async { self?.signalsInstalled = false }
-            }
-        }
+        updateLoginItem(settings.config.openAtLogin)
     }
 
     private func updateLoginItem(_ on: Bool) {
@@ -101,27 +76,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Commands from the CLI (`paw refresh`, `paw reload`…).
-    private func command(_ name: String) {
+    /// Messages from the CLI: "run <command>", "reload", "quit", "status", "query".
+    private func command(_ text: String) {
+        let (name, rest) = text.firstIndex(of: " ").map { (String(text[..<$0]), String(text[text.index(after: $0)...])) } ?? (text, "")
         switch name {
-        case "refresh":
-            controller.refresh()
-        case "hide":
-            controller.hideAll()
-        case "show":
-            controller.showAll()
+        case "run":
+            do { wm.run(try Command.parseAll(rest)) } catch { Log.app.error("cli: \(error.localizedDescription, privacy: .public)") }
+        case "hide": wm.indicators.setHidden(true)
+        case "show": wm.indicators.setHidden(false)
         case "reload":
             settings.load()
             reply("reload", ["error": settings.error ?? "", "warnings": settings.warnings.joined(separator: "\n")])
         case "quit":
             NSApp.terminate(nil)
         case "status":
-            let stacks = controller.snapshot
+            let names = wm.displays.map(\.workspace).joined(separator: ", ")
             reply("status", ["version": AppPaths.version, "pid": "\(ProcessInfo.processInfo.processIdentifier)",
-                             "config": settings.url.path, "error": settings.error ?? controller.lastError ?? "",
-                             "stacks": "\(stacks.count) (\(stacks.map { "\($0.items.count)" }.joined(separator: ", ")))",
-                             "signals": signalsInstalled ? "on" : "off",
-                             "iconFont": controller.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok"])
+                             "trusted": AX.isTrusted ? "yes" : "no", "windows": "\(wm.windows.count)",
+                             "workspaces": names, "stacks": "\(wm.indicators.snapshot.count)",
+                             "config": settings.url.path, "error": settings.error ?? "",
+                             "bindings": wm.hotkeys.problems.isEmpty ? "ok" : wm.hotkeys.problems.joined(separator: "; "),
+                             "iconFont": wm.indicators.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok"])
+        case "query":
+            let data = (try? JSONSerialization.data(withJSONObject: wm.query(), options: [.prettyPrinted, .sortedKeys])) ?? Data()
+            reply("query", ["json": String(decoding: data, as: UTF8.self)])
         default:
             Log.app.error("unknown command \(name, privacy: .public)")
         }

@@ -1,20 +1,61 @@
 // paw configuration (JSON5: comments and trailing commas are fine).
 // Saved changes apply immediately. Delete a key to use its default.
 {
-  yabai: {
-    path: "/opt/homebrew/bin/yabai",
-    // paw adds yabai signals (label paw_*) that run `paw refresh` when windows or spaces
-    // change, and removes them when it quits.
-    signals: true,
-    // Also refresh every N seconds, in case a change has no signal; 0 turns it off.
-    pollSeconds: 5,
-    // Windows whose frames differ by less than this many points are one stack.
-    fuzz: 30,
+  layout: {
+    // New workspaces: "bsp", "stack" or "float"
+    default: "stack",
+    gap: 10,
+    padding: { top: 2, bottom: 2, left: 24, right: 24 },
+    // Kept free for sketchybar (yabai's external_bar)
+    barTop: 41,
+    barBottom: 0,
+    // Workspaces 1…N exist from the start; "workspace new" adds more
+    workspaces: 10,
   },
 
+  focus: {
+    mouseFollowsFocus: true,
+    focusFollowsMouse: false,
+  },
+
+  animation: {
+    enabled: true,
+    durationMs: 180,
+    // linear, easeOutCubic, easeInOutCubic, easeOutQuint, easeOutBack, spring
+    curve: "easeOutCubic",
+    // "start": final size first, then glide (smooth); "animate": size every frame; "end"
+    resize: "start",
+    // More windows moving at once than this are placed without animation
+    maxWindows: 12,
+  },
+
+  // Presets: which apps go in which tile. "arrange" (or opening the app) puts them there.
+  workspaces: {
+    // "1": {
+    //   layout: "bsp",
+    //   axis: "horizontal",           // tiles side by side; "vertical" stacks them
+    //   tiles: [
+    //     { apps: ["Discord", "Spotify"], size: 1 },   // one stack
+    //     { apps: ["Ghostty", "/^Alacritty$/"], size: 1 },
+    //   ],
+    //   display: "main",              // or "secondary", or 1, 2…
+    // },
+  },
+
+  // app: name or /regex/; title / unlessTitle: substring or /regex/
+  // manage: false leaves windows alone, float: true floats them, workspace: where they open
+  rules: [
+    { app: "/^(iTerm2|He3|System Settings|Parallels Desktop|CleanShot X|Raycast|Perplexity)$/", float: true },
+    { app: "Raycast Beta", title: "/^AI Chat$/", float: true },
+    { app: "Google Chrome", unlessTitle: "Google Chrome", float: true },
+    { app: "Brave Browser", unlessTitle: "Brave", float: true },
+    { app: "Zen", unlessTitle: "Zen", float: true },
+    { app: "/^Digital Colou?r Meter$/", float: true },
+  ],
+
+  // Stack indicators: an island next to each stack with one app icon per window
   indicator: {
-    // "auto" puts it outside the window on the side nearer the screen edge (like
-    // stackline); also "left", "right", "insideLeft", "insideRight".
+    // "auto" (outside, on the side nearer the screen edge), "left", "right", "insideLeft", "insideRight"
     side: "auto",
     offsetX: 4,
     offsetY: 2,
@@ -22,18 +63,15 @@
     cellHeight: 22,
     gap: 2,
     padding: 3,
-    // An island with the window title next to the icon under the pointer: "hover" or "never"
-    titles: "hover",
+    titles: "hover", // or "never"
     clickToFocus: true,
-    // Scroll over the indicator to move through the stack
     scrollToCycle: true,
-    // Stacks without focus fade to this
     unfocusedOpacity: 0.6,
     fadeMs: 150,
   },
 
   appearance: {
-    font: "GeistMono Nerd Font", // titles; falls back to SF Mono
+    font: "GeistMono Nerd Font",
     fontSize: 12,
     appFont: "sketchybar-app-font",
     appIconSize: 14,
@@ -41,7 +79,6 @@
     cellRadius: 7,
     borderWidth: 1,
     shadow: true,
-    // 0xAARRGGBB like sketchybar's colors.lua, or "#RRGGBB" / "#RRGGBBAA"
     colors: {
       island: "0xeb1d1d16",
       islandHi: "0xff2b2b22",
@@ -57,14 +94,119 @@
   },
 
   icons: {
-    // sketchybar's app → glyph map; paw's built-in copy is used when it's missing.
     map: "~/.config/sketchybar/helpers/app_icons.lua",
-    overrides: {
-      // "My App": ":code:",
-    },
+    overrides: {},
   },
 
-  // App names whose windows are left out of indicators.
-  excludedApps: [],
+  // Shell commands with $PAW_WORKSPACE / $PAW_PREV_WORKSPACE, $PAW_APP / $PAW_WINDOW
+  hooks: {
+    workspaceChanged: "",
+    windowFocused: "",
+  },
+
   openAtLogin: false,
+
+  // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.
+  // Commands (also `paw <command>`; chain with ";"):
+  //   focus west|east|north|south|stack.next|stack.prev   swap|warp|stack <dir>   unstack [all]
+  //   layout bsp|stack|float   toggle float|zoom|split   balance   rotate 90|180|270
+  //   resize <dir> <points>   grid rows:cols:x:y:w:h   workspace <n>|next|prev|last|new|close
+  //   move-to <n>|next|prev [--follow]   display <dir>|next|n   move-to-display <dir> [--follow]
+  //   arrange [workspace]   retile   recover   reload   exec <shell command>
+  // Setting bindings replaces this whole list.
+  bindings: {
+    "ctrl+right": "focus east",
+    "ctrl+up": "focus north",
+    "ctrl+down": "focus south",
+    "hyper+right": "focus stack.next",
+    "hyper+left": "focus stack.prev",
+    "ctrl+left": "focus west",
+    "ctrl+alt+right": "swap east",
+    "ctrl+alt+up": "swap north",
+    "ctrl+alt+down": "swap south",
+    "ctrl+alt+left": "swap west",
+    "ctrl+shift+right": "stack east",
+    "ctrl+shift+up": "stack north",
+    "ctrl+shift+down": "stack south",
+    "ctrl+shift+left": "stack west",
+    "cmd+shift+ctrl+right": "warp east",
+    "cmd+shift+ctrl+up": "warp north",
+    "cmd+shift+ctrl+down": "warp south",
+    "cmd+shift+ctrl+left": "warp west",
+    "ctrl+alt+u": "unstack",
+    "hyper+w": "layout bsp",
+    "hyper+f": "layout float",
+    "hyper+s": "layout stack",
+    "ctrl+alt+space": "toggle float",
+    "ctrl+alt+c": "toggle float; grid 4:4:1:1:2:2",
+    "ctrl+alt+s": "toggle split",
+    "ctrl+alt+return": "toggle zoom",
+    "ctrl+shift+return": "grid 1:1:0:0:1:1",
+    "hyper+e": "balance",
+    "alt+r": "rotate 270",
+    "shift+ctrl+d": "resize east -40",
+    "shift+alt+d": "resize east 40",
+    "shift+ctrl+w": "resize north -40",
+    "shift+alt+w": "resize north 40",
+    "shift+ctrl+s": "resize south -40",
+    "shift+alt+s": "resize south 40",
+    "shift+ctrl+a": "resize west -40",
+    "shift+alt+a": "resize west 40",
+    "hyper+d": "workspace close",
+    "hyper+n": "workspace new",
+    "ralt+d": "workspace next",
+    "ralt+a": "workspace prev",
+    "ctrl+1": "workspace 1",
+    "ralt+1": "workspace 1",
+    "ctrl+2": "workspace 2",
+    "ralt+2": "workspace 2",
+    "ctrl+3": "workspace 3",
+    "ralt+3": "workspace 3",
+    "ctrl+4": "workspace 4",
+    "ralt+4": "workspace 4",
+    "ctrl+5": "workspace 5",
+    "ralt+5": "workspace 5",
+    "ctrl+6": "workspace 6",
+    "ralt+6": "workspace 6",
+    "ctrl+7": "workspace 7",
+    "ralt+7": "workspace 7",
+    "ctrl+8": "workspace 8",
+    "ralt+8": "workspace 8",
+    "ctrl+9": "workspace 9",
+    "ralt+9": "workspace 9",
+    "ctrl+0": "workspace 10",
+    "ralt+0": "workspace 10",
+    "cmd+ctrl+1": "move-to 1 --follow",
+    "cmd+ralt+1": "move-to 1 --follow",
+    "ralt+shift+1": "move-to 1",
+    "cmd+ctrl+2": "move-to 2 --follow",
+    "cmd+ralt+2": "move-to 2 --follow",
+    "ralt+shift+2": "move-to 2",
+    "cmd+ctrl+3": "move-to 3 --follow",
+    "cmd+ralt+3": "move-to 3 --follow",
+    "ralt+shift+3": "move-to 3",
+    "cmd+ctrl+4": "move-to 4 --follow",
+    "cmd+ralt+4": "move-to 4 --follow",
+    "ralt+shift+4": "move-to 4",
+    "cmd+ctrl+5": "move-to 5 --follow",
+    "cmd+ralt+5": "move-to 5 --follow",
+    "ralt+shift+5": "move-to 5",
+    "cmd+ctrl+6": "move-to 6 --follow",
+    "cmd+ralt+6": "move-to 6 --follow",
+    "ralt+shift+6": "move-to 6",
+    "cmd+ctrl+7": "move-to 7 --follow",
+    "cmd+ralt+7": "move-to 7 --follow",
+    "ralt+shift+7": "move-to 7",
+    "cmd+ctrl+8": "move-to 8 --follow",
+    "cmd+ralt+8": "move-to 8 --follow",
+    "ralt+shift+8": "move-to 8",
+    "cmd+ctrl+9": "move-to 9 --follow",
+    "cmd+ralt+9": "move-to 9 --follow",
+    "ralt+shift+9": "move-to 9",
+    "cmd+ctrl+0": "move-to 10 --follow",
+    "cmd+ralt+0": "move-to 10 --follow",
+    "ralt+shift+0": "move-to 10",
+    "cmd+alt+r": "recover",
+    "hyper+0x18": "exec open -a Alacritty",
+  },
 }

@@ -2,25 +2,102 @@ import Foundation
 
 /// `~/.config/paw/config.json5`. Every key is optional; a missing key keeps its default.
 public struct PawConfig: Codable, Equatable, Sendable {
-    public var yabai = Yabai()
+    public var layout = Layout()
+    public var focus = Focus()
+    public var animation = Animation()
+    /// Key → command(s), e.g. "ctrl+left": "focus west". Replaces the defaults when set.
+    public var bindings: [String: String] = Defaults.bindings
+    /// Workspace presets by name: layout and which apps go in which tile.
+    public var workspaces: [String: WorkspacePreset] = [:]
+    public var rules: [Rule] = Defaults.rules
     public var indicator = Indicator()
     public var appearance = Appearance()
     public var icons = Icons()
-    /// Apps (names) whose windows never get an indicator cell.
-    public var excludedApps: [String] = []
+    public var hooks = Hooks()
     /// Start paw when you log in (only for the installed paw.app).
     public var openAtLogin = false
 
     public init() {}
 
-    public struct Yabai: Codable, Equatable, Sendable {
-        public var path = "/opt/homebrew/bin/yabai"
-        /// Add yabai signals (label paw_*) that run `paw refresh` on window and space changes.
-        public var signals = true
-        /// Also refresh every N seconds as a safety net; 0 = only on signals.
-        public var pollSeconds = 5.0
-        /// Window frames within this many points count as the same stack.
-        public var fuzz = 30.0
+    public struct Layout: Codable, Equatable, Sendable {
+        /// Layout of new workspaces: "bsp", "stack" or "float".
+        public var `default` = LayoutKind.stack
+        public var gap = 10.0
+        public var padding = Padding()
+        /// Space kept free for sketchybar (like yabai's external_bar).
+        public var barTop = 41.0
+        public var barBottom = 0.0
+        /// How many workspaces exist from the start (1…N); more come with `workspace new`.
+        public var workspaces = 10
+        public init() {}
+    }
+
+    public struct Focus: Codable, Equatable, Sendable {
+        /// Move the pointer to the middle of a window focused from the keyboard.
+        public var mouseFollowsFocus = true
+        /// Focus the window under the pointer when it moves.
+        public var focusFollowsMouse = false
+        public init() {}
+    }
+
+    public struct Animation: Codable, Equatable, Sendable {
+        public var enabled = true
+        public var durationMs = 180.0
+        public var curve = Easing.easeOutCubic
+        /// "start": windows take their final size first and glide into place (smooth);
+        /// "animate": size changes every frame (apps redraw a lot); "end": size at the end.
+        public var resize = "start"
+        /// Skip animating more windows than this at once (just place them).
+        public var maxWindows = 12
+        public init() {}
+    }
+
+    /// Which windows paw leaves alone or treats specially.
+    public struct Rule: Codable, Equatable, Sendable {
+        /// App name, or /regex/.
+        public var app: String
+        /// Window title /regex/ (or plain substring) the rule needs.
+        public var title: String?
+        /// The rule doesn't apply when the title matches this.
+        public var unlessTitle: String?
+        /// false: paw never touches these windows.
+        public var manage: Bool?
+        /// true: floating instead of tiled.
+        public var float: Bool?
+        /// Workspace new windows of the app go to.
+        public var workspace: String?
+
+        public init(app: String, title: String? = nil, unlessTitle: String? = nil, manage: Bool? = nil, float: Bool? = nil,
+                    workspace: String? = nil) {
+            self.app = app
+            self.title = title
+            self.unlessTitle = unlessTitle
+            self.manage = manage
+            self.float = float
+            self.workspace = workspace
+        }
+
+        public func matches(app a: String, title t: String) -> Bool {
+            guard AppMatcher.matches(app, a) else { return false }
+            if let title, !Self.text(title, t) { return false }
+            if let unlessTitle, Self.text(unlessTitle, t) { return false }
+            return true
+        }
+
+        static func text(_ pattern: String, _ s: String) -> Bool {
+            if pattern.count > 2, pattern.hasPrefix("/"), pattern.hasSuffix("/") {
+                return s.range(of: String(pattern.dropFirst().dropLast()), options: [.regularExpression, .caseInsensitive]) != nil
+            }
+            return s.localizedCaseInsensitiveContains(pattern)
+        }
+    }
+
+    /// Shell commands paw runs on events, with PAW_* variables set.
+    public struct Hooks: Codable, Equatable, Sendable {
+        /// After the focused workspace changes ($PAW_WORKSPACE, $PAW_PREV_WORKSPACE).
+        public var workspaceChanged = ""
+        /// After focus moves to another window ($PAW_APP, $PAW_WINDOW).
+        public var windowFocused = ""
         public init() {}
     }
 
@@ -102,19 +179,48 @@ struct Fields<K: CodingKey> {
 }
 
 extension PawConfig {
-    enum CodingKeys: String, CodingKey, CaseIterable { case yabai, indicator, appearance, icons, excludedApps, openAtLogin }
+    enum CodingKeys: String, CodingKey, CaseIterable {
+        case layout, focus, animation, bindings, workspaces, rules, indicator, appearance, icons, hooks, openAtLogin
+    }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.yabai, &yabai); try f(.indicator, &indicator); try f(.appearance, &appearance)
-        try f(.icons, &icons); try f(.excludedApps, &excludedApps); try f(.openAtLogin, &openAtLogin)
+        try f(.layout, &layout); try f(.focus, &focus); try f(.animation, &animation); try f(.bindings, &bindings)
+        try f(.workspaces, &workspaces); try f(.rules, &rules); try f(.indicator, &indicator); try f(.appearance, &appearance)
+        try f(.icons, &icons); try f(.hooks, &hooks); try f(.openAtLogin, &openAtLogin)
     }
 }
 
-extension PawConfig.Yabai {
-    enum CodingKeys: String, CodingKey, CaseIterable { case path, signals, pollSeconds, fuzz }
+extension PawConfig.Layout {
+    enum CodingKeys: String, CodingKey, CaseIterable { case `default`, gap, padding, barTop, barBottom, workspaces }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.path, &path); try f(.signals, &signals); try f(.pollSeconds, &pollSeconds); try f(.fuzz, &fuzz)
+        try f(.default, &`default`); try f(.gap, &gap); try f(.padding, &padding); try f(.barTop, &barTop)
+        try f(.barBottom, &barBottom); try f(.workspaces, &workspaces)
+    }
+}
+
+extension PawConfig.Focus {
+    enum CodingKeys: String, CodingKey, CaseIterable { case mouseFollowsFocus, focusFollowsMouse }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.mouseFollowsFocus, &mouseFollowsFocus); try f(.focusFollowsMouse, &focusFollowsMouse)
+    }
+}
+
+extension PawConfig.Animation {
+    enum CodingKeys: String, CodingKey, CaseIterable { case enabled, durationMs, curve, resize, maxWindows }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.enabled, &enabled); try f(.durationMs, &durationMs); try f(.curve, &curve); try f(.resize, &resize)
+        try f(.maxWindows, &maxWindows)
+    }
+}
+
+extension PawConfig.Hooks {
+    enum CodingKeys: String, CodingKey, CaseIterable { case workspaceChanged, windowFocused }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.workspaceChanged, &workspaceChanged); try f(.windowFocused, &windowFocused)
     }
 }
 
@@ -213,7 +319,10 @@ public enum ConfigLoader {
         guard let root = try? JSONSerialization.jsonObject(with: data, options: [.json5Allowed]) as? [String: Any] else { return [] }
         var out: [String] = []
         let sections: [String: Set<String>] = [
-            "yabai": Set(PawConfig.Yabai.CodingKeys.allCases.map(\.rawValue)),
+            "layout": Set(PawConfig.Layout.CodingKeys.allCases.map(\.rawValue)),
+            "focus": Set(PawConfig.Focus.CodingKeys.allCases.map(\.rawValue)),
+            "animation": Set(PawConfig.Animation.CodingKeys.allCases.map(\.rawValue)),
+            "hooks": Set(PawConfig.Hooks.CodingKeys.allCases.map(\.rawValue)),
             "indicator": Set(PawConfig.Indicator.CodingKeys.allCases.map(\.rawValue)),
             "appearance": Set(PawConfig.Appearance.CodingKeys.allCases.map(\.rawValue)),
             "icons": Set(PawConfig.Icons.CodingKeys.allCases.map(\.rawValue)),
@@ -233,14 +342,21 @@ public enum ConfigLoader {
         return out
     }
 
-    /// Problems a valid file can still have.
+    /// Problems a valid file can still have: bindings that don't parse, two keys on one binding.
     public static func warnings(_ c: PawConfig) -> [String] {
         var w: [String] = []
-        if !["hover", "never"].contains(c.indicator.titles) { w.append("indicator.titles: “\(c.indicator.titles)” is not hover or never") }
-        if c.indicator.width < 8 || c.indicator.cellHeight < 8 { w.append("indicator.width and cellHeight need at least 8") }
-        if !FileManager.default.isExecutableFile(atPath: (c.yabai.path as NSString).expandingTildeInPath) {
-            w.append("yabai.path: \(c.yabai.path) is not executable")
+        var seen: [KeySpec: String] = [:]
+        for (key, cmd) in c.bindings.sorted(by: { $0.key < $1.key }) {
+            guard let spec = KeySpec.parse(key) else { w.append("bindings: “\(key)” is not a key"); continue }
+            if let other = seen[spec] { w.append("bindings: “\(key)” and “\(other)” are the same key") }
+            seen[spec] = key
+            do { _ = try Command.parseAll(cmd) } catch { w.append("bindings.\(key): \(error)") }
         }
+        for (name, p) in c.workspaces.sorted(by: { $0.key < $1.key }) where p.tiles.isEmpty && p.layout != .float {
+            w.append("workspaces.\(name): no tiles")
+        }
+        if !["hover", "never"].contains(c.indicator.titles) { w.append("indicator.titles: “\(c.indicator.titles)” is not hover or never") }
+        if !["start", "animate", "end"].contains(c.animation.resize) { w.append("animation.resize: start, animate or end") }
         return w
     }
 }
