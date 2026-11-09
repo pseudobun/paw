@@ -39,7 +39,9 @@ final class Hotkeys {
             }
             return me.handle(event) ? nil : Unmanaged.passUnretained(event)
         }
-        guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+        // Last in the chain, after key remappers such as a Caps Lock → hyper key app, which add
+        // the modifier flags in their own tap.
+        guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .tailAppendEventTap, options: .defaultTap,
                                            eventsOfInterest: mask, callback: callback,
                                            userInfo: Unmanaged.passUnretained(self).toOpaque()) else { return false }
         tap = port

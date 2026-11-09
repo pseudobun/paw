@@ -26,6 +26,7 @@ class TextLayer: CALayer {
     required init?(coder: NSCoder) { fatalError() }
 
     override func draw(in ctx: CGContext) {
+        if centered { drawCentered(in: ctx); return }
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
         let size = text.size()
@@ -34,6 +35,21 @@ class TextLayer: CALayer {
         let y = ((bounds.height - size.height) / 2).rounded()
         text.draw(at: NSPoint(x: x.rounded(), y: y))
         NSGraphicsContext.restoreGraphicsState()
+    }
+
+    /// Centres the ink (glyph outlines), not the advance box: app-font icons have uneven side
+    /// bearings, so centring the line box leaves them off to one side.
+    private func drawCentered(in ctx: CGContext) {
+        let line = CTLineCreateWithAttributedString(text)
+        let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+        let px = 1 / max(contentsScale, 1)
+        func snap(_ v: CGFloat) -> CGFloat { (v / px).rounded() * px }
+        ctx.saveGState()
+        ctx.textMatrix = .identity
+        ctx.textPosition = CGPoint(x: snap((bounds.width - ink.width) / 2 - ink.minX),
+                                   y: snap((bounds.height - ink.height) / 2 - ink.minY))
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
     }
 }
 

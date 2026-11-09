@@ -3,7 +3,7 @@ import PawCore
 import QuartzCore
 
 /// One stack's indicator: a small borderless panel next to the window. It doesn't take focus;
-/// clicks focus a window through yabai, scrolling moves through the stack.
+/// clicks focus a window, scrolling moves through the stack.
 final class IndicatorPanel: NSPanel {
     let view = IndicatorView()
 
@@ -46,7 +46,8 @@ final class IndicatorView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    override var isFlipped: Bool { true }
+    // Not flipped: AppKit flips a flipped view's layer whenever it lays the view out, which
+    // turned the bottom-up rendered island (and its icons) upside down. Points are flipped by hand.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     func redraw() {
@@ -70,7 +71,8 @@ final class IndicatorView: NSView {
     private func cell(at event: NSEvent) -> Int? {
         guard let stack else { return nil }
         let p = convert(event.locationInWindow, from: nil)
-        return IndicatorLayout.cellIndex(at: p, count: stack.items.count, metrics: metrics)
+        let topLeft = CGPoint(x: p.x, y: bounds.height - p.y)
+        return IndicatorLayout.cellIndex(at: topLeft, count: stack.items.count, metrics: metrics)
     }
 
     override func mouseMoved(with event: NSEvent) { setHovered(cell(at: event)) }
