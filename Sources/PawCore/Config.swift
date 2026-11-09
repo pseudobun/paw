@@ -183,6 +183,9 @@ public struct PawConfig: Codable, Equatable, Sendable {
         /// After windows open, close or move between workspaces, or workspaces come and go
         /// (debounced; for a bar's app icons: read `paw query --json`).
         public var windowsChanged = ""
+        /// After displays are plugged in, unplugged or rearranged and paw has retiled
+        /// ($PAW_DISPLAYS: how many are connected).
+        public var displaysChanged = ""
         public init() {}
     }
 
@@ -322,11 +325,12 @@ extension PawConfig.Initiate {
 }
 
 extension PawConfig.Hooks {
-    enum CodingKeys: String, CodingKey, CaseIterable { case workspaceChanged, windowFocused, windowsChanged, modeChanged }
+    enum CodingKeys: String, CodingKey, CaseIterable { case workspaceChanged, windowFocused, windowsChanged, modeChanged, displaysChanged }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.workspaceChanged, &workspaceChanged); try f(.windowFocused, &windowFocused)
         try f(.windowsChanged, &windowsChanged); try f(.modeChanged, &modeChanged)
+        try f(.displaysChanged, &displaysChanged)
     }
 }
 

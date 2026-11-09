@@ -43,7 +43,7 @@ app: no yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift + AppKit.
 - **Rules**: float or ignore apps and windows by name/title, send apps to workspaces
 - **Key bindings** in the config (left/right modifiers like `ralt` work, `hyper` = ⌘⌃⌥⇧), and
   the same commands on the CLI: `paw focus west`, `paw workspace 3`
-- **Hooks** for status bars: `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged`, plus
+- **Hooks** for status bars: `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged`, `displaysChanged`, plus
   `paw query --json` ([sketchybar example](examples/sketchybar/paw_spaces.lua))
 
 ## Requirements
@@ -161,7 +161,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `indicator` | `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
 | `appearance` | `font`, `fontSize`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `borderWidth`, `shadow`, `colors {island islandHi border fg muted dim accent wave good bad}` |
 | `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`), `brandColors` (true), `colors` (`"App": "#RRGGBB"`) |
-| `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged` (shell commands with `PAW_*` variables) |
+| `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged`, `displaysChanged` (shell commands with `PAW_*` variables) |
 | `openAtLogin` | |
 
 App names are what macOS shows in the menu bar (`paw query` lists the open ones); `/regex/`

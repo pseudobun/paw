@@ -189,6 +189,7 @@ final class WindowManager {
         if setupChanged { applySetup() }
         if before != after {
             runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": focusedWorkspace.name, "PAW_PREV_WORKSPACE": focusedWorkspace.name])
+            runHook(config.hooks.displaysChanged, ["PAW_DISPLAYS": "\(displays.count)"])
         }
         scheduleSave()
     }

@@ -158,12 +158,14 @@ public enum ConfigTemplate {
 
           // Shell commands with $PAW_WORKSPACE / $PAW_PREV_WORKSPACE, $PAW_APP / $PAW_WINDOW;
           // windowsChanged runs when windows open, close or change workspace (read `paw query --json`);
-          // modeChanged when a mode turns on or off ($PAW_MODE, "" for off)
+          // modeChanged when a mode turns on or off ($PAW_MODE, "" for off);
+          // displaysChanged after displays come, go or move and paw has retiled ($PAW_DISPLAYS)
           hooks: {
             workspaceChanged: \(str(c.hooks.workspaceChanged)),
             windowFocused: \(str(c.hooks.windowFocused)),
             windowsChanged: \(str(c.hooks.windowsChanged)),
             modeChanged: \(str(c.hooks.modeChanged)),
+            displaysChanged: \(str(c.hooks.displaysChanged)),
           },
 
           // `paw initiate` (also `paw reset`): opens the apps, waits for their windows, then arranges

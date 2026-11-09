@@ -370,7 +370,7 @@ private struct HooksTab: View {
     var body: some View {
         Form {
             Section {
-                Text("Shell commands paw runs on events, e.g. sketchybar --trigger paw_workspace_change. Variables: $PAW_WORKSPACE, $PAW_PREV_WORKSPACE, $PAW_APP, $PAW_WINDOW, $PAW_MODE.")
+                Text("Shell commands paw runs on events, e.g. sketchybar --trigger paw_workspace_change. Variables: $PAW_WORKSPACE, $PAW_PREV_WORKSPACE, $PAW_APP, $PAW_WINDOW, $PAW_MODE, $PAW_DISPLAYS.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Hooks") {
@@ -378,6 +378,7 @@ private struct HooksTab: View {
                 TextField("Windows changed", text: $c.hooks.windowsChanged)
                 TextField("Window focused", text: $c.hooks.windowFocused)
                 TextField("Mode changed", text: $c.hooks.modeChanged)
+                TextField("Displays changed", text: $c.hooks.displaysChanged)
             }
         }
         .formStyle(.grouped)
