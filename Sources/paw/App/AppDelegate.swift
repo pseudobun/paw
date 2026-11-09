@@ -44,7 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func isAlreadyRunning() -> Bool {
         guard let id = Bundle.main.bundleIdentifier else { return false }
         let me = ProcessInfo.processInfo.processIdentifier
-        return NSRunningApplication.runningApplications(withBundleIdentifier: id).contains { $0.processIdentifier != me }
+        let myLaunch = NSRunningApplication.current.launchDate ?? .distantFuture
+        // Only the newer of two instances quits: when `open` and launchd start paw at the same
+        // moment, each sees the other, and quitting on any match left none running.
+        return NSRunningApplication.runningApplications(withBundleIdentifier: id).contains { other in
+            guard other.processIdentifier != me, !other.isTerminated else { return false }
+            let theirs = other.launchDate ?? .distantFuture
+            return theirs < myLaunch || (theirs == myLaunch && other.processIdentifier < me)
+        }
     }
 
     /// SIGTERM (pkill, launchd) and SIGINT quit through AppKit, so hidden windows come back.

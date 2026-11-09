@@ -45,10 +45,12 @@ fi
 if [ -z "$identity" ] && security find-identity -p codesigning 2>/dev/null | grep -q "paw Local Signing"; then
   identity="paw Local Signing"
 fi
-if [ -n "$identity" ]; then
-  codesign --force --options runtime --timestamp=none -s "$identity" "$app" 2>&1 | grep -v "replacing existing" || true
+# A locked keychain (e.g. over SSH) makes codesign fail with errSecInternalComponent:
+# fall back to ad-hoc instead of leaving a broken signature.
+if [ -n "$identity" ] && err="$(codesign --force --options runtime --timestamp=none -s "$identity" "$app" 2>&1)"; then
   echo "signed: $identity"
 else
+  [ -n "$identity" ] && echo "signing with $identity failed ($(echo "$err" | grep -v 'replacing existing' | tail -1)); ad-hoc instead" >&2
   codesign --force -s - "$app"
   echo "signed: ad-hoc"
 fi

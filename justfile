@@ -43,7 +43,9 @@ local-cert:
     d=$(mktemp -d); trap 'rm -rf "$d"' EXIT
     printf '[req]\ndistinguished_name=dn\nprompt=no\nx509_extensions=ext\n[dn]\nCN={{local_identity}}\n[ext]\nbasicConstraints=critical,CA:false\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=critical,codeSigning\n' > "$d/c.cnf"
     openssl req -x509 -newkey rsa:2048 -nodes -keyout "$d/k.pem" -out "$d/c.pem" -days 3650 -config "$d/c.cnf" 2>/dev/null
-    openssl pkcs12 -export -legacy -inkey "$d/k.pem" -in "$d/c.pem" -out "$d/c.p12" -passout pass:paw
+    # macOS's /usr/bin/openssl is LibreSSL: its pkcs12 already uses the legacy algorithms and has no -legacy flag
+    legacy=$(openssl version | grep -q LibreSSL || echo -legacy)
+    openssl pkcs12 -export $legacy -inkey "$d/k.pem" -in "$d/c.pem" -out "$d/c.p12" -passout pass:paw
     security import "$d/c.p12" -k ~/Library/Keychains/login.keychain-db -P paw -T /usr/bin/codesign
     echo "created {{local_identity}}; run just install, then grant Accessibility once"
 
@@ -52,6 +54,9 @@ launchd: install
     mkdir -p "$(dirname "{{launch_agent}}")"
     sed "s|/Applications|{{app_dir}}|" examples/dev.paw.app.plist > "{{launch_agent}}"
     -launchctl bootout gui/$(id -u) "{{launch_agent}}" 2>/dev/null
+    @# install opened paw itself; hand it to launchd so KeepAlive restarts it after a crash
+    -pkill -x paw
+    @for i in $(seq 1 30); do pgrep -x paw >/dev/null || break; sleep 0.1; done
     launchctl bootstrap gui/$(id -u) "{{launch_agent}}"
     @echo "loaded {{launch_agent}}"
 
