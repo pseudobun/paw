@@ -85,11 +85,14 @@ struct TreeTests {
         #expect(ws.tiles.count == 3)
     }
 
-    @Test func cycleStackWraps() {
+    @Test func cycleStackStopsOrWraps() {
         let ws = Workspace(name: "s", layout: .stack)
         for id: WindowID in [1, 2, 3] { ws.insert(id, area: area) }
-        #expect(ws.cycleStack(3, by: 1) == 1)
-        #expect(ws.cycleStack(1, by: -1) == 3)
+        #expect(ws.cycleStack(3, by: 1) == nil)
+        #expect(ws.cycleStack(1, by: -1) == nil)
+        #expect(ws.cycleStack(2, by: 1) == 3)
+        #expect(ws.cycleStack(3, by: 1, wrap: true) == 1)
+        #expect(ws.cycleStack(1, by: -1, wrap: true) == 3)
         ws.activate(2)
         #expect(ws.tiles[0].activeWindow == 2)
     }

@@ -94,7 +94,9 @@ final class IndicatorController {
         v.onScroll = { [weak self] dir in
             guard let self, config.indicator.scrollToCycle, let current = stack.activeIndex else { return }
             let n = stack.items.count
-            onFocus?(WindowID(stack.items[(current + dir + n) % n].id))
+            var next = current + dir
+            if config.focus.wrapStacks { next = (next + n) % n } else if !stack.items.indices.contains(next) { return }
+            onFocus?(WindowID(stack.items[next].id))
         }
         v.onHover = { [weak self] i in
             guard let self else { return }

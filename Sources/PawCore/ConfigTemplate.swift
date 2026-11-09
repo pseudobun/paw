@@ -36,6 +36,8 @@ public enum ConfigTemplate {
       focus: {
         mouseFollowsFocus: true,
         focusFollowsMouse: false,
+        // stack.next on the last window goes back to the first (false: it stays)
+        wrapStacks: false,
       },
 
       animation: {

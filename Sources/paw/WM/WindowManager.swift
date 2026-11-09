@@ -6,6 +6,9 @@ import PawCore
 final class WindowManager {
     struct Display {
         let id: CGDirectDisplayID
+        /// "DELL U2717D", "Built-in Retina Display"…
+        let name: String
+        let builtin: Bool
         /// AX coordinates (top-left origin).
         let frame: CGRect
         let area: CGRect
@@ -27,6 +30,9 @@ final class WindowManager {
     private var dragTimer: Timer?
     private var saveWork: DispatchWorkItem?
     private var windowsHookWork: DispatchWorkItem?
+    private var displaysWork: DispatchWorkItem?
+    /// The workspace each display showed last, so one plugged in again gets its workspace back.
+    private var workspaceByDisplay: [CGDirectDisplayID: String] = [:]
     private(set) var mode: String?
     private let modePanel = TitlePanel()
     private var lastWindowsSignature = ""
@@ -77,8 +83,10 @@ final class WindowManager {
         })
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                                 object: nil, queue: .main) { [weak self] _ in
-            self?.rebuildDisplays()
-            self?.layoutAll(animated: false)
+            self?.scheduleDisplaysChanged()
+        })
+        observers.append(ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.scheduleDisplaysChanged()
         })
         layoutAll(animated: false)
         if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier { syncFocus(pid, force: true) }
@@ -127,8 +135,50 @@ final class WindowManager {
         return p
     }
 
+    /// Displays come and go in bursts of notifications; act once they settle.
+    private func scheduleDisplaysChanged() {
+        displaysWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.displaysChanged() }
+        displaysWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
+    }
+
+    /// A display was plugged in or out, or rearranged: give every display a workspace, park the
+    /// windows of workspaces no longer shown (again, as the free corners moved), pick up windows
+    /// macOS moved around, and retile everything.
+    private func displaysChanged() {
+        let before = displays.map { "\($0.id)@\($0.frame)" }
+        rebuildDisplays()
+        let after = displays.map { "\($0.id)@\($0.frame)" }
+        Log.app.info("displays changed: \(after.joined(separator: ", "), privacy: .public)")
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular { adopt(app, state: nil) }
+        let visible = Set(displays.map(\.workspace))
+        for (name, ws) in workspaces where !visible.contains(name) {
+            for id in ws.allWindows { if let w = windows[id] { _ = w.readFrame(); hide(w, from: ws) } }
+        }
+        // Shown windows go back on their tiles even if macOS moved them; floating ones only when
+        // they ended up off every display.
+        for d in displays {
+            let ws = workspace(d.workspace)
+            for id in ws.allWindows {
+                guard let w = windows[id] else { continue }
+                if !ws.isFloating(id) { w.isHidden = true; continue }
+                if let f = w.readFrame(), !displays.contains(where: { $0.frame.intersects(f.insetBy(dx: 20, dy: 20)) }) {
+                    w.floatFrame = nil
+                    w.isHidden = true
+                }
+            }
+        }
+        layoutAll(animated: false)
+        if before != after {
+            runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": focusedWorkspace.name, "PAW_PREV_WORKSPACE": focusedWorkspace.name])
+        }
+        scheduleSave()
+    }
+
     private func rebuildDisplays() {
         let old = displays
+        for d in old { workspaceByDisplay[d.id] = d.workspace }
         let l = config.layout
         var used = Set<String>()
         displays = NSScreen.screens.enumerated().map { i, s in
@@ -136,10 +186,10 @@ final class WindowManager {
             let frame = Self.axFrame(s.frame)
             let area = TreeLayout.area(screen: frame, visible: Self.axFrame(s.visibleFrame), barTop: l.barTop, barBottom: l.barBottom,
                                        padding: indicatorPadding(l.padding))
-            var ws = old.first { $0.id == id }?.workspace ?? ""
+            var ws = old.first { $0.id == id }?.workspace ?? workspaceByDisplay[id] ?? ""
             if used.contains(ws) { ws = "" }
             if !ws.isEmpty { used.insert(ws) }
-            return Display(id: id, frame: frame, area: area, workspace: ws)
+            return Display(id: id, name: s.localizedName, builtin: CGDisplayIsBuiltin(id) != 0, frame: frame, area: area, workspace: ws)
         }
         for n in 1...max(1, l.workspaces) { _ = workspace("\(n)") }
         for i in displays.indices where displays[i].workspace.isEmpty {
@@ -156,7 +206,12 @@ final class WindowManager {
         switch spec.lowercased() {
         case "main", "primary": return 0
         case "secondary": return displays.count > 1 ? 1 : nil
-        default: return Int(spec).map { $0 - 1 }.flatMap { displays.indices.contains($0) ? $0 : nil }
+        case "builtin", "internal", "laptop": return displays.firstIndex { $0.builtin }
+        case "external": return displays.firstIndex { !$0.builtin }
+        default:
+            if let n = Int(spec) { return displays.indices.contains(n - 1) ? n - 1 : nil }
+            // A display's name, or part of it: "DELL", "Gigabyte M32U".
+            return displays.firstIndex { $0.name.localizedCaseInsensitiveContains(spec) }
         }
     }
 
@@ -391,18 +446,29 @@ final class WindowManager {
     /// Parks a window in a corner of its display with one pixel showing (AeroSpace's trick:
     /// macOS keeps windows that are fully off screen from moving).
     private func hide(_ w: Window, from ws: Workspace) {
-        if ws.isFloating(w.id) { _ = w.readFrame(); w.floatFrame = w.frame }
+        if ws.isFloating(w.id), !w.isHidden { _ = w.readFrame(); w.floatFrame = w.frame }
         animator.cancel(w.id)
-        let d = displays.first { $0.frame.contains(CGPoint(x: w.frame.midX, y: w.frame.midY)) } ?? displays.first
-        guard let d else { return }
-        let others = displays.filter { $0.id != d.id }.map(\.frame)
-        let size = w.frame.size
-        var origin = CGPoint(x: d.frame.maxX - 1, y: d.frame.maxY - 1)
-        let spill = CGRect(origin: origin, size: size)
-        if others.contains(where: { $0.intersects(spill) }) { origin = CGPoint(x: d.frame.minX - size.width + 1, y: d.frame.maxY - 1) }
+        guard let origin = parkingSpot(for: w) else { return }
         suppressMoves[w.id] = Date().addingTimeInterval(1)
         w.setPosition(origin)
         w.isHidden = true
+    }
+
+    /// A screen corner where the window sticks out by one pixel and covers no other display:
+    /// bottom-right or bottom-left of its display first, then of the others.
+    private func parkingSpot(for w: Window) -> CGPoint? {
+        let home = displays.first { $0.frame.contains(CGPoint(x: w.frame.midX, y: w.frame.midY)) }
+        let order = (home.map { [$0] } ?? []) + displays.filter { $0.id != home?.id }
+        let size = w.frame.size
+        var first: CGPoint?
+        for d in order {
+            for origin in [CGPoint(x: d.frame.maxX - 1, y: d.frame.maxY - 1), CGPoint(x: d.frame.minX - size.width + 1, y: d.frame.maxY - 1)] {
+                first = first ?? origin
+                let spill = CGRect(origin: origin, size: size)
+                if !displays.contains(where: { $0.id != d.id && $0.frame.intersects(spill) }) { return origin }
+            }
+        }
+        return first
     }
 
     // MARK: - Focus
@@ -622,8 +688,8 @@ final class WindowManager {
         case .focus(let target):
             switch target {
             case .dir(let d): focus(direction: d)
-            case .stackNext: if let id = fid, let n = ws.cycleStack(id, by: 1) { bringForward(n, in: ws) }
-            case .stackPrev: if let id = fid, let n = ws.cycleStack(id, by: -1) { bringForward(n, in: ws) }
+            case .stackNext: if let id = fid, let n = ws.cycleStack(id, by: 1, wrap: config.focus.wrapStacks) { bringForward(n, in: ws) }
+            case .stackPrev: if let id = fid, let n = ws.cycleStack(id, by: -1, wrap: config.focus.wrapStacks) { bringForward(n, in: ws) }
             case .stackFirst: if let id = fid, let t = ws.tile(of: id), let n = t.windows.first { focusWindow(n, warp: false) }
             case .stackLast: if let id = fid, let t = ws.tile(of: id), let n = t.windows.last { focusWindow(n, warp: false) }
             }

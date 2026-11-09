@@ -307,9 +307,11 @@ public final class Workspace {
     }
 
     /// The window `offset` places further in its stack (wrapping), and makes it the visible one.
-    public func cycleStack(_ w: WindowID, by offset: Int) -> WindowID? {
+    /// The next window in `w`'s stack; at either end nil, or round to the other end with `wrap`.
+    public func cycleStack(_ w: WindowID, by offset: Int, wrap: Bool = false) -> WindowID? {
         guard let t = tile(of: w), t.windows.count > 1, let i = t.windows.firstIndex(of: w) else { return nil }
         let n = t.windows.count
+        guard wrap || t.windows.indices.contains(i + offset) else { return nil }
         t.active = ((i + offset) % n + n) % n
         return t.windows[t.active]
     }
