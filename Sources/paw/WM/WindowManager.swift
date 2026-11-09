@@ -152,11 +152,13 @@ final class WindowManager {
     }
 
     /// Displays come and go in bursts of notifications; act once they settle.
+    /// macOS brings displays up one after another (a dock's two monitors ~2 s apart): wait until
+    /// they have settled, so windows move once, for the final setup, not once per display.
     private func scheduleDisplaysChanged() {
         displaysWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.displaysChanged() }
         displaysWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
     }
 
     /// A display was plugged in or out, or rearranged: give every display a workspace, park the
