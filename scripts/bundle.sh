@@ -22,8 +22,8 @@ if [ -z "${PAW_VERSION:-}" ]; then
   fi
 fi
 version="$PAW_VERSION"
-# CFBundleShortVersionString must be plain x.y.z; the full version goes in PawVersion.
-short="$(echo "$version" | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' || echo 0.0.0)"
+# Shown by Finder and Sparkle ("you have …"): the version without build metadata, e.g. 0.1.0-beta.2.
+short="${version%%+*}"
 build="${PAW_BUILD:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 
 # dead_strip + strip -x: about half the size (local symbols aren't needed to run)

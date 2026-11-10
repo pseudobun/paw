@@ -34,6 +34,9 @@ final class Updater: NSObject {
     var onResult: ((State) -> Void)?
 
     private var controller: SPUStandardUpdaterController?
+    /// The version the probe found; shown once its cycle has ended (Sparkle ignores a check
+    /// started while another runs).
+    private var found: String?
 
     var isAvailable: Bool { controller != nil }
 
@@ -67,6 +70,7 @@ final class Updater: NSObject {
             return
         }
         state = .checking
+        found = nil
         u.checkForUpdateInformation()
     }
 
@@ -74,18 +78,43 @@ final class Updater: NSObject {
         guard state == .checking else { return }
         state = s
         Log.app.info("updates: \(s.text, privacy: .public)")
-        if case .available = s {
-            NSApp.activate(ignoringOtherApps: true)
-            controller?.checkForUpdates(nil)
-        }
         onResult?(s)
+        if case .available = s {
+            showWindow(tries: 30)
+        }
+    }
+
+    /// Sparkle's window for the found update, once the probe's session has let go (a check
+    /// started before that is ignored).
+    private func showWindow(tries: Int) {
+        guard let controller else { return }
+        guard controller.updater.canCheckForUpdates else {
+            if tries > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.showWindow(tries: tries - 1) }
+            } else {
+                Log.app.error("updates: Sparkle stayed busy; no window")
+            }
+            return
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        controller.checkForUpdates(nil)
+    }
+
+    private func found(_ v: String) {
+        guard state == .checking else { return }
+        found = v
+    }
+
+    private func cycleEnded(_ error: String?) {
+        guard state == .checking else { return }
+        if let v = found { finish(.available(v)) } else { finish(.failed(error ?? "no answer")) }
     }
 }
 
 extension Updater: SPUUpdaterDelegate {
     nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         let v = item.displayVersionString
-        Task { @MainActor in self.finish(.available(v)) }
+        Task { @MainActor in self.found(v) }
     }
 
     nonisolated func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
@@ -93,7 +122,7 @@ extension Updater: SPUUpdaterDelegate {
     }
 
     nonisolated func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
-        let message = error.map { ($0 as NSError).localizedDescription } ?? "no answer"
-        Task { @MainActor in self.finish(.failed(message)) }
+        let message = error.map { ($0 as NSError).localizedDescription }
+        Task { @MainActor in self.cycleEnded(message) }
     }
 }

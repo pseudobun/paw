@@ -48,7 +48,7 @@ struct SettingsInfo {
 }
 
 enum SettingsAction {
-    case openConfig, revealConfig, reloadConfig
+    case openConfig, revealConfig, reloadConfig, accessibility, screenRecording
 }
 
 /// Config collections, edited in rows of their own.
@@ -198,10 +198,20 @@ enum SettingsCatalog {
     static var pages: [SettingsPage] { groups.flatMap(\.pages) }
 
     static var general: SettingsPage {
-        SettingsPage(id: "general", title: "General", subtitle: "Startup, updates and the config file.",
+        SettingsPage(id: "general", title: "General", subtitle: "Startup, permissions, updates and the config file.",
                      symbol: "gearshape.fill", color: Theme.neutral, sections: [
             SettingsSection("Startup", [
                 f(\.openAtLogin, "openAtLogin", "Open at login", .toggle, "Only for the installed paw.app."),
+            ]),
+            SettingsSection("Permissions", [
+                .info(SettingsInfo(label: "Accessibility",
+                                   help: AX.isTrusted ? "● Allowed: paw moves and resizes windows."
+                                                      : "○ Not allowed: paw can't manage windows until you allow it.",
+                                   button: AX.isTrusted ? "Open Settings" : "Request", action: .accessibility)),
+                .info(SettingsInfo(label: "Screen Recording",
+                                   help: CGPreflightScreenCaptureAccess() ? "● Allowed: the overview shows live window pictures."
+                                                                          : "○ Not allowed (optional): the overview shows app icons instead of window pictures.",
+                                   button: CGPreflightScreenCaptureAccess() ? "Open Settings" : "Request", action: .screenRecording)),
             ]),
             SettingsSection("Updates", [
                 f(\.updates.check, "updates.check", "Check for updates", .toggle, "Once a day; offers new versions from GitHub."),

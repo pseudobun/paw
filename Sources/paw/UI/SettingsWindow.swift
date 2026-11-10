@@ -818,7 +818,44 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         case .openConfig: NSWorkspace.shared.open(settings.url)
         case .revealConfig: NSWorkspace.shared.activateFileViewerSelecting([settings.url])
         case .reloadConfig: settings.load()
+        case .accessibility:
+            if !AX.isTrusted { AX.requestTrust() }
+            Self.openPrivacy("Privacy_Accessibility")
+        case .screenRecording:
+            if !CGPreflightScreenCaptureAccess() { CGRequestScreenCaptureAccess() }
+            Self.openPrivacy("Privacy_ScreenCapture")
         }
+        // Grants change outside paw; look again when the window comes back.
+        pollPermissions()
+    }
+
+    private static func openPrivacy(_ anchor: String) {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private var permissionState: (Bool, Bool) { (AX.isTrusted, CGPreflightScreenCaptureAccess()) }
+
+    /// Redraws the page once a permission changes (checked for a minute after a request).
+    private func pollPermissions(_ tries: Int = 60) {
+        let before = permissionState
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self else { return }
+            if self.permissionState != before {
+                self.shownPermissions = self.permissionState
+                self.showPage(keepScroll: true)
+            }
+            else if tries > 0 { self.pollPermissions(tries - 1) }
+        }
+    }
+
+    private var shownPermissions: (Bool, Bool)?
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        // Only when a grant changed meanwhile: a rebuild would swallow the click that focused the window.
+        if let shown = shownPermissions, shown != permissionState { showPage(keepScroll: true) }
+        shownPermissions = permissionState
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
