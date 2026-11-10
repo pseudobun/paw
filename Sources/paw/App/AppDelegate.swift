@@ -186,7 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Answer first; terminating here would close the connection without a reply.
             DispatchQueue.main.async { NSApp.terminate(nil) }
         case "settings":
-            openSettings()
+            MainActor.assumeIsolated { SettingsWindowController.shared.show(settings: settings, page: rest.isEmpty ? nil : rest) }
         case "update":
             let available = MainActor.assumeIsolated { Updater.shared.isAvailable }
             guard available else {

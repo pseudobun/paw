@@ -7,10 +7,11 @@ final class SettingsWindowController {
     static let shared = SettingsWindowController()
     private var controller: SettingsController?
 
-    func show(settings: Settings) {
+    /// `page`: a page's id ("about") to open on.
+    func show(settings: Settings, page: String? = nil) {
         let c = controller ?? SettingsController(settings: settings)
         controller = c
-        c.show()
+        c.show(page: page)
     }
 
     /// The config was read again (saved here, in an editor, or reloaded): show its values.
@@ -104,7 +105,8 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         build()
     }
 
-    func show() {
+    func show(page: String? = nil) {
+        if let page, let match = SettingsCatalog.pages.first(where: { $0.id == page.lowercased() }) { pageID = match.id }
         if !window.isVisible {
             let front = NSWorkspace.shared.frontmostApplication
             previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : front
@@ -411,6 +413,8 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 addCard(card)
             case .editor(let editor):
                 build(editor)
+            case .footer(let footer):
+                contentStack.addArrangedSubview(footerView(footer))
             }
         }
         if settings.error != nil {
@@ -676,6 +680,13 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         return text
     }
 
+    private func footerView(_ footer: SettingsFooter) -> NSView {
+        AuthorFooter.make(width: Self.rowWidth,
+                          style: .init(foreground: Theme.foreground, muted: Theme.mutedForeground, line: Theme.border,
+                                       font: { Theme.sans($0, $1) }),
+                          openSource: (footer.app, footer.repo))
+    }
+
     func button(_ title: String, _ action: @escaping () -> Void) -> NSButton {
         let b = NSButton(title: title, target: nil, action: nil)
         b.bezelStyle = .push
@@ -824,6 +835,13 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         case .screenRecording:
             if !CGPreflightScreenCaptureAccess() { CGRequestScreenCaptureAccess() }
             Self.openPrivacy("Privacy_ScreenCapture")
+        case .open(let link):
+            if let url = URL(string: link) { NSWorkspace.shared.open(url) }
+            return
+        case .copy(let text):
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            return
         }
         // Grants change outside paw; look again when the window comes back.
         pollPermissions()

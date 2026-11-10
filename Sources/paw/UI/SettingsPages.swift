@@ -49,6 +49,8 @@ struct SettingsInfo {
 
 enum SettingsAction {
     case openConfig, revealConfig, reloadConfig, accessibility, screenRecording
+    case open(String)
+    case copy(String)
 }
 
 /// Config collections, edited in rows of their own.
@@ -85,10 +87,17 @@ enum SettingsRow {
     case note(String)
 }
 
+/// The About page's footer (`AuthorFooter`): the author's links, and the open-source line.
+struct SettingsFooter {
+    let app: String
+    let repo: String
+}
+
 struct SettingsSection {
     enum Content {
         case rows([SettingsRow])
         case editor(SettingsEditor)
+        case footer(SettingsFooter)
     }
 
     var title: String?
@@ -105,6 +114,8 @@ struct SettingsSection {
         self.title = title
         content = .editor(editor)
     }
+
+    init(footer: SettingsFooter) { content = .footer(footer) }
 }
 
 struct SettingsPage {
@@ -139,6 +150,7 @@ struct SettingsPage {
                     }
                 }
             case .editor(let e): words.append(e.haystack)
+            case .footer: words += ["pseudobun", "github", "website", "email", "open source"]
             }
         }
         return words.joined(separator: " ").lowercased()
@@ -191,11 +203,32 @@ enum SettingsCatalog {
             SettingsGroup(title: "Workspaces", pages: [workspaces, setups, rules, initiate]),
             SettingsGroup(title: "Input", pages: [keys, mouse]),
             SettingsGroup(title: "Look", pages: [indicators, appearance, icons, border, overview]),
-            SettingsGroup(title: "Advanced", pages: [hooks]),
+            SettingsGroup(title: "Advanced", pages: [hooks, about]),
         ]
     }
 
     static var pages: [SettingsPage] { groups.flatMap(\.pages) }
+
+    static var about: SettingsPage {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? AppPaths.version
+        let full = info["PawVersion"] as? String ?? AppPaths.version
+        let build = info["CFBundleVersion"] as? String ?? "–"
+        let commit = full.split(separator: "+").dropFirst().first.map { " · \($0)" } ?? ""
+        return SettingsPage(id: "about", title: "About", subtitle: "A tiling window manager for macOS, by pseudobun.",
+                            symbol: "pawprint.fill", color: Theme.neutral, sections: [
+            SettingsSection("paw", [
+                .info(SettingsInfo(label: "Version", help: "\(version) (build \(build)\(commit))", button: "Copy", action: .copy(full))),
+                .info(SettingsInfo(label: "Source code", help: "github.com/pseudobun/paw", button: "Open",
+                                   action: .open("https://github.com/pseudobun/paw"))),
+                .info(SettingsInfo(label: "Report a problem", help: "Issues on GitHub", button: "Open",
+                                   action: .open("https://github.com/pseudobun/paw/issues"))),
+                .info(SettingsInfo(label: "Licence", help: "MIT", button: "Open",
+                                   action: .open("https://github.com/pseudobun/paw/blob/main/LICENSE"))),
+            ]),
+            SettingsSection(footer: SettingsFooter(app: "paw", repo: "https://github.com/pseudobun/paw")),
+        ])
+    }
 
     static var general: SettingsPage {
         SettingsPage(id: "general", title: "General", subtitle: "Startup, permissions, updates and the config file.",

@@ -9,7 +9,7 @@ enum CLI {
         "hide": { _ in post("hide") },
         "show": { _ in post("show") },
         "quit": { _ in post("quit") },
-        "settings": { _ in post("settings") },
+        "settings": { args in post((["settings"] + args.prefix(1)).joined(separator: " ")) },
         "update": update,
         "reload": reload,
         "status": status,
@@ -78,7 +78,7 @@ enum CLI {
           icon <app name>     the sketchybar-app-font glyph for an app
           color <app name>    the app's colour (0xAARRGGBB, from its icon or icons.colors)
           preview <out.png> [--fonts=DIR]   render stack indicators with your config
-          settings            open the settings window (also in the menu bar icon)
+          settings [page]     open the settings window, e.g. on its about page (also in the menu bar icon)
           update              look for a new version now (Homebrew: brew upgrade --cask pseudobun/tap/paw)
           quit                quit (puts hidden windows back on screen)
           version
