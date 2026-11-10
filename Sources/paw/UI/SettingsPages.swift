@@ -247,8 +247,9 @@ enum SettingsCatalog {
                                    button: CGPreflightScreenCaptureAccess() ? "Open Settings" : "Request", action: .screenRecording)),
             ]),
             SettingsSection("Updates", [
-                f(\.updates.check, "updates.check", "Check for updates", .toggle, "Once a day; offers new versions from GitHub."),
-                f(\.updates.automatic, "updates.automatic", "Install automatically", .toggle, "Without asking; paw relaunches."),
+                f(\.updates.check, "updates.check", "Check for updates", .toggle,
+                  "Once a day, downloaded in the background; installs when paw quits, or from hop or paw update."),
+                f(\.updates.automatic, "updates.automatic", "Install right away", .toggle, "As soon as it is downloaded; paw restarts."),
             ]),
             SettingsSection("Config file", [
                 .info(SettingsInfo(label: "Open in editor", help: "Everything here is saved to config.json5 at once; edits there apply here too.",

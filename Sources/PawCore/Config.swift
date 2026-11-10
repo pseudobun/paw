@@ -271,9 +271,9 @@ public struct PawConfig: Codable, Equatable, Sendable {
     }
 
     public struct Updates: Codable, Equatable, Sendable {
-        /// Look for a new version once a day.
+        /// Look for a new version once a day and download it in the background; it installs when paw quits.
         public var check = true
-        /// Download and install new versions without asking (paw relaunches by itself).
+        /// Install as soon as it is downloaded (paw restarts by itself).
         public var automatic = false
         public init() {}
     }
