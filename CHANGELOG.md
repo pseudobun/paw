@@ -3,6 +3,13 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.5](https://github.com/pseudobun/paw/compare/v0.1.0-beta.4...v0.1.0-beta.5) (2026-11-10)
+
+
+### Bug Fixes
+
+* **cask:** mark paw as self-updating with auto_updates ([#25](https://github.com/pseudobun/paw/issues/25)) ([aa39cc9](https://github.com/pseudobun/paw/commit/aa39cc92b7b90026047ce995247360f14997064f))
+
 ## [0.1.0-beta.4](https://github.com/pseudobun/paw/compare/v0.1.0-beta.3...v0.1.0-beta.4) (2026-11-10)
 
 
