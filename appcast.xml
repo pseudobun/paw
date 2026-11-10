@@ -6,6 +6,23 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.4</title>
+      <pubDate>Tue, 10 Nov 2026 17:46:00 +0000</pubDate>
+      <sparkle:version>71</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
+<ul>
+<li><b>settings:</b> add an About page with the version, links and an author footer (<a href="https://github.com/pseudobun/paw/commit/3d81699dc908e72a422b2596566b0c65e4770062">3d81699</a>)</li>
+</ul>
+<h3>Bug Fixes</h3>
+<ul>
+<li><b>cask:</b> use the current depends_on macos syntax (<a href="https://github.com/pseudobun/paw/issues/23">#23</a>) (<a href="https://github.com/pseudobun/paw/commit/d12e1f210780d68b8823bccc71b2607e70e1b86f">d12e1f2</a>)</li>
+<li><b>overview:</b> show every app of a stack on the workspace cards (<a href="https://github.com/pseudobun/paw/issues/21">#21</a>) (<a href="https://github.com/pseudobun/paw/commit/2b88d2397e42f2a66312d2633c6c8f6210eddd33">2b88d23</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.4">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.4/paw-0.1.0-beta.4-macos.zip" type="application/octet-stream" sparkle:edSignature="dDC323PBbL+lHJuDjDRmY5XL87pdo+OsWUldSU98D6sgBVNu0bD/CL2UnhU+gmnDYgTIveAt7CIfzRkFiF71DQ==" length="3210691"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.3</title>
       <pubDate>Tue, 10 Nov 2026 17:27:07 +0000</pubDate>
       <sparkle:version>66</sparkle:version>
