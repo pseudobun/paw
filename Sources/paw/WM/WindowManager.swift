@@ -41,6 +41,8 @@ final class WindowManager {
     /// to that display and are numbered after its other workspaces (yabai's space order).
     private var extraPins: [String: CGDirectDisplayID] = [:]
     private var extraSeq = 0
+    /// Workspaces moved to another display (`move-workspace`, the overview), by display id.
+    private var movedTo: [String: CGDirectDisplayID] = [:]
     /// When paw last switched a display's workspace itself.
     private var lastSwitch = Date.distantPast
     /// The workspace presets in effect: the active setup's, else `workspaces`.
@@ -293,7 +295,7 @@ final class WindowManager {
             return Display(id: id, name: s.localizedName, builtin: CGDisplayIsBuiltin(id) != 0, frame: frame, area: area, workspace: ws)
         }
         let displaysNow = displays.map { "\($0.id)" }
-        if !lastDisplayIDs.isEmpty, displaysNow != lastDisplayIDs { forcedSetup = nil }
+        if !lastDisplayIDs.isEmpty, displaysNow != lastDisplayIDs { forcedSetup = nil; movedTo = [:] }
         lastDisplayIDs = displaysNow
         let match = forcedSetup.flatMap { n in config.setups[n].map { (name: n, setup: $0) } }
             ?? config.setup(for: displays.map { (name: $0.name, builtin: $0.builtin) })
@@ -1028,7 +1030,37 @@ final class WindowManager {
 
     /// The display a workspace belongs to: its preset's pin or the display it was made on.
     func homeDisplay(_ name: String) -> Int? {
-        displayIndex(for: presets[name]?.display) ?? extraPins[name].flatMap { id in displays.firstIndex { $0.id == id } }
+        if let id = movedTo[name], let i = displays.firstIndex(where: { $0.id == id }) { return i }
+        return displayIndex(for: presets[name]?.display) ?? extraPins[name].flatMap { id in displays.firstIndex { $0.id == id } }
+    }
+
+    /// Moves a workspace, windows and all, to display `di`, where it shows; the display it left
+    /// shows another of its workspaces. It stays there until the displays change.
+    func moveWorkspace(_ name: String, to di: Int) {
+        guard displays.indices.contains(di), workspaces[name] != nil else { return }
+        let from = displayShowing(name)
+        guard from != di else { return }
+        movedTo[name] = displays[di].id
+        if let from {
+            // The display it leaves: its next workspace, or a new empty one.
+            let next = numberedWorkspaces.first { homeDisplay($0) == from && displayShowing($0) == nil && $0 != name }
+                ?? orderedNames.first { $0 != Self.side && $0 != name && displayShowing($0) == nil && homeDisplay($0) == nil }
+            if let next {
+                displays[from].workspace = next
+                layout(workspace(next), animated: false)
+            }
+        }
+        // The display it goes to puts its own workspace away.
+        let old = displays[di].workspace
+        for id in workspace(old).allWindows { if let w = windows[id], !w.isHidden { hide(w, from: workspace(old)) } }
+        displays[di].workspace = name
+        focusedDisplay = di
+        let ws = workspace(name)
+        layout(ws, animated: true)
+        if let f = ws.focused ?? ws.allWindows.first { focusWindow(f, warp: true) } else { focusEmpty(di) }
+        emitWorkspaceChanged(prev: label(old))
+        showHUD(name, on: di)
+        scheduleSave()
     }
 
     /// Workspaces in the order their numbers go: display by display (the display whose first
@@ -1394,6 +1426,8 @@ final class WindowManager {
                     focusEmpty(di)
                 }
             }
+        case .moveWorkspace(let t):
+            if let di = displayTarget(t) { moveWorkspace(ws.name, to: di) }
         case .moveToDisplay(let t, let follow):
             if let id = fid, let di = displayTarget(t) { moveWindow(id, to: displays[di].workspace, follow: follow) }
         case .initiate(let setup):

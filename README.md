@@ -419,6 +419,7 @@ matches by pattern.
 | `hyper+e`, `alt+r` | balance, rotate |
 | `hyper+r` | resize mode: `←↑→↓`/`hjkl` grow, `shift+` shrink, `e` balance, `esc`/`return` done |
 | `hyper+tab` | overview |
+| `hyper+.`, `hyper+,` | move the workspace to the next / previous display |
 | `hyper+j`, `hyper+k` | zoom in, out |
 | `hyper+z`, `hyper+y` | undo, redo |
 | `hyper+o`, `hyper+i` | focus back, forward (vim's jump list) |
@@ -479,6 +480,7 @@ large with each window where it is. A stack shows its windows as icons; click on
 | drag a window | onto a card: send it there; onto the stage: drop zones as on the desktop (⌥ stacks) |
 | drag on empty stage, ⇧-drag | pick a region: the screen then shows the smallest branch holding every window it touches |
 | double-click a card, `+` | go to that workspace, new workspace |
+| drag a card to another display | move the whole workspace there |
 | `esc`, right click | close |
 
 With Screen Recording allowed (`overview.thumbnails`), windows show as pictures, otherwise as
@@ -512,6 +514,7 @@ Bindings and the CLI take the same commands; chain several with `;`
 | `move-to <n>\|next\|prev [--follow]` | Send the window to a workspace |
 | `display <dir>\|next\|prev\|<n>` | Focus a display |
 | `move-to-display <dir>\|<n> [--follow]` | Send the window to a display's workspace |
+| `move-workspace <dir>\|next\|prev\|<n>` | Move the focused workspace, windows and all, to that display (it shows there; the display it left shows its next workspace) |
 | `arrange [workspace\|all]` | Apply the preset(s), pulling their apps from other workspaces |
 | `initiate [setup]` | Open the preset apps and arrange every workspace (also `reset`); with a setup, use that one |
 | `mode <name>\|exit` | Turn a key mode on (again: off) or off |

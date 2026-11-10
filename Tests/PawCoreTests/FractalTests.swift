@@ -330,6 +330,8 @@ struct NewCommandTests {
         #expect(try Command.parse("find  Safari docs ") == .find("Safari docs"))
         #expect(try Command.parse("overview") == .overview)
         #expect(try Command.parse("zoom in") == .zoom(in: true))
+        #expect(try Command.parse("move-workspace next") == .moveWorkspace(.next))
+        #expect(try Command.parse("move-workspace 2") == .moveWorkspace(.index(2)))
         #expect(try Command.parse("zoom out") == .zoom(in: false))
         #expect(try Command.parse("layout columns") == .layout(.columns))
         #expect(try Command.parse("layout master") == .layout(.master))
