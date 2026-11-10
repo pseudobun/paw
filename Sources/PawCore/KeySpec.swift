@@ -90,6 +90,9 @@ public struct KeySpec: Hashable, Sendable {
             "-": kVK_ANSI_Minus, "=": kVK_ANSI_Equal, ",": kVK_ANSI_Comma, ".": kVK_ANSI_Period,
             "/": kVK_ANSI_Slash, ";": kVK_ANSI_Semicolon, "'": kVK_ANSI_Quote, "`": kVK_ANSI_Grave,
             "[": kVK_ANSI_LeftBracket, "]": kVK_ANSI_RightBracket, "\\": kVK_ANSI_Backslash,
+            // The same keys by the letters on a Slovenian/Croatian keyboard.
+            "š": kVK_ANSI_LeftBracket, "đ": kVK_ANSI_RightBracket, "č": kVK_ANSI_Semicolon, "ć": kVK_ANSI_Quote,
+            "ž": kVK_ANSI_Backslash,
         ]
         let f = [kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10,
                  kVK_F11, kVK_F12, kVK_F13, kVK_F14, kVK_F15, kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20]
