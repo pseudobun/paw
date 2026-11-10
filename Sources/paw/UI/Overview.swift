@@ -784,7 +784,9 @@ final class OverviewView: NSView {
                 let f = OverviewLayout.place(w.frame, in: inner).insetBy(dx: 1.5, dy: 1.5)
                 guard f.width > 2, f.height > 2 else { continue }
                 ctx.setAlpha(controller.matches(w) ? 1 : 0.25)
-                drawMini(w, in: f)
+                // A stack: every app in it, not just the one on top.
+                let apps = w.stack.compactMap { id in ws.windows.first { $0.id == id }?.app }
+                drawMini(w, stackApps: apps.count > 1 ? apps : [], in: f)
                 hits.append((f, .window(w.id)))
             }
             ctx.setAlpha(1)
@@ -813,7 +815,7 @@ final class OverviewView: NSView {
         }
     }
 
-    private func drawMini(_ w: WindowManager.OverviewWindow, in f: CGRect) {
+    private func drawMini(_ w: WindowManager.OverviewWindow, stackApps: [String] = [], in f: CGRect) {
         let c = style.colors
         let color = AppColors.shared.color(for: w.app, icons: controller.config?.icons ?? PawConfig.Icons()) ?? c.muted
         let p = NSBezierPath(roundedRect: f, xRadius: 3, yRadius: 3)
@@ -825,8 +827,24 @@ final class OverviewView: NSView {
         } else {
             color.withAlpha(0.35).ns.setFill()
             p.fill()
-            let side = min(22, f.width * 0.6, f.height * 0.6)
-            if side >= 9 { drawIcon(w.app, in: CGRect(x: f.midX - side / 2, y: f.midY - side / 2, width: side, height: side)) }
+            let apps = stackApps.isEmpty ? [w.app] : stackApps
+            let gap: CGFloat = 3
+            // Icons side by side, as large as fit (a stack shows each of its windows' apps).
+            let side = min(22, f.height * 0.6, (f.width * 0.85 - gap * CGFloat(apps.count - 1)) / CGFloat(apps.count))
+            if side >= 7 {
+                var x = f.midX - (side * CGFloat(apps.count) + gap * CGFloat(apps.count - 1)) / 2
+                for app in apps {
+                    drawIcon(app, in: CGRect(x: x, y: f.midY - side / 2, width: side, height: side))
+                    x += side + gap
+                }
+            }
+        }
+        if stackApps.count > 1, controller.thumbnails[w.id] != nil {
+            // Over a picture: a small badge with how many windows are stacked.
+            let b = CGRect(x: f.maxX - 16, y: f.minY + 3, width: 13, height: 13)
+            c.island.withAlpha(0.85).ns.setFill()
+            NSBezierPath(ovalIn: b).fill()
+            draw("\(stackApps.count)", in: b, font: Style.font(style.a.font, size: 8, weight: "bold"), color: c.fg, align: .center, centerY: true)
         }
         (w.id == controller.selected ? c.accent : color.withAlpha(0.7)).ns.setStroke()
         p.lineWidth = w.id == controller.selected ? 1.5 : 0.75
