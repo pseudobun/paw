@@ -3,6 +3,14 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.2](https://github.com/pseudobun/paw/compare/v0.1.0-beta.1...v0.1.0-beta.2) (2026-11-10)
+
+
+### Features
+
+* mark the ends of the move strip with an empty start/end slot ([#17](https://github.com/pseudobun/paw/issues/17)) ([90bc0cf](https://github.com/pseudobun/paw/commit/90bc0cfd359ef7338a04a550d8daa814c3120f48))
+* show where a moving workspace is; stop workspace next/prev at the ends ([#16](https://github.com/pseudobun/paw/issues/16)) ([2397781](https://github.com/pseudobun/paw/commit/239778164db158679cc7c3a84944ed6186cd1635))
+
 ## [0.1.0-beta.1](https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.1) (2026-11-10)
 
 First public beta.
