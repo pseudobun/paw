@@ -45,12 +45,14 @@ public enum Defaults {
             b["cmd+shift+ctrl+\(key)"] = "warp \(dir)"
         }
         for n in 1...10 {
+            // 0 is the side workspace: a place to throw a window you'll sort out later.
             let key = n == 10 ? "0" : "\(n)"
-            b["ctrl+\(key)"] = "workspace \(n)"
-            b["ralt+\(key)"] = "workspace \(n)"
-            b["ralt+shift+\(key)"] = "move-to \(n)"
-            b["cmd+ctrl+\(key)"] = "move-to \(n) --follow"
-            b["cmd+ralt+\(key)"] = "move-to \(n) --follow"
+            let ws = n == 10 ? "side" : "\(n)"
+            b["ctrl+\(key)"] = "workspace \(ws)"
+            b["ralt+\(key)"] = "workspace \(ws)"
+            b["ralt+shift+\(key)"] = "move-to \(ws)"
+            b["cmd+ctrl+\(key)"] = "move-to \(ws) --follow"
+            b["cmd+ralt+\(key)"] = "move-to \(ws) --follow"
         }
         return b
     }()

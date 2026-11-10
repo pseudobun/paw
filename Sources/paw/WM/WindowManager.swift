@@ -82,6 +82,7 @@ final class WindowManager {
     private var overflowSuspects: [WindowID: CGSize] = [:]
     private var overflowWork: [String: DispatchWorkItem] = [:]
     private var relayingOutClamped = false
+    private var droppingSide = false
     /// The window paw just focused, until macOS catches up (the border goes there at once).
     private var pawFocus: (id: WindowID, at: Date)?
     /// The window server and AX calls that focus a window take 20–40 ms; they run here, in
@@ -1064,13 +1065,13 @@ final class WindowManager {
         return numberedWorkspaces.firstIndex(of: name).map { "\($0 + 1)" } ?? name
     }
 
-    private func resolve(_ t: Command.WorkspaceTarget) -> String? {
+    private func resolve(_ t: Command.WorkspaceTarget, making: Bool = false) -> String? {
         let names = numbered
         let cur = focusedWorkspace.name
         switch t {
         case .name(let n):
             // "+N" (as the bar shows it) or "side": the side workspace.
-            if n.hasPrefix("+") || n == Self.side { return workspaces[Self.side] != nil ? Self.side : nil }
+            if n.hasPrefix("+") || n == Self.side { return workspaces[Self.side] != nil || making ? Self.side : nil }
             let core = numberedWorkspaces
             if let i = Int(n), core.contains(where: { homeDisplay($0) != nil }) {
                 return core.indices.contains(i - 1) ? core[i - 1] : nil
@@ -1380,7 +1381,8 @@ final class WindowManager {
         case .workspaceClose:
             closeWorkspace(ws)
         case .moveTo(let t, let follow):
-            if let id = fid, let n = resolve(t) { moveWindow(id, to: n, follow: follow) }
+            // Sending a window to the side workspace makes it when there is none.
+            if let id = fid, let n = resolve(t, making: true) { moveWindow(id, to: n, follow: follow) }
         case .focusDisplay(let t):
             if let di = displayTarget(t) {
                 focusedDisplay = di
@@ -1984,7 +1986,23 @@ final class WindowManager {
 
     /// The side workspace goes once everything on it has a place (and it isn't on screen).
     private func dropEmptySide() {
-        guard let s = workspaces[Self.side], s.isEmpty, displayShowing(Self.side) == nil else { return }
+        guard let s = workspaces[Self.side], s.isEmpty else { return }
+        if displayShowing(Self.side) != nil {
+            // Sorted while looking at it: back to where you were, then it goes.
+            guard !droppingSide else { return }
+            droppingSide = true
+            let back = lastWorkspace.flatMap { $0 != Self.side && workspaces[$0] != nil ? $0 : nil } ?? numberedWorkspaces.first ?? "1"
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                defer { droppingSide = false }
+                guard workspaces[Self.side]?.isEmpty == true, displayShowing(Self.side) != nil else { return }
+                show(back)
+                if displayShowing(Self.side) == nil { workspaces[Self.side] = nil }
+                publish("windowsChanged", ["workspaces": query()])
+                runHook(config.hooks.windowsChanged, [:])
+            }
+            return
+        }
         workspaces[Self.side] = nil
     }
 

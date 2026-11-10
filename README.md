@@ -408,8 +408,9 @@ matches by pattern.
 | `ctrl+shift+←↑→↓` | stack onto the neighbour |
 | `cmd+shift+ctrl+←↑→↓` | warp; a stacked window with nothing that way leaves its stack to that side |
 | `hyper+←/→` | previous / next window in the stack |
-| `ctrl+1…0`, `ralt+1…0` | workspace 1–10 |
-| `ralt+shift+1…0` | send the window to a workspace |
+| `ctrl+1…9`, `ralt+1…9` | workspace 1–9 |
+| `ctrl+0`, `ralt+0` | the side workspace (`+N` in the bar) |
+| `ralt+shift+1…0` | send the window to a workspace (0: the side workspace, to sort out later) |
 | `cmd+ctrl+1…0` | send and follow |
 | `ralt+a/d` | previous / next workspace |
 | `hyper+n`, `hyper+d` | new / close workspace |
@@ -433,7 +434,10 @@ When displays are unplugged, the workspaces that lived on them (pinned there by 
 with `workspace new`, or shown there) are cleared out: windows a preset in the new arrangement
 places go to their preset workspace, every other window waits on the **side** workspace, which the
 bar shows first as `+N` (N windows still to sort). Move them where you like; the side workspace
-disappears once it's empty. Workspaces that only existed for that display go away.
+disappears once it's empty (when you're on it, you go back to where you were). Workspaces that only
+existed for that display go away. `move-to side` (`ralt+shift+0`, with `--follow`: `cmd+ctrl+0`)
+throws any window there when you don't know yet where it belongs; `workspace side` (`ctrl+0`) goes
+there.
 
 Each display shows one workspace. Without setups the workspaces are shared: switching shows one on
 the focused display, or focuses the display that already shows it. With a setup, its presets pin
