@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>paw</title>
+    <link>https://github.com/pseudobun/paw</link>
+    <description>paw releases</description>
+    <language>en</language>
+    <item>
+      <title>paw 0.1.0-beta.1</title>
+      <pubDate>Tue, 10 Nov 2026 16:46:23 +0000</pubDate>
+      <sparkle:version>60</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.1</sparkle:releaseNotesLink>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.1/paw-0.1.0-beta.1-macos.zip" type="application/octet-stream" sparkle:edSignature="wp90AQx/jwZs39gAczFprh375uC9KM4ggngHEatfnVcQeRnIxKON6lm3xGEUglXeBudc8YRNqM6dnQm9r8p8Cg==" length="3150002"/>
+    </item>
+  </channel>
+</rss>
