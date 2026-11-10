@@ -482,6 +482,7 @@ large with each window where it is. A stack shows its windows as icons; click on
 | double-click a card, `+` | go to that workspace, new workspace |
 | drag a card onto another card | the two workspaces trade contents (3 → 5) |
 | drag a card to another display | move the whole workspace there |
+| `⌘E` | switch between the stage and the canvas: every workspace of a display side by side, scrolled left / right; pinch, ⌘-scroll or `⌘-` / `⌘=` zoom |
 | `esc`, right click | close |
 
 With Screen Recording allowed (`overview.thumbnails`), windows show as pictures, otherwise as

@@ -23,6 +23,47 @@ final class OverviewController {
     private(set) var thumbnails: [WindowID: CGImage] = [:]
     /// The display the overview opened on: the search field and the hints stay there.
     private(set) var keyDisplay = 0
+    /// "stage": cards and the selected workspace large; "canvas": every workspace of a display
+    /// side by side as one canvas, scrolled left and right. Remembered between openings.
+    private(set) var canvasMode = UserDefaults.standard.string(forKey: "overviewMode") == "canvas"
+    /// The canvas's zoom: 1 fills the height with one workspace. Remembered between openings.
+    private(set) var canvasZoom: CGFloat = {
+        let z = UserDefaults.standard.double(forKey: "overviewCanvasZoom")
+        return z > 0 ? CGFloat(z) : 0.45
+    }()
+
+    func zoomCanvas(by factor: CGFloat) {
+        guard canvasMode else { return }
+        canvasZoom = min(1, max(0.12, canvasZoom * factor))
+        UserDefaults.standard.set(Double(canvasZoom), forKey: "overviewCanvasZoom")
+        panels.forEach { $0.view.revealSelection() }
+        redraw()
+    }
+
+    /// ⌘E, ⌘- and ⌘= while the overview is open (its panel doesn't make paw the active app, so
+    /// key equivalents never reach it the usual way).
+    private var keyMonitor: Any?
+
+    private func watchKeys() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            guard let self, isOpen, e.modifierFlags.intersection([.command, .option, .control]) == .command else { return e }
+            switch e.charactersIgnoringModifiers?.lowercased() {
+            case "e": toggleMode()
+            case "-": zoomCanvas(by: 1 / 1.25)
+            case "=", "+": zoomCanvas(by: 1.25)
+            default: return e
+            }
+            return nil
+        }
+    }
+
+    func toggleMode() {
+        canvasMode.toggle()
+        UserDefaults.standard.set(canvasMode ? "canvas" : "stage", forKey: "overviewMode")
+        panels.forEach { $0.view.revealSelection() }
+        redraw()
+    }
     /// The display whose stage the selection is on (arrows, Tab, Return).
     private(set) var activeDisplay = 0
 
@@ -55,6 +96,7 @@ final class OverviewController {
     func open() {
         guard let wm, !isOpen else { return }
         isOpen = true
+        watchKeys()
         wm.hud.hide()
         query = ""
         keyDisplay = wm.focusedDisplayIndex
@@ -174,6 +216,7 @@ final class OverviewController {
             stageWorkspace[ws.display] = ws.name
             activeDisplay = ws.display
         }
+        panels.forEach { $0.view.revealSelection() }
         redraw()
     }
 
@@ -183,10 +226,11 @@ final class OverviewController {
         // Every window shown on a stage, in global coordinates.
         var all: [(id: WindowID, display: Int, frame: CGRect)] = []
         for p in panels {
-            guard let ws = stage(on: p.display), let origin = wm?.displayFrame(p.display)?.origin else { continue }
-            let st = p.view.stageRect
-            for w in ws.windows where w.isActive && matches(w) {
-                all.append((w.id, p.display, OverviewLayout.place(w.frame, in: st).offsetBy(dx: origin.x, dy: origin.y)))
+            guard let origin = wm?.displayFrame(p.display)?.origin else { continue }
+            for (ws, st) in p.view.frames() {
+                for w in ws.windows where w.isActive && matches(w) {
+                    all.append((w.id, p.display, OverviewLayout.place(w.frame, in: st).offsetBy(dx: origin.x, dy: origin.y)))
+                }
             }
         }
         // A window in a stack counts as its stack's top window.
@@ -467,6 +511,7 @@ final class OverviewPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
 }
 
 // MARK: - View
@@ -483,13 +528,85 @@ final class OverviewView: NSView {
     private var layoutCache: OverviewLayout?
     private var searchField: SearchField?
     /// The stage in this view's coordinates (top-left origin, like AX within the display).
-    var stageRect: CGRect { (layoutCache ?? currentLayout()).stage }
+    /// How far the canvas is scrolled (points, from its left end).
+    private var scrollX: CGFloat = 0
+    private var revealPending = true
+
+    func toggleMode() { controller.toggleMode() }
+
+    func zoom(by factor: CGFloat) { if controller.canvasMode { controller.zoomCanvas(by: factor) } }
+
+    override func magnify(with event: NSEvent) { zoom(by: 1 + event.magnification) }
+
+    /// Keep the selected window's workspace in view on the canvas.
+    func revealSelection() { revealPending = true; needsDisplay = true }
+
+    /// Where each workspace is drawn: the stage (one), or every workspace of this display side by
+    /// side on the canvas, scrolled.
+    func frames() -> [(WindowManager.OverviewWorkspace, CGRect)] {
+        let l = layoutCache ?? currentLayout()
+        guard controller.canvasMode else { return controller.stage(on: display).map { [($0, l.stage)] } ?? [] }
+        let list = controller.workspaces(on: display)
+        let room = CGRect(x: OverviewLayout.margin * 2, y: l.search.maxY + 64, width: bounds.width - OverviewLayout.margin * 4,
+                          height: max(60, l.footer.minY - 30 - (l.search.maxY + 64)))
+        var x = room.minX - scrollX
+        let h = (room.height * controller.canvasZoom).rounded()
+        let gap = max(36, 70 * controller.canvasZoom)
+        // Everything fits: centred instead of starting at the left.
+        let total = list.reduce(CGFloat(0)) { $0 + (h * $1.area.width / max(1, $1.area.height)).rounded() } + gap * CGFloat(max(0, list.count - 1))
+        if total < room.width { x = room.minX + ((room.width - total) / 2).rounded() }
+        return list.map { ws in
+            let aspect = ws.area.width / max(1, ws.area.height)
+            let w = (h * aspect).rounded()
+            defer { x += w + gap }
+            return (ws, CGRect(x: x.rounded(), y: (room.midY - h / 2).rounded(), width: w, height: h))
+        }
+    }
+
+    /// The canvas's full width and the visible width, for scrolling.
+    private func canvasExtent() -> (content: CGFloat, view: CGFloat) {
+        let f = frames()
+        guard let first = f.first, let last = f.last else { return (0, 0) }
+        return (last.1.maxX - first.1.minX, bounds.width - OverviewLayout.margin * 4)
+    }
+
+    private func scroll(by dx: CGFloat) {
+        let e = canvasExtent()
+        scrollX = min(max(0, scrollX + dx), max(0, e.content - e.view))
+        needsDisplay = true
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard controller.canvasMode else { return }
+        if event.modifierFlags.contains(.command) {
+            // ⌘-scroll zooms.
+            let d = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 10
+            zoom(by: 1 + d / 200)
+            return
+        }
+        let dx = event.hasPreciseScrollingDeltas ? event.scrollingDeltaX : event.scrollingDeltaX * 12
+        let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 12
+        // Two-finger sideways, or the wheel (up = left).
+        scroll(by: abs(dx) > abs(dy) ? -dx : -dy)
+    }
+
+    /// Scrolls just enough to show the workspace holding the selection (or the one on screen).
+    private func applyReveal() {
+        guard revealPending, controller.canvasMode else { revealPending = false; return }
+        revealPending = false
+        let target = controller.selected.flatMap { id in controller.workspaces(on: display).first { $0.windows.contains { $0.id == id } } }
+            ?? controller.stage(on: display)
+        guard let target, let r = frames().first(where: { $0.0.name == target.name })?.1 else { return }
+        let left = OverviewLayout.margin * 2, right = bounds.width - OverviewLayout.margin * 2
+        if r.minX < left { scroll(by: r.minX - left) } else if r.maxX > right { scroll(by: r.maxX - right) }
+    }
 
     enum Hit: Equatable {
         case window(WindowID)
         case card(String)
         case newCard
         case search
+        case mode
     }
 
     init(controller: OverviewController, display: Int) {
@@ -577,19 +694,19 @@ final class OverviewView: NSView {
         for (i, ws) in list.enumerated() where l.cards.indices.contains(i) && l.cards[i].insetBy(dx: -6, dy: -6).contains(local) {
             return .card(ws.name)
         }
-        guard let ws = controller.stage(on: display), l.stage.insetBy(dx: -40, dy: -40).contains(local) else { return nil }
-        let ax = OverviewLayout.unplace(local, from: l.stage, to: ws.area)
+        guard let (ws, stage) = frames().first(where: { $0.1.insetBy(dx: -30, dy: -40).contains(local) }) else { return nil }
+        let ax = OverviewLayout.unplace(local, from: stage, to: ws.area)
         let workspace = wm.workspaceNamed(ws.name)
         let copy = workspace.clone()
         let stack = NSEvent.modifierFlags.contains(.option)
         let target = DropZones.target(at: ax, in: copy, area: ws.area, gap: wm.config.layout.gap, dragging: id, stack: stack, full: true)
         var preview: CGRect?
         if let target, let f = DropZones.preview(target, in: copy, area: ws.area, gap: wm.config.layout.gap, dragging: id, full: true) {
-            preview = OverviewLayout.place(ax: f, area: ws.area, in: l.stage)
+            preview = OverviewLayout.place(ax: f, area: ws.area, in: stage)
         }
         if target == nil, !workspace.contains(id) {
             // Another workspace: dropped anywhere on its stage, it joins it.
-            return .stage(ws.name, nil, l.stage.insetBy(dx: l.stage.width * 0.3, dy: l.stage.height * 0.3))
+            return .stage(ws.name, nil, stage.insetBy(dx: stage.width * 0.3, dy: stage.height * 0.3))
         }
         return .stage(ws.name, target, preview)
     }
@@ -606,8 +723,15 @@ final class OverviewView: NSView {
         bounds.fill()
 
         drawSearch(l, ctx)
-        drawRail(l, ctx)
-        if let ws = controller.stage(on: display) { drawStage(ws, l, ctx) }
+        drawModeToggle(l)
+        if controller.canvasMode {
+            applyReveal()
+            for (ws, r) in frames() where r.maxX > 0 && r.minX < bounds.width { drawStage(ws, r, ctx) }
+            drawScrollHints()
+        } else {
+            drawRail(l, ctx)
+            if let ws = controller.stage(on: display) { drawStage(ws, l.stage, ctx) }
+        }
         drawFooter(l)
         drawDrag(l, ctx)
         drawCardDrag(l)
@@ -709,17 +833,52 @@ final class OverviewView: NSView {
         p.stroke()
     }
 
-    private func drawStage(_ ws: WindowManager.OverviewWorkspace, _ l: OverviewLayout, _ ctx: CGContext) {
+    /// "Stage · Canvas" at the top right; click (or ⌘E) to switch.
+    private func drawModeToggle(_ l: OverviewLayout) {
+        guard isKey else { return }
         let c = style.colors
-        let stage = l.stage
+        let r = CGRect(x: bounds.maxX - OverviewLayout.margin - 170, y: l.search.minY + 4, width: 170, height: 26)
+        let pill = NSBezierPath(roundedRect: r, xRadius: 13, yRadius: 13)
+        c.islandHi.withAlpha(0.9).ns.setFill()
+        pill.fill()
+        let half = CGRect(x: controller.canvasMode ? r.midX : r.minX, y: r.minY, width: r.width / 2, height: r.height).insetBy(dx: 2, dy: 2)
+        c.accent.withAlpha(0.25).ns.setFill()
+        NSBezierPath(roundedRect: half, xRadius: 11, yRadius: 11).fill()
+        draw("Stage", in: CGRect(x: r.minX, y: r.minY, width: r.width / 2, height: r.height), font: style.bold,
+             color: controller.canvasMode ? c.muted : c.accent, align: .center, centerY: true)
+        draw("Canvas ⌘E", in: CGRect(x: r.midX, y: r.minY, width: r.width / 2, height: r.height), font: style.bold,
+             color: controller.canvasMode ? c.accent : c.muted, align: .center, centerY: true)
+        hits.append((r, .mode))
+    }
+
+    /// Fades at the canvas's edges when there's more that way.
+    private func drawScrollHints() {
+        let e = canvasExtent()
+        guard e.content > e.view else { return }
+        let c = style.colors
+        if scrollX > 1 {
+            draw("‹", in: CGRect(x: 8, y: bounds.midY - 20, width: 30, height: 40), font: Style.font(style.a.font, size: 28, weight: "bold"),
+                 color: c.muted, align: .center, centerY: true)
+        }
+        if scrollX < e.content - e.view - 1 {
+            draw("›", in: CGRect(x: bounds.maxX - 38, y: bounds.midY - 20, width: 30, height: 40), font: Style.font(style.a.font, size: 28, weight: "bold"),
+                 color: c.muted, align: .center, centerY: true)
+        }
+    }
+
+    private func drawStage(_ ws: WindowManager.OverviewWorkspace, _ stage: CGRect, _ ctx: CGContext) {
+        let c = style.colors
         let bg = NSBezierPath(roundedRect: stage.insetBy(dx: -10, dy: -10), xRadius: 16, yRadius: 16)
         c.island.withAlpha(0.35).ns.setFill()
         bg.fill()
-        if controller.activeDisplay == display {
+        let isActiveStage = controller.canvasMode ? ws.name == controller.stage(on: display)?.name && controller.activeDisplay == display
+                                                  : controller.activeDisplay == display
+        if isActiveStage {
             c.accent.withAlpha(0.35).ns.setStroke()
             bg.lineWidth = 1
             bg.stroke()
         }
+        if controller.canvasMode { hits.append((stage.insetBy(dx: -10, dy: -10), .card(ws.name))) }
         // Header: number, layout, how many windows, whether it's on screen.
         let n = Set(ws.windows.map(\.id)).count
         let head = NSMutableAttributedString(attributedString: style.text("Workspace \(ws.label)", ws.focused ? c.accent : c.fg, font: style.bold))
@@ -845,7 +1004,7 @@ final class OverviewView: NSView {
 
     private func drawFooter(_ l: OverviewLayout) {
         guard isKey else { return }
-        let hint = "←↑→↓ move   ⇥ workspace   ⏎ go   ⇧⏎ bring here   drag to move (⌥ stacks)   drag a card onto another (swap) or display   ⇧-drag: work in that area   esc close"
+        let hint = "←↑→↓ move   ⇥ workspace   ⏎ go   ⇧⏎ bring here   drag to move (⌥ stacks)   drag a card onto another (swap) or display   ⇧-drag: work in that area   ⌘E canvas   esc close"
         draw(hint, in: l.footer, font: style.font, color: style.colors.dim, align: .center)
     }
 
@@ -858,16 +1017,16 @@ final class OverviewView: NSView {
 
     /// Tiled windows of the stage the band touches.
     private func bandWindows(_ b: (from: CGPoint, to: CGPoint)) -> [WindowID] {
-        guard let r = Self.rect(b), let ws = controller.stage(on: display) else { return [] }
-        let stage = (layoutCache ?? currentLayout()).stage
+        guard let r = Self.rect(b) else { return [] }
+        // The workspace the band starts in.
+        guard let (ws, stage) = frames().first(where: { $0.1.insetBy(dx: -10, dy: -10).contains(b.from) }) ?? frames().first else { return [] }
         return ws.windows.filter { !$0.floating && $0.isActive && OverviewLayout.place($0.frame, in: stage).intersects(r) }.map(\.id)
     }
 
     private func drawBand(_ ctx: CGContext) {
         guard let r = bandRect, let b = band else { return }
         let c = style.colors
-        let stage = (layoutCache ?? currentLayout()).stage
-        if let ws = controller.stage(on: display) {
+        if let (ws, stage) = frames().first(where: { $0.1.insetBy(dx: -10, dy: -10).contains(b.from) }) ?? frames().first {
             let ids = Set(bandWindows(b))
             for w in ws.windows where ids.contains(w.id) {
                 let f = OverviewLayout.place(w.frame, in: stage).insetBy(dx: 4, dy: 4)
@@ -989,7 +1148,7 @@ final class OverviewView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        let onStage = (layoutCache ?? currentLayout()).stage.contains(p)
+        let onStage = frames().contains { $0.1.contains(p) }
         let h = hit(at: p)
         if onStage, h == nil || event.modifierFlags.contains(.shift) {
             if case .window? = h, !event.modifierFlags.contains(.shift) {} else {
@@ -1036,7 +1195,8 @@ final class OverviewView: NSView {
             band = nil
             needsDisplay = true
             let ids = bandWindows(b)
-            if let ws = controller.stage(on: display), !ids.isEmpty { controller.focusArea(ids, in: ws.name) }
+            let ws = frames().first(where: { $0.1.insetBy(dx: -10, dy: -10).contains(b.from) })?.0 ?? controller.stage(on: display)
+            if let ws, !ids.isEmpty { controller.focusArea(ids, in: ws.name) }
             return
         }
         if controller.drag != nil {
@@ -1056,6 +1216,7 @@ final class OverviewView: NSView {
         case .card(let name): controller.show(workspace: name, on: display)
         case .newCard: controller.newWorkspace()
         case .search: focusSearch()
+        case .mode: controller.toggleMode()
         }
     }
 
