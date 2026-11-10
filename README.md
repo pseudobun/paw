@@ -23,6 +23,12 @@ No yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift and AppKit.
 
 <sub>Two tiles in bsp, each a stack. The islands beside them show every window in the stack.</sub>
 
+<br><br>
+
+<img src="docs/assets/paw-demo.gif" width="820" alt="paw switching layouts, moving windows between stacks and opening the overview">
+
+<sub>Layouts, stacks and the overview (<code>hyper+tab</code>). <a href="docs/assets/paw-demo.mp4">Watch the full demo (1:49)</a>.</sub>
+
 </div>
 
 > [!NOTE]
