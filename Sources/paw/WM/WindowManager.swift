@@ -327,7 +327,12 @@ final class WindowManager {
         tracker.watch(window: el, pid: pid)
 
         let float = rules.contains { $0.float == true } || subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute)
-        let presetName = presets.first { $0.value.slot(for: appName) != nil }?.key
+        var presetName = presets.first { $0.value.slot(for: appName) != nil }?.key
+        // A new window of an app you already use on this workspace (a second Finder window moved
+        // here, then ⌘K) stays with it instead of jumping to the app's preset workspace.
+        if !initial, presetName != nil, focusedWorkspace.allWindows.contains(where: { $0 != id && windows[$0]?.pid == pid }) {
+            presetName = nil
+        }
         var name = state?[id] ?? rules.first(where: { $0.workspace != nil })?.workspace ?? presetName
         if name == nil, initial, let di = displays.indices.first(where: { displays[$0].frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }) {
             name = displays[di].workspace
