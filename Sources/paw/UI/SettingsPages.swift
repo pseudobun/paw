@@ -236,7 +236,7 @@ enum SettingsCatalog {
                 f(\.layout.placeholders, "layout.placeholders", "Placeholders", .toggle,
                   "A placeholder takes the tile while the window waits out of sight. Off: the window sticks out over its neighbours."),
                 f(\.layout.placeholderMinWidth, "layout.placeholderMinWidth", "Smallest width", .number(min: 0, max: 2_000, step: 10, unit: "pt"),
-                  "Resizing stops before a placeholder gets smaller."),
+                  "Resizing stops before a tile, and so a placeholder, gets smaller."),
                 f(\.layout.placeholderMinHeight, "layout.placeholderMinHeight", "Smallest height", .number(min: 0, max: 2_000, step: 10, unit: "pt")),
             ]),
             SettingsSection("Padding", [
