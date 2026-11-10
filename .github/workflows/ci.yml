@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+      - name: Bundle universal paw.app (ad-hoc)
+        run: |
+          PAW_ARCHS="arm64 x86_64" scripts/bundle.sh build.noindex
+          lipo -archs build.noindex/paw.app/Contents/MacOS/paw
+          build.noindex/paw.app/Contents/MacOS/paw version
+
+      - name: Config template matches examples/config.json5
+        run: |
+          .build/debug/paw config template > /tmp/config.json5
+          diff -u examples/config.json5 /tmp/config.json5
+
+      - name: Check the cask template
+        run: ruby -c packaging/paw.rb.template

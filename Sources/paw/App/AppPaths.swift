@@ -1,8 +1,8 @@
 import Foundation
 
 enum AppPaths {
-    /// paw.app's bundle id; `dev.paw.app` for a bare `swift run`.
-    static let bundleID: String = appBundle.bundleIdentifier ?? "dev.paw.app"
+    /// paw.app's bundle id; `com.pseudobun.paw` for a bare `swift run`.
+    static let bundleID: String = appBundle.bundleIdentifier ?? "com.pseudobun.paw"
 
     static let cacheDir: URL = {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -27,7 +27,8 @@ enum AppPaths {
     static var isAppBundle: Bool { appBundle.bundleURL.pathExtension == "app" }
 
     static var version: String {
-        appBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        appBundle.object(forInfoDictionaryKey: "PawVersion") as? String
+            ?? appBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
     }
 }
 
