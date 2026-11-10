@@ -89,6 +89,8 @@
 
   // Stack indicators: an island next to each stack with one app icon per window
   indicator: {
+    // the islands beside stacks, one icon per window
+    enabled: true,
     // "auto" (outside, on the side nearer the screen edge), "left", "right", "insideLeft", "insideRight"
     side: "auto",
     offsetX: 4,

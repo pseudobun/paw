@@ -210,6 +210,7 @@ final class WindowManager {
     /// and the screen edge, with `indicator.offsetX` on both sides of it.
     private func indicatorPadding(_ p: Padding) -> Padding {
         let i = config.indicator
+        guard i.enabled else { return p }
         let room = i.width + 2 * i.offsetX
         var p = p
         if [.auto, .left].contains(i.side) { p.left = max(p.left, room) }

@@ -362,6 +362,7 @@ enum SettingsCatalog {
         SettingsPage(id: "indicators", title: "Indicators", subtitle: "The islands that show a stack's windows.",
                      symbol: "square.stack.3d.up.fill", color: Theme.chart5, sections: [
             SettingsSection([
+                f(\.indicator.enabled, "indicator.enabled", "Show indicators", .toggle, "Islands beside stacks, one icon per window."),
                 e(\.indicator.side, "indicator.side", "Side", "Auto: outside, on the side nearer the screen edge."),
                 f(\.indicator.titles, "indicator.titles", "Titles", .choice([("hover", "On hover"), ("never", "Never")]),
                   "An island with the window's title next to the hovered icon."),

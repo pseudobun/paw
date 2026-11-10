@@ -43,7 +43,12 @@ final class IndicatorController {
     func apply(_ new: [Stack], force: Bool = false) {
         if !force, new == stacks, panels.count == new.count { return }
         stacks = new
-        guard !hidden else { return }
+        guard !hidden, config.indicator.enabled else {
+            for p in panels.values { p.orderOut(nil) }
+            panels.removeAll()
+            title.orderOut(nil)
+            return
+        }
         let primary = NSScreen.screens.first?.frame.height ?? 0
         let screens = NSScreen.screens
         let axScreens = screens.map { ScreenGeometry.axFrame(ofScreen: $0.frame, primaryHeight: primary) }
