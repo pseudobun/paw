@@ -79,26 +79,33 @@ enum CLI {
           color <app name>    the app's colour (0xAARRGGBB, from its icon or icons.colors)
           preview <out.png> [--fonts=DIR]   render stack indicators with your config
           settings [page]     open the settings window, e.g. on its about page (also in the menu bar icon)
-          update              look for a new version now (Homebrew: brew upgrade --cask pseudobun/tap/paw)
+          update [--check]    install the newest version now (paw restarts); --check only looks
           quit                quit (puts hidden windows back on screen)
           version
         """)
         return 0
     }
 
-    /// Starts a check, then waits up to 30 s for its answer.
+    /// Installs the newest version (or with --check only looks), waiting up to 2 min for the answer.
+    /// Exit 10 when --check finds a new version.
     static func update(_ args: [String]) -> Int32 {
-        var r = request("update", timeout: 10)
-        let deadline = Date().addingTimeInterval(30)
+        let check = args.contains("--check")
+        var r = request(check ? "update check" : "update", timeout: 10)
+        let deadline = Date().addingTimeInterval(120)
         while let reply = r, reply["state"] as? String == "checking", Date() < deadline {
             usleep(300_000)
             r = request("update status", timeout: 10)
         }
-        guard let r else { return 1 }
+        guard let r else {
+            // The app quit to install.
+            print("paw is restarting into the new version")
+            return 0
+        }
         if let e = r["error"] as? String, !e.isEmpty { fputs("paw: \(e)\n", stderr); return 1 }
         let message = r["message"] as? String ?? ""
         print(message)
-        return message.hasPrefix("update check failed") ? 1 : 0
+        if message.hasPrefix("update check failed") { return 1 }
+        return message.hasSuffix("is available") ? 10 : 0
     }
 
     static func runWM(_ words: [String]) -> Int32 {

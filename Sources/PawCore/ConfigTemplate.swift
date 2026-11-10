@@ -235,8 +235,8 @@ public enum ConfigTemplate {
 
           // New versions from GitHub releases. Homebrew installs can also `brew upgrade --cask pseudobun/tap/paw`.
           updates: {
-            check: \(c.updates.check), // look once a day and offer to install
-            automatic: \(c.updates.automatic), // install without asking; paw relaunches
+            check: \(c.updates.check), // look once a day, download in the background, install when paw quits
+            automatic: \(c.updates.automatic), // install as soon as it is downloaded; paw restarts
           },
 
           // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.
