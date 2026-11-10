@@ -7,7 +7,7 @@ cask "paw" do
   desc "Tiling window manager with virtual workspaces, presets and stack indicators"
   homepage "https://github.com/pseudobun/paw"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "paw.app"
   binary "#{appdir}/paw.app/Contents/MacOS/paw"

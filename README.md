@@ -114,7 +114,8 @@ Press `ctrl+←/→` to move focus, `hyper+w` for bsp, `hyper+tab` for the overv
 **Start at login:** set `openAtLogin: true` in the config.<br>
 **Updates:** paw checks once a day and offers new versions; menu bar → *Check for Updates…* or
 `paw update` looks right away, `updates.automatic: true` installs them without asking, and
-`updates.check: false` turns it off. Or `brew upgrade --cask pseudobun/tap/paw`.<br>
+`updates.check: false` turns it off. Or `brew upgrade --cask pseudobun/tap/paw` (the full name:
+`brew upgrade --cask paw` alone means RapidAPI, once called Paw).<br>
 **Uninstall:** `brew uninstall --cask pseudobun/tap/paw` (add `--zap` to remove the config and state too).
 
 Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
