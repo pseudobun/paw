@@ -42,7 +42,8 @@ def main():
         try:
             paw("workspace", empty)
             paw("layout", "bsp")
-            process = subprocess.Popen([str(binary)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            process = subprocess.Popen([str(binary)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                       stderr=subprocess.DEVNULL, text=True)
             deadline = time.monotonic() + 12
             hidden = False
             while time.monotonic() < deadline:
@@ -60,6 +61,8 @@ def main():
             time.sleep(0.4)
             window = next(w for ws in query() for w in ws["windows"] if w["title"] == "PAW minimum regression")
             assert not window["onScreen"], "A real minimum must remain a placeholder"
+            process.stdin.write("lower-minimum\n")
+            process.stdin.flush()
             if not select.select([process.stdout], [], [], 8)[0]:
                 raise AssertionError("Fixture did not lower its minimum in time")
             assert process.stdout.readline().strip() == "minimum-lowered"

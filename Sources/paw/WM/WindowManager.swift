@@ -84,7 +84,8 @@ final class WindowManager {
     private var windowMins: [WindowID: CGSize] = [:]
     private var overflowSuspects: [WindowID: CGSize] = [:]
     private var overflowWork: [String: DispatchWorkItem] = [:]
-    private var minimumChecks: [WindowID: UUID] = [:]
+    private var minimumChecks: [WindowID: (token: UUID, focus: Int?, frontmost: pid_t?)] = [:]
+    private var focusRevision = 0
     private var relayingOutClamped = false
     private var droppingSide = false
     /// The window paw just focused, until macOS catches up (the border goes there at once).
@@ -525,6 +526,8 @@ final class WindowManager {
 
     /// Focus moved outside paw (click, ⌘Tab): follow it, switching workspace when needed.
     private func syncFocus(_ pid: pid_t, force: Bool = false) {
+        // Even an ignored app taking focus invalidates a pending recovery's focus request.
+        focusRevision += 1
         guard force || Date() > ignoreFocusUntil else { return }
         let app = AXUIElementCreateApplication(pid)
         guard let el = app.element(kAXFocusedWindowAttribute), let id = el.windowID else { return }
@@ -540,7 +543,7 @@ final class WindowManager {
             focusedDisplay = di
             ws.focused = id
             ws.activate(id)
-            if let w = windows[id] { retryMinimum(w) }
+            if let w = windows[id] { retryMinimum(w, focus: true) }
             if ws.frameCamera(on: id, area: displays[di].area, gap: config.layout.gap) { layout(ws, animated: true) }
             updateIndicators()
             focusChanged(id)
@@ -738,16 +741,25 @@ final class WindowManager {
 
     /// A Chromium window can later accept a size it refused during startup or a transition.
     /// Retry while parked so a genuine minimum never flashes over its neighbours.
-    private func retryMinimum(_ w: Window) {
-        guard minimumChecks[w.id] == nil, w.isHidden,
+    private func retryMinimum(_ w: Window, focus: Bool = false) {
+        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        if var pending = minimumChecks[w.id] {
+            if focus {
+                pending.focus = focusRevision
+                pending.frontmost = frontmost
+                minimumChecks[w.id] = pending
+            }
+            return
+        }
+        guard w.isHidden,
               let ws = workspaceOf(w.id), let di = displayShowing(ws.name),
               let target = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[w.id],
               isCramped(w.id) else { return }
         let token = UUID()
-        minimumChecks[w.id] = token
+        minimumChecks[w.id] = (token, focus ? focusRevision : nil, frontmost)
         w.element.setSize(target.size)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            guard let self, self.minimumChecks[w.id] == token else { return }
+            guard let self, let check = self.minimumChecks[w.id], check.token == token else { return }
             defer { self.minimumChecks[w.id] = nil }
             guard self.windows[w.id] === w, w.isHidden, self.workspaceOf(w.id) === ws,
                   let di = self.displayShowing(ws.name),
@@ -759,7 +771,9 @@ final class WindowManager {
             self.overflowSuspects[w.id] = nil
             for workspace in self.workspaces.values { workspace.windowMins[w.id] = nil }
             self.layout(ws, animated: false)
-            if self.focusedWorkspace === ws, ws.focused == w.id, !w.isHidden {
+            if check.focus == self.focusRevision,
+               check.frontmost == NSWorkspace.shared.frontmostApplication?.processIdentifier,
+               self.focusedWorkspace === ws, ws.focused == w.id, !w.isHidden {
                 self.focusWindow(w.id, warp: false)
             }
         }
@@ -966,6 +980,7 @@ final class WindowManager {
 
     func focusWindow(_ id: WindowID?, warp: Bool) {
         guard let id, let w = windows[id] else { return }
+        focusRevision += 1
         if let ws = workspaceOf(id) {
             ws.focused = id
             ws.activate(id)
@@ -977,7 +992,7 @@ final class WindowManager {
         }
         // A placeholder: focus is paw's (moves, swaps); the window itself waits out of sight.
         if isCramped(id) {
-            retryMinimum(w)
+            retryMinimum(w, focus: true)
             if warp && config.focus.mouseFollowsFocus, let ws = workspaceOf(id), let di = displayShowing(ws.name),
                let r = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] {
                 let primary = NSScreen.screens.first?.frame.height ?? 0

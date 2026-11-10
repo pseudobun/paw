@@ -23,11 +23,14 @@ final class Fixture: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             _ = self.window("PAW minimum companion", minimum: 200)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-            main.minSize = NSSize(width: 400, height: 250)
-            // No resize/title notification: focusing the placeholder must retry its size.
-            print("minimum-lowered")
-            fflush(stdout)
+        DispatchQueue.global().async {
+            guard readLine() == "lower-minimum" else { return }
+            DispatchQueue.main.async {
+                main.minSize = NSSize(width: 400, height: 250)
+                // No resize/title notification: focusing the placeholder must retry its size.
+                print("minimum-lowered")
+                fflush(stdout)
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 60) { NSApp.terminate(nil) }
     }
