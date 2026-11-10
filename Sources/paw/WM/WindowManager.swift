@@ -460,6 +460,18 @@ final class WindowManager {
             t.invalidate()
             dragTimer = nil
             let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
+            // Dropped on another display: the window moves to the workspace shown there, next to
+            // the tile under the mouse (instead of snapping back to its old tile).
+            if let di = displays.firstIndex(where: { $0.frame.contains(p) }), displays[di].workspace != ws.name {
+                let to = workspace(displays[di].workspace)
+                let toFrames = TreeLayout.tileFrames(to, in: displays[di].area, gap: config.layout.gap)
+                if let under = to.tiles.first(where: { toFrames[ObjectIdentifier($0)]?.contains(p) == true }) {
+                    to.focused = under.activeWindow
+                }
+                focusedDisplay = di
+                moveWindow(w.id, to: to.name, follow: true)
+                return
+            }
             let frames = TreeLayout.tileFrames(ws, in: area(of: ws), gap: config.layout.gap)
             if let own = ws.tile(of: w.id), let target = ws.tiles.first(where: { $0 !== own && frames[ObjectIdentifier($0)]?.contains(p) == true }),
                let other = target.activeWindow, let i = own.windows.firstIndex(of: w.id), let j = target.windows.firstIndex(of: other) {
