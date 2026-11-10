@@ -1,5 +1,17 @@
 import AppKit
 
+private func isParked(_ frame: CGRect, on screen: CGRect) -> Bool {
+    let intersection = frame.intersection(screen)
+    // AppKit can clamp the vertical origin, leaving a one-point-wide strip.
+    return intersection.isNull || intersection.width <= 1 || intersection.height <= 1
+}
+
+private let testScreen = CGRect(x: 0, y: 0, width: 1800, height: 1169)
+assert(isParked(CGRect(x: 1799, y: 1137, width: 1000, height: 1124), on: testScreen))
+assert(isParked(CGRect(x: 100, y: 1168, width: 1000, height: 500), on: testScreen))
+assert(!isParked(CGRect(x: 100, y: 100, width: 1000, height: 500), on: testScreen))
+assert(!isParked(CGRect(x: 1768, y: 1137, width: 1000, height: 500), on: testScreen))
+
 // A real AX client: it initially refuses a half-screen tile, then accepts it.
 final class Fixture: NSObject, NSApplicationDelegate {
     var windows: [NSWindow] = []
@@ -42,8 +54,7 @@ final class Fixture: NSObject, NSApplicationDelegate {
                             let parked = NSScreen.screens.allSatisfy {
                                 let screen = CGRect(x: $0.frame.minX, y: primaryHeight - $0.frame.maxY,
                                                     width: $0.frame.width, height: $0.frame.height)
-                                let intersection = frame.intersection(screen)
-                                return intersection.isNull || intersection.width <= 1 && intersection.height <= 1
+                                return isParked(frame, on: screen)
                             }
                             print(parked ? "parked" : "not-parked")
                         } else {

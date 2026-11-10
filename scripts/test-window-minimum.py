@@ -84,13 +84,14 @@ def main():
             deadline = time.monotonic() + 3
             while time.monotonic() < deadline:
                 window = next(w for ws in query() for w in ws["windows"] if w["title"] == "PAW minimum regression")
-                if window["onScreen"] and fixture_reply(process, "focused") == "focused":
+                if (window["onScreen"] and fixture_reply(process, "focused") == "focused"
+                        and fixture_reply(process, "parked") == "not-parked"):
                     print("PASS: workspace switch recovered the window and its native keyboard focus")
                     return
                 time.sleep(0.1)
             if not window["onScreen"]:
                 raise AssertionError("Window stayed hidden after switching back to its workspace")
-            raise AssertionError("Recovered window did not receive native keyboard focus after workspace switch")
+            raise AssertionError("Recovery did not restore both visible bounds and native keyboard focus")
         finally:
             if process is not None:
                 process.terminate()

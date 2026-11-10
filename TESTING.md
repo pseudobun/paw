@@ -103,7 +103,8 @@ This opt-in native AX test uses two temporary fixture windows on an empty worksp
 1000-point minimum must stay a placeholder; the driver then tells the app to lower it to 400.
 Switching away and back must recover the window and native keyboard focus without a corrective
 `find` or `retile`. A pending check must not reveal it on a hidden workspace; the fixture
-checks its WindowServer bounds intersect no display beyond the one-pixel parking corner.
+checks its WindowServer bounds intersect no display beyond a one-point parking strip.
+AppKit can clamp the vertical position, so the strip need not be only one point tall.
 The script closes its fixture and restores the previous workspace and the empty workspace's
 layout. Use a display narrower than 2000 points so the initial half-screen tile cannot fit,
 and leave the keyboard and mouse alone during the run.
