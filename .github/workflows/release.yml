@@ -138,7 +138,8 @@ jobs:
           else
             git worktree add --orphan -b appcast "$DIR"
           fi
-          scripts/appcast.sh "$DIR/appcast.xml" "$VERSION" "$BUILD" "$URL" "$SPARKLE_SIG"
+          awk -v v="$VERSION" 'index($0, "## [" v "]") == 1 {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > "$RUNNER_TEMP/appcast-notes.md"
+          scripts/appcast.sh "$DIR/appcast.xml" "$VERSION" "$BUILD" "$URL" "$SPARKLE_SIG" "$RUNNER_TEMP/appcast-notes.md"
           xmllint --noout "$DIR/appcast.xml"
           cd "$DIR"
           git config user.name "github-actions[bot]"
