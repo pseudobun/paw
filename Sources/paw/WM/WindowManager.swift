@@ -84,6 +84,8 @@ final class WindowManager {
     private var windowMins: [WindowID: CGSize] = [:]
     private var overflowSuspects: [WindowID: CGSize] = [:]
     private var overflowWork: [String: DispatchWorkItem] = [:]
+    private var minimumChecks: [WindowID: (token: UUID, focus: Int?, frontmost: pid_t?)] = [:]
+    private var focusRevision = 0
     private var relayingOutClamped = false
     private var droppingSide = false
     /// The window paw just focused, until macOS catches up (the border goes there at once).
@@ -444,6 +446,7 @@ final class WindowManager {
         guard let w = windows.removeValue(forKey: id) else { return }
         windowMins[id] = nil
         overflowSuspects[id] = nil
+        minimumChecks[id] = nil
         for ws in workspaces.values { ws.windowMins[id] = nil }
         animator.cancel(id)
         let ws = workspaceOf(id)
@@ -503,7 +506,10 @@ final class WindowManager {
         case .moved(let el), .resized(let el):
             if let w = window(for: el) { userMoved(w) }
         case .titleChanged(let el):
-            if let w = window(for: el), w.refreshTitle() { updateIndicators() }
+            if let w = window(for: el), w.refreshTitle() {
+                retryMinimum(w)
+                updateIndicators()
+            }
         }
     }
 
@@ -521,6 +527,8 @@ final class WindowManager {
     /// Focus moved outside paw (click, ⌘Tab): follow it, switching workspace when needed.
     private func syncFocus(_ pid: pid_t, force: Bool = false) {
         guard force || Date() > ignoreFocusUntil else { return }
+        // An unmanaged app taking focus also supersedes a recovery's focus request.
+        focusRevision += 1
         let app = AXUIElementCreateApplication(pid)
         guard let el = app.element(kAXFocusedWindowAttribute), let id = el.windowID else { return }
         if windows[id] == nil {
@@ -535,6 +543,7 @@ final class WindowManager {
             focusedDisplay = di
             ws.focused = id
             ws.activate(id)
+            if let w = windows[id] { retryMinimum(w, focus: true) }
             if ws.frameCamera(on: id, area: displays[di].area, gap: config.layout.gap) { layout(ws, animated: true) }
             updateIndicators()
             focusChanged(id)
@@ -727,6 +736,53 @@ final class WindowManager {
             }
         }
         if learned { layout(ws, animated: false) } else if suspect { scheduleOverflowCheck(name, after: 0.4) }
+    }
+
+    /// A Chromium window can later accept a size it refused during startup or a transition.
+    /// Retry while parked so a genuine minimum never flashes over its neighbours.
+    private func retryMinimum(_ w: Window, focus: Bool = false) {
+        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        if var pending = minimumChecks[w.id] {
+            if focus {
+                pending.focus = focusRevision
+                pending.frontmost = frontmost
+                minimumChecks[w.id] = pending
+            }
+            return
+        }
+        guard w.isHidden,
+              let ws = workspaceOf(w.id), let di = displayShowing(ws.name),
+              let target = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[w.id],
+              isCramped(w.id) else { return }
+        let token = UUID()
+        minimumChecks[w.id] = (token, focus ? focusRevision : nil, frontmost)
+        w.element.setSize(target.size)
+        // Left-corner parking depends on the actual width, which the probe may have changed.
+        _ = w.readFrame()
+        hide(w, from: ws)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self, let check = self.minimumChecks[w.id], check.token == token else { return }
+            defer { self.minimumChecks[w.id] = nil }
+            guard self.windows[w.id] === w, w.isHidden, let parkedWorkspace = self.workspaceOf(w.id) else { return }
+            // An asynchronous resize must be reparked even when recovery is no longer valid.
+            let actual = w.readFrame()?.size
+            self.hide(w, from: parkedWorkspace)
+            guard parkedWorkspace === ws,
+                  let di = self.displayShowing(ws.name),
+                  let current = TreeLayout.windowFrames(ws, in: self.displays[di].area, gap: self.config.layout.gap)[w.id],
+                  current.size == target.size, let actual,
+                  actual.width > 0, actual.height > 0,
+                  actual.width <= target.width + 4, actual.height <= target.height + 4 else { return }
+            self.windowMins[w.id] = nil
+            self.overflowSuspects[w.id] = nil
+            for workspace in self.workspaces.values { workspace.windowMins[w.id] = nil }
+            self.layout(ws, animated: false)
+            if check.focus == self.focusRevision,
+               check.frontmost == NSWorkspace.shared.frontmostApplication?.processIdentifier,
+               self.focusedWorkspace === ws, ws.focused == w.id, !w.isHidden {
+                self.focusWindow(w.id, warp: false)
+            }
+        }
     }
 
     /// The focus border: around the focused window's tile (or its placeholder, or a floating
@@ -930,6 +986,7 @@ final class WindowManager {
 
     func focusWindow(_ id: WindowID?, warp: Bool) {
         guard let id, let w = windows[id] else { return }
+        focusRevision += 1
         if let ws = workspaceOf(id) {
             ws.focused = id
             ws.activate(id)
@@ -941,6 +998,7 @@ final class WindowManager {
         }
         // A placeholder: focus is paw's (moves, swaps); the window itself waits out of sight.
         if isCramped(id) {
+            retryMinimum(w, focus: true)
             if warp && config.focus.mouseFollowsFocus, let ws = workspaceOf(id), let di = displayShowing(ws.name),
                let r = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] {
                 let primary = NSScreen.screens.first?.frame.height ?? 0
@@ -1516,6 +1574,7 @@ final class WindowManager {
             // Forget the minimum sizes learned from apps; they are measured again.
             windowMins = [:]
             overflowSuspects = [:]
+            minimumChecks = [:]
             ghosts = []
             for w in workspaces.values { w.windowMins = [:] }
             layoutAll(animated: true)
