@@ -1034,6 +1034,43 @@ final class WindowManager {
         return displayIndex(for: presets[name]?.display) ?? extraPins[name].flatMap { id in displays.firstIndex { $0.id == id } }
     }
 
+    /// The workspace `move-workspace` trades contents with: next/prev in the bar's order (no
+    /// wrapping, the side workspace left out), or a number.
+    private func resolveMoveTarget(_ t: Command.WorkspaceTarget, from name: String) -> String? {
+        let order = numberedWorkspaces
+        switch t {
+        case .next, .prev:
+            guard let i = order.firstIndex(of: name) else { return nil }
+            let j = i + (t == .next ? 1 : -1)
+            return order.indices.contains(j) ? order[j] : nil
+        default:
+            guard let n = resolve(t), n != name, n != Self.side else { return nil }
+            return n
+        }
+    }
+
+    /// Trades the contents of two workspaces (windows, tiles, layout); focus follows the
+    /// contents of `from` to `to`, on whichever display shows it.
+    func swapWorkspaces(_ from: String, _ to: String) {
+        guard from != to, let a = workspaces[from] else { return }
+        let b = workspace(to)
+        let prev = label(focusedWorkspace.name)
+        a.swapContents(with: b)
+        undoStack[from] = nil; undoStack[to] = nil; redoStack[from] = nil; redoStack[to] = nil
+        // Windows now on a workspace that isn't shown wait out of sight; shown ones are laid out.
+        for ws in [a, b] {
+            if displayShowing(ws.name) == nil {
+                for id in ws.allWindows { if let w = windows[id], !w.isHidden { hide(w, from: ws) } }
+            }
+        }
+        if displayShowing(to) == nil { show(to) } else { layout(b, animated: true) }
+        if displayShowing(from) != nil { layout(a, animated: true) }
+        if let f = b.focused ?? b.allWindows.first { focusWindow(f, warp: true) }
+        if let di = displayShowing(to) { showHUD(to, on: di) }
+        emitWorkspaceChanged(prev: prev)
+        scheduleSave()
+    }
+
     /// Moves a workspace, windows and all, to display `di`, where it shows; the display it left
     /// shows another of its workspaces. It stays there until the displays change.
     func moveWorkspace(_ name: String, to di: Int) {
@@ -1427,6 +1464,8 @@ final class WindowManager {
                 }
             }
         case .moveWorkspace(let t):
+            if let target = resolveMoveTarget(t, from: ws.name) { swapWorkspaces(ws.name, target) }
+        case .moveWorkspaceToDisplay(let t):
             if let di = displayTarget(t) { moveWorkspace(ws.name, to: di) }
         case .moveToDisplay(let t, let follow):
             if let id = fid, let di = displayTarget(t) { moveWindow(id, to: displays[di].workspace, follow: follow) }

@@ -29,8 +29,12 @@ public enum Command: Equatable, Sendable {
     case moveTo(WorkspaceTarget, follow: Bool)
     case focusDisplay(DisplayTarget)
     case moveToDisplay(DisplayTarget, follow: Bool)
+    /// Moves the focused workspace's windows, tiles and layout to another workspace (its
+    /// contents trade places with that one's); next/prev step through the bar's order, which
+    /// crosses to the next display at the end of one.
+    case moveWorkspace(WorkspaceTarget)
     /// Moves the focused workspace, windows and all, to another display (it shows there).
-    case moveWorkspace(DisplayTarget)
+    case moveWorkspaceToDisplay(DisplayTarget)
     case arrange(String?)
     /// Open the preset apps and arrange everything; with a name, use that setup whatever
     /// displays are connected.
@@ -146,7 +150,11 @@ public enum Command: Equatable, Sendable {
         case "move-to", "send": return .moveTo(try workspace(0), follow: follow)
         case "display": return .focusDisplay(try display(0))
         case "move-to-display": return .moveToDisplay(try display(0), follow: follow)
-        case "move-workspace": return .moveWorkspace(try display(0))
+        case "move-workspace":
+            // A direction is a display; next/prev/N are workspaces.
+            if let d = Direction(try arg(0)) { return .moveWorkspaceToDisplay(.dir(d)) }
+            return .moveWorkspace(try workspace(0))
+        case "move-workspace-to-display": return .moveWorkspaceToDisplay(try display(0))
         case "arrange": return .arrange(args.first)
         case "initiate", "init", "reset": return .initiate(args.first)
         case "mode":
