@@ -1427,6 +1427,7 @@ final class WindowManager {
             case .split: ws.toggleSplit(id)
             }
             relayout()
+            focusWindow(id, warp: false)
         case .balance:
             ws.balance(); relayout()
         case .rotate(let deg):
