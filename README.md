@@ -419,7 +419,7 @@ matches by pattern.
 | `hyper+e`, `alt+r` | balance, rotate |
 | `hyper+r` | resize mode: `←↑→↓`/`hjkl` grow, `shift+` shrink, `e` balance, `esc`/`return` done |
 | `hyper+tab` | overview |
-| `hyper+.`, `hyper+,` | move the workspace to the next / previous display |
+| `hyper+]`, `hyper+[` (đ, š on a Slovenian keyboard) | move the workspace to the next / previous display |
 | `hyper+j`, `hyper+k` | zoom in, out |
 | `hyper+z`, `hyper+y` | undo, redo |
 | `hyper+o`, `hyper+i` | focus back, forward (vim's jump list) |

@@ -23,8 +23,8 @@ public enum Defaults {
             "hyper+e": "balance",
             "hyper+r": "mode resize",
             "hyper+tab": "overview",
-            "hyper+.": "move-workspace next",
-            "hyper+,": "move-workspace prev",
+            "hyper+[": "move-workspace prev",       // š on a Slovenian keyboard
+            "hyper+]": "move-workspace next",       // đ
             "hyper+j": "zoom in",
             "hyper+k": "zoom out",
             "hyper+z": "undo",

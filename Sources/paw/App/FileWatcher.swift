@@ -38,7 +38,8 @@ final class FileWatcher {
 
     private func changed() {
         pending?.cancel()
-        pending = Task { [weak self] in
+        // On the main actor: the reload touches AppKit and the window manager.
+        pending = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(200))
             guard let self, !Task.isCancelled else { return }
             file?.cancel()

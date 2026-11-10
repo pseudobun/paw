@@ -332,6 +332,8 @@ struct NewCommandTests {
         #expect(try Command.parse("zoom in") == .zoom(in: true))
         #expect(try Command.parse("move-workspace next") == .moveWorkspace(.next))
         #expect(try Command.parse("move-workspace 2") == .moveWorkspace(.index(2)))
+        #expect(KeySpec.parse("hyper+š") == KeySpec.parse("hyper+["))
+        #expect(KeySpec.parse("hyper+đ") == KeySpec.parse("hyper+]"))
         #expect(try Command.parse("zoom out") == .zoom(in: false))
         #expect(try Command.parse("layout columns") == .layout(.columns))
         #expect(try Command.parse("layout master") == .layout(.master))
