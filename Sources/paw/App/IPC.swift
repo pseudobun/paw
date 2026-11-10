@@ -89,7 +89,7 @@ enum IPC {
             try IPC.prepareDirectory()
             let path = IPC.socketPath
             guard var addr = IPC.address(path) else { throw IPCError("socket path too long: \(path)") }
-            unlink(path)
+            try IPC.clearSocketPath(path)
             let fd = socket(AF_UNIX, SOCK_STREAM, 0)
             guard fd >= 0 else { throw IPCError("socket: \(String(cString: strerror(errno)))") }
             // Created 0600 from the start: no window where another user could connect.
@@ -98,7 +98,7 @@ enum IPC {
                 $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
             }
             umask(old)
-            guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 16) == 0 else {
+            guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 128) == 0 else {
                 let message = String(cString: strerror(errno))
                 close(fd)
                 throw IPCError("bind \(path): \(message)")
@@ -110,26 +110,50 @@ enum IPC {
         }
 
         func stop() {
+            stopped = true
             guard listener >= 0 else { return }
-            close(listener)
+            let fd = listener
             listener = -1
+            close(fd)
             unlink(IPC.socketPath)
         }
 
+        private var stopped = false
+        /// Connections being served; more than this and new ones wait in the backlog.
+        private let slots = DispatchSemaphore(value: 64)
+
         private func acceptLoop(_ fd: Int32) {
+            var backoff: useconds_t = 10_000
             while true {
+                slots.wait()
                 let client = accept(fd, nil, nil)
                 if client < 0 {
-                    if errno == EINTR || errno == ECONNABORTED { continue }
-                    return // closed by stop()
+                    let err = errno
+                    slots.signal()
+                    if stopped || err == EBADF || err == EINVAL { return } // closed by stop()
+                    if err != EINTR && err != ECONNABORTED {
+                        // Out of descriptors (EMFILE/ENFILE) or memory: wait and try again; giving
+                        // up here would leave the CLI dead until paw restarts.
+                        Log.app.error("ipc: accept: \(String(cString: strerror(err)), privacy: .public)")
+                        usleep(backoff)
+                        backoff = min(backoff * 2, 1_000_000)
+                    }
+                    continue
                 }
-                DispatchQueue.global(qos: .userInitiated).async { [weak self] in self?.serve(client) }
+                backoff = 10_000
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    guard let self else { close(client); return }
+                    self.serve(client)
+                    self.slots.signal()
+                }
             }
         }
 
         private func serve(_ fd: Int32) {
             var keep = false
             defer { if !keep { close(fd) } }
+            // Fails with EINVAL when the client already hung up; SIGPIPE is ignored process-wide
+            // (AppDelegate), so the write below then just fails with EPIPE.
             IPC.configure(fd, timeout: 5)
             var uid: uid_t = 0, gid: gid_t = 0
             guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else {
@@ -185,12 +209,31 @@ enum IPC {
         return addr
     }
 
-    static func configure(_ fd: Int32, timeout: TimeInterval) {
+    /// Per-socket options. Returns false when they could not be set, which on macOS is what an
+    /// accepted socket whose peer already closed reports (EINVAL): such a socket raises SIGPIPE
+    /// on write, so processes that serve sockets must ignore SIGPIPE rather than rely on this.
+    @discardableResult
+    static func configure(_ fd: Int32, timeout: TimeInterval) -> Bool {
         var on: Int32 = 1
-        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+        let a = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
         var tv = timeval(tv_sec: Int(timeout), tv_usec: Int32((timeout - floor(timeout)) * 1_000_000))
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
-        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        let b = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        let c = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        return a == 0 && b == 0 && c == 0
+    }
+
+    /// Makes room for the socket at `path`: removes an old socket, and moves anything else that
+    /// sits there (a directory, a file) aside instead of failing to bind for the whole session.
+    static func clearSocketPath(_ path: String) throws {
+        var st = stat()
+        guard lstat(path, &st) == 0 else { return }
+        if (st.st_mode & S_IFMT) == S_IFSOCK || (st.st_mode & S_IFMT) == S_IFLNK {
+            if unlink(path) != 0 { throw IPCError("unlink \(path): \(String(cString: strerror(errno)))") }
+            return
+        }
+        let aside = path + ".stale-\(getpid())-\(Int(Date().timeIntervalSince1970))"
+        if rename(path, aside) != 0 { throw IPCError("move aside \(path): \(String(cString: strerror(errno)))") }
+        Log.app.error("ipc: \(path, privacy: .public) was not a socket; moved it to \(aside, privacy: .public)")
     }
 
     static func writeAll(_ fd: Int32, _ data: Data) -> Bool {
