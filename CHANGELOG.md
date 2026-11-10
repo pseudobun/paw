@@ -3,6 +3,14 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.3](https://github.com/pseudobun/paw/compare/v0.1.0-beta.2...v0.1.0-beta.3) (2026-11-10)
+
+
+### Features
+
+* **overview:** add a canvas mode with every workspace side by side ([#18](https://github.com/pseudobun/paw/issues/18)) ([654a156](https://github.com/pseudobun/paw/commit/654a156eb2350f3cfec27c3e4f0826f1b8d99743))
+* **settings:** show permissions with request buttons; fix the update window ([#20](https://github.com/pseudobun/paw/issues/20)) ([4986b5a](https://github.com/pseudobun/paw/commit/4986b5abd877bbc1e0e35ecbe3bafb05e646e5c9))
+
 ## [0.1.0-beta.2](https://github.com/pseudobun/paw/compare/v0.1.0-beta.1...v0.1.0-beta.2) (2026-11-10)
 
 
