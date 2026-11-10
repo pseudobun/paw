@@ -2001,7 +2001,7 @@ final class WindowManager {
             }
         }
         updateBorder(cramped: Set(holders.map(\.id)))
-        placeholders.apply(holders, style: indicators.style, actions: .init(
+        placeholders.apply(holders, style: indicators.style, focusFollowsMouse: config.focus.focusFollowsMouse, actions: .init(
             focus: { [weak self] id in self?.focusWindow(id, warp: false) },
             zoom: { [weak self] id in self?.makeRoom(for: id) },
             drag: { [weak self] id, p in self?.placeholderDragged(id, to: p) },

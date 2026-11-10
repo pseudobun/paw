@@ -30,5 +30,6 @@ let package = Package(
             ]
         ),
         .testTarget(name: "PawCoreTests", dependencies: ["PawCore"]),
+        .testTarget(name: "PawTests", dependencies: ["paw"]),
     ]
 )

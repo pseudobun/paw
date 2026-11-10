@@ -30,6 +30,7 @@
 - [ ] Drag a tiled window's edge with the mouse → the tile resizes (neighbours follow) instead of snapping back
 - [ ] bsp (`hyper+w`): open windows until they'd get smaller than 640×400 → the screen shows only the branch around the focused one; `ctrl+arrows` past the edge pans to the next ones; the overview shows the whole canvas with the on-screen part outlined
 - [ ] Squeeze a window whose app has a minimum size (System Settings-like apps, Codex, T3) → after a moment it leaves, a placeholder (icon, title, "needs more room") takes its tile; click it → gold outline, `ctrl+alt+arrows` swaps it; in a bigger tile the window shows again; drag it like a window; double-click → zooms in until it fits; `paw retile` forgets the learned sizes
+- [ ] Enable `focus.focusFollowsMouse`: hover a placeholder → its outline and keyboard focus move there, with the app still parked; move to a normal window → focus follows back. Disable it in Settings → hovering stops focusing, clicking still works. Drag across another placeholder or cover it with a floating window → it must not steal focus
 - [ ] `hyper+j` on `A | (B / C)` with B focused → B and C fill the workspace, A hides; again → B alone; `hyper+k` twice → all back; HUD shows the level; switching workspace drops the zoom
 - [ ] ⌥-scroll up / ⌥-pinch out over a window zooms in towards it, animated; down / pinch in zooms out
 - [ ] Overview: drag across empty stage (or ⇧-drag over windows) → those windows' branch fills the screen

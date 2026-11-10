@@ -26,7 +26,7 @@ final class Placeholders {
 
     private var panels: [WindowID: (panel: NSPanel, view: PlaceholderView)] = [:]
 
-    func apply(_ items: [Item], style: Style, actions: Actions) {
+    func apply(_ items: [Item], style: Style, focusFollowsMouse: Bool, actions: Actions) {
         let ids = Set(items.map(\.id))
         for (id, p) in panels where !ids.contains(id) {
             p.panel.orderOut(nil)
@@ -38,6 +38,7 @@ final class Placeholders {
             p.view.item = item
             p.view.style = style
             p.view.actions = actions
+            p.view.focusFollowsMouse = focusFollowsMouse
             let f = ScreenGeometry.cocoa(fromAX: item.frame, primaryHeight: primaryHeight)
             if p.panel.frame != f { p.panel.setFrame(f, display: false) }
             p.view.needsDisplay = true
@@ -54,6 +55,7 @@ final class Placeholders {
         panel.collectionBehavior = [.ignoresCycle, .stationary, .canJoinAllSpaces]
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
+        panel.acceptsMouseMovedEvents = true
         let v = PlaceholderView()
         panel.contentView = v
         return (panel, v)
@@ -64,11 +66,28 @@ final class PlaceholderView: NSView {
     var item: Placeholders.Item?
     var style = Style(PawConfig.Appearance())
     var actions: Placeholders.Actions?
+    var focusFollowsMouse = false
     private var downAt: CGPoint?
     private var dragging = false
+    private var area: NSTrackingArea?
 
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let area { removeTrackingArea(area) }
+        let a = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(a)
+        area = a
+    }
+
+    override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard focusFollowsMouse, NSEvent.pressedMouseButtons == 0, let item, !item.focused else { return }
+        actions?.focus(item.id)
+    }
 
     override func draw(_ dirty: NSRect) {
         guard let item else { return }
