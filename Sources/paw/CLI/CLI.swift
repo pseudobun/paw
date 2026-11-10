@@ -79,42 +79,26 @@ enum CLI {
             fputs("paw: \(error); see paw help\n", stderr)
             return 64
         }
-        guard isRunning else { fputs("paw is not running (open -a paw)\n", stderr); return 1 }
         return post("run \(text)")
     }
 
     // MARK: - Talking to the running app
 
-    static var isRunning: Bool { !NSRunningApplication.runningApplications(withBundleIdentifier: AppPaths.bundleID).isEmpty }
-
-    /// Fire and forget.
+    /// Fire and forget: succeeds once the app has taken the command.
     static func post(_ command: String) -> Int32 {
-        guard isRunning else { fputs("paw is not running (open -a paw)\n", stderr); return 1 }
-        DistributedNotificationCenter.default().postNotificationName(AppPaths.commandNotification, object: command,
-                                                                     userInfo: nil, deliverImmediately: true)
+        guard let r = request(command, timeout: 10) else { return 1 }
+        if let e = r["error"] as? String, !e.isEmpty { fputs("paw: \(e)\n", stderr); return 1 }
         return 0
     }
 
-    /// Sends a command and waits for the app's reply file.
+    /// Sends a command over paw's socket and returns its reply.
     static func request(_ command: String, timeout: TimeInterval) -> [String: Any]? {
-        guard isRunning else { fputs("paw is not running (open -a paw)\n", stderr); return nil }
-        let url = AppPaths.cacheDir.appending(path: "reply-\(command).json")
-        try? FileManager.default.removeItem(at: url)
-        var got = false
-        let observer = DistributedNotificationCenter.default().addObserver(forName: AppPaths.replyNotification, object: command,
-                                                                           queue: nil) { _ in got = true }
-        defer { DistributedNotificationCenter.default().removeObserver(observer) }
-        DistributedNotificationCenter.default().postNotificationName(AppPaths.commandNotification, object: command,
-                                                                     userInfo: nil, deliverImmediately: true)
-        let deadline = Date().addingTimeInterval(timeout)
-        // run(mode:before:) returns as soon as the reply notification is handled.
-        while !got, Date() < deadline { _ = RunLoop.current.run(mode: .default, before: deadline) }
-        guard got, let data = try? Data(contentsOf: url),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            fputs("paw did not answer\n", stderr)
-            return nil
+        switch IPC.send(command, timeout: timeout) {
+        case .success(let reply): return reply
+        case .failure(.notRunning): fputs("paw is not running (open -a paw)\n", stderr)
+        case .failure(.failed(let why)): fputs("paw: \(why)\n", stderr)
         }
-        return obj
+        return nil
     }
 
     static func reload(_ args: [String]) -> Int32 {

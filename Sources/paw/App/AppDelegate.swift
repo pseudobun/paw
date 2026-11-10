@@ -5,10 +5,10 @@ import ServiceManagement
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = Settings()
     private var wm: WindowManager!
-    private var observers: [NSObjectProtocol] = []
     private var signalSources: [DispatchSourceSignal] = []
     private var trustTimer: Timer?
     private var statusItem: NSStatusItem?
+    private var ipc: IPC.Server?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if isAlreadyRunning() {
@@ -19,10 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.start()
         wm = WindowManager(settings: settings)
         settings.onChange = { [weak self] in self?.apply() }
-        observers.append(DistributedNotificationCenter.default().addObserver(forName: AppPaths.commandNotification, object: nil,
-                                                                             queue: .main) { [weak self] note in
-            self?.command(note.object as? String ?? "")
-        })
+        let server = IPC.Server { [weak self] text in self?.command(text) ?? ["error": "paw is shutting down"] }
+        do {
+            try server.start()
+            ipc = server
+        } catch {
+            Log.app.error("ipc: \(String(describing: error), privacy: .public); the CLI cannot reach paw")
+        }
         // Window management needs Accessibility; wait for the grant instead of quitting.
         if AX.isTrusted {
             wm.start()
@@ -40,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        ipc?.stop()
         wm?.restoreAll()
     }
 
@@ -141,43 +145,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Messages from the CLI: "run <command>", "reload", "quit", "status", "query".
-    private func command(_ text: String) {
+    /// Requests from the CLI: "run <command>", "reload", "quit", "status", "query"; returns the reply.
+    private func command(_ text: String) -> [String: Any] {
         let (name, rest) = text.firstIndex(of: " ").map { (String(text[..<$0]), String(text[text.index(after: $0)...])) } ?? (text, "")
         switch name {
         case "run":
-            do { wm.run(try Command.parseAll(rest)) } catch { Log.app.error("cli: \(error.localizedDescription, privacy: .public)") }
+            do { wm.run(try Command.parseAll(rest)) } catch {
+                Log.app.error("cli: \(error.localizedDescription, privacy: .public)")
+                return ["error": "\(error)"]
+            }
         case "hide": wm.indicators.setHidden(true)
         case "show": wm.indicators.setHidden(false)
         case "reload":
             settings.load()
-            reply("reload", ["error": settings.error ?? "", "warnings": settings.warnings.joined(separator: "\n")])
+            return ["error": settings.error ?? "", "warnings": settings.warnings.joined(separator: "\n")]
         case "quit":
-            NSApp.terminate(nil)
+            // Answer first; terminating here would close the connection without a reply.
+            DispatchQueue.main.async { NSApp.terminate(nil) }
         case "settings":
             openSettings()
         case "status":
             let names = wm.displays.map { wm.label($0.workspace) }.joined(separator: ", ")
-            reply("status", ["version": AppPaths.version, "pid": "\(ProcessInfo.processInfo.processIdentifier)",
-                             "trusted": AX.isTrusted ? "yes" : "no", "windows": "\(wm.windows.count)",
-                             "workspaces": names, "stacks": "\(wm.indicators.snapshot.count)",
-                             "config": settings.url.path, "error": settings.error ?? "",
-                             "bindings": wm.hotkeys.problems.isEmpty ? "ok" : wm.hotkeys.problems.joined(separator: "; "),
-                             "iconFont": wm.indicators.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok"])
+            return ["version": AppPaths.version, "pid": "\(ProcessInfo.processInfo.processIdentifier)",
+                    "trusted": AX.isTrusted ? "yes" : "no", "windows": "\(wm.windows.count)",
+                    "workspaces": names, "stacks": "\(wm.indicators.snapshot.count)",
+                    "config": settings.url.path, "error": settings.error ?? "",
+                    "bindings": wm.hotkeys.problems.isEmpty ? "ok" : wm.hotkeys.problems.joined(separator: "; "),
+                    "iconFont": wm.indicators.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok"]
         case "query":
             let data = (try? JSONSerialization.data(withJSONObject: wm.query(), options: [.prettyPrinted, .sortedKeys])) ?? Data()
-            reply("query", ["json": String(decoding: data, as: UTF8.self)])
+            return ["json": String(decoding: data, as: UTF8.self)]
         default:
             Log.app.error("unknown command \(name, privacy: .public)")
+            return ["error": "unknown command \(name)"]
         }
-    }
-
-    private func reply(_ command: String, _ info: [String: String]) {
-        let url = AppPaths.cacheDir.appending(path: "reply-\(command).json")
-        try? FileManager.default.createDirectory(at: AppPaths.cacheDir, withIntermediateDirectories: true)
-        if let data = try? JSONSerialization.data(withJSONObject: info, options: [.sortedKeys]) { try? data.write(to: url) }
-        DistributedNotificationCenter.default().postNotificationName(AppPaths.replyNotification, object: command, userInfo: nil,
-                                                                     deliverImmediately: true)
+        return ["ok": true]
     }
 }
 

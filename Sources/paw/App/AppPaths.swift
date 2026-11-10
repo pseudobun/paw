@@ -4,10 +4,6 @@ enum AppPaths {
     /// paw.app's bundle id; `dev.paw.app` for a bare `swift run`.
     static let bundleID: String = appBundle.bundleIdentifier ?? "dev.paw.app"
 
-    /// Distributed notifications between the CLI and the running app.
-    static let commandNotification = Notification.Name("\(bundleID).command")
-    static let replyNotification = Notification.Name("\(bundleID).reply")
-
     static let cacheDir: URL = {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         return base.appending(path: bundleID, directoryHint: .isDirectory)
