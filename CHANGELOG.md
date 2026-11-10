@@ -21,6 +21,11 @@ First public beta.
 - Zoom through the tree, canvas mode, undo/redo, focus history and `find`
 - Key bindings and key modes in a commented JSON5 config, plus a Settings window
 - A CLI for every command over a private Unix socket, and `paw subscribe` for status bars
+- Placeholders for windows whose app won't shrink to their tile (`layout.placeholders`), and a
+  smallest tile size when resizing (`layout.placeholderMinWidth`/`Height`)
+- `indicator.enabled` to turn the stack indicators off
+- Windows of an unplugged display go to their preset workspace, or wait on a side workspace
+  (`+N` in the bar) until you sort them
 - Homebrew cask: `brew install --cask pseudobun/tap/paw`
 - Updates through Sparkle: a daily check that offers new versions (`updates.check`), silent
   installs if you want them (`updates.automatic`), "Check for Updates…" in the menu bar and
