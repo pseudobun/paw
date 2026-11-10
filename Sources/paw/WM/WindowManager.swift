@@ -84,6 +84,7 @@ final class WindowManager {
     private var windowMins: [WindowID: CGSize] = [:]
     private var overflowSuspects: [WindowID: CGSize] = [:]
     private var overflowWork: [String: DispatchWorkItem] = [:]
+    private var minimumChecks: [WindowID: UUID] = [:]
     private var relayingOutClamped = false
     private var droppingSide = false
     /// The window paw just focused, until macOS catches up (the border goes there at once).
@@ -444,6 +445,7 @@ final class WindowManager {
         guard let w = windows.removeValue(forKey: id) else { return }
         windowMins[id] = nil
         overflowSuspects[id] = nil
+        minimumChecks[id] = nil
         for ws in workspaces.values { ws.windowMins[id] = nil }
         animator.cancel(id)
         let ws = workspaceOf(id)
@@ -503,7 +505,10 @@ final class WindowManager {
         case .moved(let el), .resized(let el):
             if let w = window(for: el) { userMoved(w) }
         case .titleChanged(let el):
-            if let w = window(for: el), w.refreshTitle() { updateIndicators() }
+            if let w = window(for: el), w.refreshTitle() {
+                retryMinimum(w)
+                updateIndicators()
+            }
         }
     }
 
@@ -535,6 +540,7 @@ final class WindowManager {
             focusedDisplay = di
             ws.focused = id
             ws.activate(id)
+            if let w = windows[id] { retryMinimum(w) }
             if ws.frameCamera(on: id, area: displays[di].area, gap: config.layout.gap) { layout(ws, animated: true) }
             updateIndicators()
             focusChanged(id)
@@ -712,8 +718,8 @@ final class WindowManager {
                   let actual = w.element.frame else { continue }
             let over = CGSize(width: actual.width > r.width + 4 ? actual.width : 0, height: actual.height > r.height + 4 ? actual.height : 0)
             guard over.width > 0 || over.height > 0 else { overflowSuspects[id] = nil; continue }
-            // After an animation the app has had its frames; a second look only when it's still resizing.
-            if overflowSuspects[id] == nil || abs(overflowSuspects[id]!.width - over.width) < 4 && abs(overflowSuspects[id]!.height - over.height) < 4 {
+            // Require two stable readings: AX clients can apply a requested size asynchronously.
+            if let previous = overflowSuspects[id], abs(previous.width - over.width) < 4 && abs(previous.height - over.height) < 4 {
                 let old = windowMins[id] ?? .zero
                 let m = CGSize(width: max(old.width, over.width), height: max(old.height, over.height))
                 windowMins[id] = m
@@ -726,7 +732,37 @@ final class WindowManager {
                 suspect = true
             }
         }
-        if learned { layout(ws, animated: false) } else if suspect { scheduleOverflowCheck(name, after: 0.4) }
+        if learned { layout(ws, animated: false) }
+        if suspect { scheduleOverflowCheck(name, after: 0.4) }
+    }
+
+    /// A Chromium window can later accept a size it refused during startup or a transition.
+    /// Retry while parked so a genuine minimum never flashes over its neighbours.
+    private func retryMinimum(_ w: Window) {
+        guard minimumChecks[w.id] == nil, w.isHidden,
+              let ws = workspaceOf(w.id), let di = displayShowing(ws.name),
+              let target = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[w.id],
+              isCramped(w.id) else { return }
+        let token = UUID()
+        minimumChecks[w.id] = token
+        w.element.setSize(target.size)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self, self.minimumChecks[w.id] == token else { return }
+            defer { self.minimumChecks[w.id] = nil }
+            guard self.windows[w.id] === w, w.isHidden, self.workspaceOf(w.id) === ws,
+                  let di = self.displayShowing(ws.name),
+                  let current = TreeLayout.windowFrames(ws, in: self.displays[di].area, gap: self.config.layout.gap)[w.id],
+                  current.size == target.size, let actual = w.element.size,
+                  actual.width > 0, actual.height > 0,
+                  actual.width <= target.width + 4, actual.height <= target.height + 4 else { return }
+            self.windowMins[w.id] = nil
+            self.overflowSuspects[w.id] = nil
+            for workspace in self.workspaces.values { workspace.windowMins[w.id] = nil }
+            self.layout(ws, animated: false)
+            if self.focusedWorkspace === ws, ws.focused == w.id, !w.isHidden {
+                self.focusWindow(w.id, warp: false)
+            }
+        }
     }
 
     /// The focus border: around the focused window's tile (or its placeholder, or a floating
@@ -941,6 +977,7 @@ final class WindowManager {
         }
         // A placeholder: focus is paw's (moves, swaps); the window itself waits out of sight.
         if isCramped(id) {
+            retryMinimum(w)
             if warp && config.focus.mouseFollowsFocus, let ws = workspaceOf(id), let di = displayShowing(ws.name),
                let r = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] {
                 let primary = NSScreen.screens.first?.frame.height ?? 0
@@ -1515,6 +1552,7 @@ final class WindowManager {
             // Forget the minimum sizes learned from apps; they are measured again.
             windowMins = [:]
             overflowSuspects = [:]
+            minimumChecks = [:]
             ghosts = []
             for w in workspaces.values { w.windowMins = [:] }
             layoutAll(animated: true)

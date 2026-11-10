@@ -91,5 +91,24 @@
 
 ## Report
 
+### Changing a window's minimum size
+
+With paw running and at least one empty hidden workspace, run:
+
+```sh
+python3 scripts/test-window-minimum.py
+```
+
+This opt-in native AX test uses two temporary fixture windows on an empty workspace. A real
+1000-point minimum must stay a placeholder; after the app lowers it to 400, focusing it must
+recover the window without `retile`. A pending check must not reveal it on a hidden workspace.
+The script closes its fixture and restores the previous workspace and the empty workspace's
+layout. Use a display narrower than 2000 points so the initial half-screen tile cannot fit.
+
+Also test Arc/Brave: after a temporary size refusal, focus the placeholder again; windows
+that now fit return, while genuinely undersized tiles remain placeholders. Try closing a
+window or switching workspace during the delayed size check. Check with animations both on
+and off, and keep focus-follows-mouse enabled if that is your usual configuration.
+
 What felt slow (`just log`), anything that flickered, apps that misbehaved (Electron, Chrome, Finder,
 JetBrains), and which defaults you'd change.
