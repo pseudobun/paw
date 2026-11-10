@@ -287,6 +287,15 @@ struct FractalTests {
         #expect(ws.view == nil)
     }
 
+    @Test func workspacesTradeContents() {
+        let a = columns([1, 2])
+        let b = Workspace(name: "5", layout: .stack)
+        b.insert(9, area: area); b.focused = 9
+        a.swapContents(with: b)
+        #expect(a.name == "c" && a.tiledWindows == [9] && a.layout == .stack && a.focused == 9)
+        #expect(b.name == "5" && b.tiledWindows == [1, 2] && b.layout == .columns)
+    }
+
     // MARK: Presets with titles
 
     @Test func titledTilesWin() {
@@ -331,7 +340,9 @@ struct NewCommandTests {
         #expect(try Command.parse("overview") == .overview)
         #expect(try Command.parse("zoom in") == .zoom(in: true))
         #expect(try Command.parse("move-workspace next") == .moveWorkspace(.next))
-        #expect(try Command.parse("move-workspace 2") == .moveWorkspace(.index(2)))
+        #expect(try Command.parse("move-workspace 5") == .moveWorkspace(.name("5")))
+        #expect(try Command.parse("move-workspace east") == .moveWorkspaceToDisplay(.dir(.east)))
+        #expect(try Command.parse("move-workspace-to-display 2") == .moveWorkspaceToDisplay(.index(2)))
         #expect(KeySpec.parse("hyper+š") == KeySpec.parse("hyper+["))
         #expect(KeySpec.parse("hyper+đ") == KeySpec.parse("hyper+]"))
         #expect(try Command.parse("zoom out") == .zoom(in: false))

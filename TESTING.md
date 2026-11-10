@@ -56,7 +56,8 @@
 
 ## Displays
 
-- [ ] `hyper+]` / `hyper+[` (đ / š) move the focused workspace with its windows to the next / previous display; the display it left shows its next workspace; the bar follows
+- [ ] `hyper+]` / `hyper+[` (đ / š) move the focused workspace's windows one place right / left, past the last one onto the next display; `paw move-workspace 5` from 3 → Discord + Spotify now on 5, 5's windows on 3; focus follows; the bar follows
+- [ ] Overview: drag card 3 onto card 5 → they trade contents
 - [ ] Overview: drag a workspace card onto another display → "Move workspace N here", drop → it moves
 - [ ] Unplug a display whose workspaces have windows: preset apps land on their preset workspace, the rest on `+N` (first in the bar); `paw workspace +N` goes there; moving the last one out makes `+N` disappear; empty workspaces of that display are gone
 

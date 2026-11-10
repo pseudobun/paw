@@ -957,6 +957,20 @@ public final class Workspace {
     }
 
     /// A copy to try things on (drop previews).
+    /// Trades everything (tree, floating windows, focus, layout, zoom) with `other`: the
+    /// workspaces keep their names and displays, their contents change places.
+    public func swapContents(with other: Workspace) {
+        guard other !== self else { return }
+        (layout, other.layout) = (other.layout, layout)
+        (root, other.root) = (other.root, root)
+        (floating, other.floating) = (other.floating, floating)
+        (focused, other.focused) = (other.focused, focused)
+        (zoomed, other.zoomed) = (other.zoomed, zoomed)
+        (view, other.view) = (other.view, view)
+        (range, other.range) = (other.range, range)
+        (pinned, other.pinned) = (other.pinned, pinned)
+    }
+
     public func clone() -> Workspace {
         let w = Workspace(name: name, layout: layout)
         w.root = root?.copy()
