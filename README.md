@@ -31,12 +31,7 @@ No yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift and AppKit.
 
 ## Install
 
-<table>
-<tr>
-<td width="56" align="center"><b>1</b></td>
-<td>
-
-**Install with Homebrew**
+### 1. Install with Homebrew
 
 ```sh
 brew install --cask pseudobun/tap/paw
@@ -45,13 +40,7 @@ brew install --cask pseudobun/tap/paw
 This puts `paw.app` in `/Applications` and the `paw` CLI on your `PATH`. Always use the full
 `pseudobun/tap/paw` name: a bare `paw` cask in Homebrew is a different app.
 
-</td>
-</tr>
-<tr>
-<td align="center"><b>2</b></td>
-<td>
-
-**Stop other window managers**
+### 2. Stop other window managers
 
 Quit anything else that moves windows or grabs hotkeys, so they don't fight paw:
 
@@ -61,28 +50,17 @@ yabai --stop-service; skhd --stop-service   # if you use them
 
 Also quit AeroSpace, Amethyst, Rectangle and the like.
 
-</td>
-</tr>
-<tr>
-<td align="center"><b>3</b></td>
-<td>
-
-**Start paw and allow Accessibility**
+### 3. Start paw and allow Accessibility
 
 ```sh
 open -a paw
 ```
 
-Then **System Settings → Privacy & Security → Accessibility → paw**. paw waits for the grant and
-starts tiling right after.
+Then **System Settings → Privacy & Security → Accessibility → paw** (or paw's Settings → General →
+Permissions → Request). paw waits for the grant and starts tiling right after. Updates keep the
+grant.
 
-</td>
-</tr>
-<tr>
-<td align="center"><b>4</b></td>
-<td>
-
-**Tune macOS for tiling**
+### 4. Tune macOS for tiling
 
 In **System Settings → Desktop & Dock**:
 
@@ -92,13 +70,7 @@ In **System Settings → Desktop & Dock**:
 
 Keep one native Space per display; paw's workspaces replace Spaces.
 
-</td>
-</tr>
-<tr>
-<td align="center"><b>5</b></td>
-<td>
-
-**Check it works**
+### 5. Check it works
 
 ```sh
 paw status     # trusted: yes, bindings: ok
@@ -106,10 +78,6 @@ paw status     # trusted: yes, bindings: ok
 
 Press `ctrl+←/→` to move focus, `hyper+w` for bsp, `hyper+tab` for the overview. Your config is at
 `~/.config/paw/config.json5` and applies the moment you save it.
-
-</td>
-</tr>
-</table>
 
 **Start at login:** set `openAtLogin: true` in the config.<br>
 **Updates:** paw checks once a day and offers new versions; menu bar → *Check for Updates…* or
