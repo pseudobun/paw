@@ -176,7 +176,7 @@ enum SettingsCatalog {
                           _ kind: SettingsField.Kind, _ help: String? = nil) -> SettingsRow {
         .field(SettingsField(key: key, label: label, help: help, kind: kind,
                              value: Lens(get: { Double($0[keyPath: path]) },
-                                         set: { c, v in if let v = v as? Double { c[keyPath: path] = Int(v) } })))
+                                         set: { c, v in if let v = v as? Double { c[keyPath: path] = Int(saturating: v) } })))
     }
 
     /// A String-backed enum key shown as a choice of its raw values.

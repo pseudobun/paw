@@ -12,6 +12,10 @@ enum Preview {
         }
         if let dir = args.first(where: { $0.hasPrefix("--fonts=") })?.dropFirst(8) { registerFonts(in: String(dir).expandingTilde) }
         let scale = args.first { $0.hasPrefix("--scale=") }.flatMap { Double($0.dropFirst(8)) } ?? 2
+        guard scale.isFinite, (0.1...8).contains(scale) else {
+            fputs("--scale must be a number from 0.1 to 8\n", stderr)
+            return 64
+        }
         let settings = Settings(url: Settings.defaultURL)
         let style = Style(settings.config.appearance)
         if style.appFont == nil { fputs("note: \(settings.config.appearance.appFont) is not installed; cells show initials\n", stderr) }
@@ -33,7 +37,8 @@ enum Preview {
     }
 
     static func render(_ root: CALayer, scale: CGFloat) -> Data? {
-        let w = Int(root.bounds.width * scale), h = Int(root.bounds.height * scale)
+        let w = Int(saturating: root.bounds.width * scale), h = Int(saturating: root.bounds.height * scale)
+        guard (1...32768).contains(w), (1...32768).contains(h) else { return nil }
         guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             return nil

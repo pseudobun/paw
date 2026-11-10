@@ -36,7 +36,7 @@ enum StackRenderer {
                 color = item.hasFocus || item.isActive ? c.fg : (focused ? c.muted : c.dim)
             }
             if icons.mapped(item.app) == nil,
-               let image = AppColors.shared.image(for: item.app, side: Int((style.a.appIconSize * 1.3 * scale).rounded())) {
+               let image = AppColors.shared.image(for: item.app, side: Int(saturating: (style.a.appIconSize * 1.3 * scale).rounded())) {
                 // No glyph in the font: the app's own icon, faded like the glyphs behind it.
                 let side = (style.a.appIconSize * 1.3).rounded()
                 let img = CALayer()
