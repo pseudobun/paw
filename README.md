@@ -79,14 +79,33 @@ paw status     # trusted: yes, bindings: ok
 Press `ctrl+←/→` to move focus, `hyper+w` for bsp, `hyper+tab` for the overview. Your config is at
 `~/.config/paw/config.json5` and applies the moment you save it.
 
-**Start at login:** set `openAtLogin: true` in the config.<br>
-**Updates:** paw looks once a day and downloads a new version in the background, without
-windows; it installs when paw quits. [hop](https://github.com/pseudobun/hop) shows a row when one
-is ready, `paw update` (or menu bar → *Update to …*) installs it now and restarts paw,
-`paw update --check` only looks (exit 10 when there is one), `updates.automatic: true` installs
-right after downloading, and `updates.check: false` turns it off. Or `brew upgrade --cask pseudobun/tap/paw` (the full name:
-`brew upgrade --cask paw` alone means RapidAPI, once called Paw).<br>
-**Uninstall:** `brew uninstall --cask pseudobun/tap/paw` (add `--zap` to remove the config and state too).
+### 6. Optional extras
+
+- **Start at login:** set `openAtLogin: true` in the config.
+- **Workspaces in your menu bar:** see [Status bar](#status-bar) for a step-by-step sketchybar setup.
+
+### Updates
+
+paw keeps itself current, without windows or prompts:
+
+1. Once a day it looks for a new version and downloads it in the background.
+2. It installs when paw quits, so the next start is the new version.
+3. `paw update` (or menu bar → *Update to …*) installs it now; paw restarts and retiles.
+
+| Want | Do |
+|---|---|
+| Just look | `paw update --check` (exit 10 when there is a new version) |
+| Install right after downloading | `updates.automatic: true` |
+| No checks at all | `updates.check: false` |
+| Homebrew instead | `brew upgrade --cask pseudobun/tap/paw` (the full name: `paw` alone is RapidAPI's app) |
+
+Updates are signed (EdDSA) and keep the Accessibility grant.
+
+### Uninstall
+
+```sh
+brew uninstall --cask pseudobun/tap/paw          # add --zap to remove the config and state too
+```
 
 Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
 again (it remembers which workspace each window was on) or run `paw recover`.
@@ -420,7 +439,33 @@ everything. `focus`/`swap` past the screen edge go to the next display, `display
 
 ### Status bar
 
-`paw query --json` lists every workspace with its windows. `paw subscribe` tells a bar when to read
+paw draws no bar of its own; it feeds one. Step by step for [sketchybar](https://github.com/FelixKratz/SketchyBar):
+
+1. Install sketchybar and its Lua API, [SbarLua](https://github.com/FelixKratz/SbarLua):
+
+   ```sh
+   brew install FelixKratz/formulae/sketchybar
+   git clone https://github.com/FelixKratz/SbarLua.git /tmp/SbarLua && (cd /tmp/SbarLua && make install)
+   ```
+
+2. Optional, for app glyphs instead of names: put
+   [sketchybar-app-font](https://github.com/kvndrsslr/sketchybar-app-font/releases) in `~/Library/Fonts`.
+3. Copy [`examples/sketchybar/paw_spaces.lua`](examples/sketchybar/paw_spaces.lua) to
+   `~/.config/sketchybar/` and add `require("paw_spaces")` to your `init.lua`. It shows one item per
+   workspace with its apps; click switches, right-click closes.
+4. Leave room for the bar so tiles start below it: `layout.barTop` in paw's config (41 for a 40 pt
+   bar).
+5. Optional: sketchybar doesn't always follow displays coming and going. Copy
+   [`examples/sketchybar/displays_changed.sh`](examples/sketchybar/displays_changed.sh) to
+   `~/.config/sketchybar/plugins/` and set `hooks.displaysChanged` to its path; paw restarts the bar
+   once the displays have settled.
+6. Start it: `brew services start sketchybar`.
+
+A complete bar built this way (workspace islands with app icons, front app, media, system stats)
+is in [pseudobun/dotfiles → `sketchybar/`](https://github.com/pseudobun/dotfiles/tree/main/sketchybar);
+its `items/spaces.lua` is the full version of `paw_spaces.lua`.
+
+How it works: `paw query --json` lists every workspace with its windows. `paw subscribe` tells a bar when to read
 it again: one long-lived connection, a `snapshot` first, then one JSON line per event with a
 `seq` that counts up (a gap means lines were lost):
 
@@ -432,8 +477,8 @@ paw subscribe workspaceChanged,windowsChanged
 paw subscribe workspaceChanged,windowsChanged --reconnect --exec 'sketchybar --trigger paw_$PAW_EVENT'
 ```
 
-[`examples/sketchybar/paw_spaces.lua`](examples/sketchybar/paw_spaces.lua) is a complete sketchybar
-setup that starts that bridge itself.
+`paw_spaces.lua` starts that bridge itself, so there is nothing else to run. Any other bar can
+use the same two commands.
 
 ### Overview
 
