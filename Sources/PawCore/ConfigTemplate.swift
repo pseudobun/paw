@@ -31,6 +31,12 @@ public enum ConfigTemplate {
             // freely and only windows whose app refuses the size get a placeholder
             minTileWidth: \(num(l.minTileWidth)),
             minTileHeight: \(num(l.minTileHeight)),
+            // A window whose app won't shrink to its tile waits out of sight and a placeholder with its
+            // icon takes the tile; false: the window keeps its size and sticks out over its neighbours
+            placeholders: \(l.placeholders),
+            // resizing stops before a placeholder gets smaller than this
+            placeholderMinWidth: \(num(l.placeholderMinWidth)),
+            placeholderMinHeight: \(num(l.placeholderMinHeight)),
           },
 
           focus: {

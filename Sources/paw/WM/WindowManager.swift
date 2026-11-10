@@ -169,7 +169,10 @@ final class WindowManager {
         for p in hotkeys.problems { Log.app.warning("bindings: \(p, privacy: .public)") }
         indicators.configChanged()
         updateFocusFollowsMouse()
-        for ws in workspaces.values { ws.canvasMin = CGSize(width: config.layout.minTileWidth, height: config.layout.minTileHeight) }
+        for ws in workspaces.values {
+            ws.canvasMin = CGSize(width: config.layout.minTileWidth, height: config.layout.minTileHeight)
+            ws.placeholderMin = placeholderMin
+        }
         // Windows a rule now leaves alone (manage: false) are let go, where they are.
         for w in windows.values where config.rules.contains(where: { $0.manage == false && $0.matches(app: w.app, title: w.title) }) {
             if w.isHidden { w.isHidden = false; w.setFrame(w.floatFrame ?? w.frame) }
@@ -322,6 +325,7 @@ final class WindowManager {
         if let w = workspaces[name] { return w }
         let w = Workspace(name: name, layout: presets[name]?.layout ?? config.layout.default)
         w.canvasMin = CGSize(width: config.layout.minTileWidth, height: config.layout.minTileHeight)
+        w.placeholderMin = placeholderMin
         w.windowMins = windowMins
         workspaces[name] = w
         return w
@@ -723,8 +727,13 @@ final class WindowManager {
         border.show(frame, window: id, above: !placeholder, screen: displays[di].frame, config: config.border)
     }
 
+    private var placeholderMin: CGSize {
+        guard config.layout.placeholders else { return .zero }
+        return CGSize(width: max(1, config.layout.placeholderMinWidth), height: max(1, config.layout.placeholderMinHeight))
+    }
+
     private func isCramped(_ id: WindowID, in frames: [WindowID: CGRect]) -> Bool {
-        guard let m = windowMins[id], let r = frames[id] else { return false }
+        guard config.layout.placeholders, let m = windowMins[id], let r = frames[id] else { return false }
         return m.width > r.width + 2 || m.height > r.height + 2
     }
 
@@ -1866,7 +1875,7 @@ final class WindowManager {
         var holders: [Placeholders.Item] = []
         for d in displays {
             let ws = workspace(d.workspace)
-            guard !windowMins.isEmpty, ws.layout.isTiled else { continue }
+            guard config.layout.placeholders, !windowMins.isEmpty, ws.layout.isTiled else { continue }
             let frames = TreeLayout.windowFrames(ws, in: d.area, gap: config.layout.gap)
             for t in ws.tiles {
                 guard let id = t.activeWindow, let m = windowMins[id], let r = frames[id], let w = windows[id],

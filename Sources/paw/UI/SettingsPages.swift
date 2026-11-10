@@ -232,6 +232,13 @@ enum SettingsCatalog {
                   "bsp: tiles never get smaller; the tree grows past the screen instead. 0: off."),
                 f(\.layout.minTileHeight, "layout.minTileHeight", "Height", .number(min: 0, max: 10_000, step: 10, unit: "pt")),
             ]),
+            SettingsSection("Windows that won't shrink", [
+                f(\.layout.placeholders, "layout.placeholders", "Placeholders", .toggle,
+                  "A placeholder takes the tile while the window waits out of sight. Off: the window sticks out over its neighbours."),
+                f(\.layout.placeholderMinWidth, "layout.placeholderMinWidth", "Smallest width", .number(min: 0, max: 2_000, step: 10, unit: "pt"),
+                  "Resizing stops before a placeholder gets smaller."),
+                f(\.layout.placeholderMinHeight, "layout.placeholderMinHeight", "Smallest height", .number(min: 0, max: 2_000, step: 10, unit: "pt")),
+            ]),
             SettingsSection("Padding", [
                 f(\.layout.padding.top, "layout.padding.top", "Top", .number(min: 0, max: 1_000, unit: "pt")),
                 f(\.layout.padding.bottom, "layout.padding.bottom", "Bottom", .number(min: 0, max: 1_000, unit: "pt")),

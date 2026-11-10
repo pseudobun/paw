@@ -60,9 +60,10 @@ public enum TreeLayout {
     }
 
     /// The smallest size `n` fits in with every tile at least `min`, given its weights.
-    public static func minSize(_ n: Node, min: CGSize, gap: Double, ws: Workspace? = nil) -> CGSize {
-        guard !n.isTile else { return min }
-        let kids = n.children.map { minSize($0, min: min, gap: gap, ws: ws) }
+    /// `tile` gives a tile's own minimum instead of `min`.
+    public static func minSize(_ n: Node, min: CGSize, gap: Double, ws: Workspace? = nil, tile: ((Node) -> CGSize)? = nil) -> CGSize {
+        guard !n.isTile else { return tile?(n) ?? min }
+        let kids = n.children.map { minSize($0, min: min, gap: gap, ws: ws, tile: tile) }
         let f = n.fractions
         let gaps = gap * Double(max(0, kids.count - 1))
         if n.axis == .horizontal {

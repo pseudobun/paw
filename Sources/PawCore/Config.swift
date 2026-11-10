@@ -54,6 +54,13 @@ public struct PawConfig: Codable, Equatable, Sendable {
         /// whose app won't go that small get a placeholder.
         public var minTileWidth = 0.0
         public var minTileHeight = 0.0
+        /// A window whose app won't shrink to its tile waits out of sight and a placeholder takes
+        /// the tile. false: the window keeps its size and sticks out over its neighbours.
+        public var placeholders = true
+        /// Resizing stops before a placeholder's tile gets smaller than this (or the window's own
+        /// minimum, when that is smaller).
+        public var placeholderMinWidth = 160.0
+        public var placeholderMinHeight = 120.0
         /// Where `initiate` and setup switches put windows of apps no preset or rule places:
         /// a workspace name, or "" to leave them on the workspace they're on.
         public var unassignedWorkspace = ""
@@ -374,12 +381,13 @@ extension PawConfig {
 }
 
 extension PawConfig.Layout {
-    enum CodingKeys: String, CodingKey, CaseIterable { case `default`, gap, padding, barTop, barBottom, workspaces, unassignedWorkspace, minTileWidth, minTileHeight }
+    enum CodingKeys: String, CodingKey, CaseIterable { case `default`, gap, padding, barTop, barBottom, workspaces, unassignedWorkspace, minTileWidth, minTileHeight, placeholders, placeholderMinWidth, placeholderMinHeight }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.default, &`default`); try f(.gap, &gap); try f(.padding, &padding); try f(.barTop, &barTop)
         try f(.barBottom, &barBottom); try f(.workspaces, &workspaces); try f(.unassignedWorkspace, &unassignedWorkspace)
         try f(.minTileWidth, &minTileWidth); try f(.minTileHeight, &minTileHeight)
+        try f(.placeholders, &placeholders); try f(.placeholderMinWidth, &placeholderMinWidth); try f(.placeholderMinHeight, &placeholderMinHeight)
     }
 }
 
