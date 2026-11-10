@@ -82,6 +82,7 @@ final class WindowManager {
     private var overflowSuspects: [WindowID: CGSize] = [:]
     private var overflowWork: [String: DispatchWorkItem] = [:]
     private var relayingOutClamped = false
+    private var droppingSide = false
     /// The window paw just focused, until macOS catches up (the border goes there at once).
     private var pawFocus: (id: WindowID, at: Date)?
     /// The window server and AX calls that focus a window take 20–40 ms; they run here, in
@@ -122,6 +123,7 @@ final class WindowManager {
             guard let ws = workspaces[name], !ws.isEmpty else { continue }
             ws.restore(snap, area: area(of: ws))
         }
+        migrateOldExtras()
         let ws = NSWorkspace.shared.notificationCenter
         observers.append(ws.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
@@ -235,6 +237,13 @@ final class WindowManager {
     private func displaysChanged() {
         let before = displays.map { "\($0.id)@\($0.frame)" }
         let prevWorkspace = displays.isEmpty ? "" : label(focusedWorkspace.name)
+        // Workspaces that live on each display now: shown there, pinned there, or made there.
+        var onDisplay: [CGDirectDisplayID: Set<String>] = [:]
+        for (i, d) in displays.enumerated() {
+            var names: Set<String> = [d.workspace]
+            for name in workspaces.keys where homeDisplay(name) == i { names.insert(name) }
+            onDisplay[d.id] = names
+        }
         rebuildDisplays()
         let after = displays.map { "\($0.id)@\($0.frame)" }
         Log.app.info("displays changed: \(after.joined(separator: ", "), privacy: .public)")
@@ -258,6 +267,8 @@ final class WindowManager {
         }
         layoutAll(animated: false)
         if setupChanged { applySetup() }
+        let gone = Set(onDisplay.keys).subtracting(displays.map(\.id))
+        if !gone.isEmpty { setAside(Set(gone.flatMap { onDisplay[$0] ?? [] })) }
         if before != after {
             emitWorkspaceChanged(prev: prevWorkspace)
             runHook(config.hooks.displaysChanged, ["PAW_DISPLAYS": "\(displays.count)"])
@@ -300,7 +311,7 @@ final class WindowManager {
         for name in presets.keys { _ = workspace(name) }
         for i in displays.indices where displays[i].workspace.isEmpty {
             let preset = presets.keys.sorted(by: Self.nameOrder).first { displayIndex(for: presets[$0]?.display) == i && !used.contains($0) }
-            let name = preset ?? orderedNames.first { !used.contains($0) } ?? "\(displays.count + i)"
+            let name = preset ?? orderedNames.first { !used.contains($0) && $0 != Self.side } ?? "\(displays.count + i)"
             displays[i].workspace = name
             used.insert(name)
         }
@@ -1023,8 +1034,11 @@ final class WindowManager {
     /// Workspaces in the order their numbers go: display by display (the display whose first
     /// workspace has the lowest number first), new ones after the rest of their display. Without
     /// pinned workspaces this is just the names in order.
-    var numbered: [String] {
-        let names = orderedNames
+    var numbered: [String] { (workspaces[Self.side] != nil ? [Self.side] : []) + numberedWorkspaces }
+
+    /// The numbered workspaces (everything but the side one).
+    private var numberedWorkspaces: [String] {
+        let names = orderedNames.filter { $0 != Self.side }
         guard names.contains(where: { homeDisplay($0) != nil }) else { return names }
         func group(_ n: String) -> String { homeDisplay(n).map { "d\($0)" } ?? "w\(n)" }
         var first: [String: String] = [:]
@@ -1047,17 +1061,21 @@ final class WindowManager {
     /// The number a workspace shows (sketchybar, `workspace N`): its place in `numbered` when
     /// workspaces are pinned, else its name.
     func label(_ name: String) -> String {
+        if name == Self.side { return "+\(workspaces[name]?.allWindows.count ?? 0)" }
         guard extraPins.isEmpty == false || orderedNames.contains(where: { homeDisplay($0) != nil }) else { return name }
-        return numbered.firstIndex(of: name).map { "\($0 + 1)" } ?? name
+        return numberedWorkspaces.firstIndex(of: name).map { "\($0 + 1)" } ?? name
     }
 
-    private func resolve(_ t: Command.WorkspaceTarget) -> String? {
+    private func resolve(_ t: Command.WorkspaceTarget, making: Bool = false) -> String? {
         let names = numbered
         let cur = focusedWorkspace.name
         switch t {
         case .name(let n):
-            if let i = Int(n), names.contains(where: { homeDisplay($0) != nil }) {
-                return names.indices.contains(i - 1) ? names[i - 1] : nil
+            // "+N" (as the bar shows it) or "side": the side workspace.
+            if n.hasPrefix("+") || n == Self.side { return workspaces[Self.side] != nil || making ? Self.side : nil }
+            let core = numberedWorkspaces
+            if let i = Int(n), core.contains(where: { homeDisplay($0) != nil }) {
+                return core.indices.contains(i - 1) ? core[i - 1] : nil
             }
             return n
         case .last: return lastWorkspace
@@ -1352,7 +1370,7 @@ final class WindowManager {
             if displays.indices.contains(focusedDisplay), orderedNames.contains(where: { homeDisplay($0) == focusedDisplay }) {
                 // On this display, numbered after its workspaces; later displays' numbers move up.
                 extraSeq += 1
-                let name = "+\(extraSeq)"
+                let name = "x\(extraSeq)"
                 extraPins[name] = displays[focusedDisplay].id
                 _ = workspace(name)
                 show(name)
@@ -1364,7 +1382,8 @@ final class WindowManager {
         case .workspaceClose:
             closeWorkspace(ws)
         case .moveTo(let t, let follow):
-            if let id = fid, let n = resolve(t) { moveWindow(id, to: n, follow: follow) }
+            // Sending a window to the side workspace makes it when there is none.
+            if let id = fid, let n = resolve(t, making: true) { moveWindow(id, to: n, follow: follow) }
         case .focusDisplay(let t):
             if let di = displayTarget(t) {
                 focusedDisplay = di
@@ -1916,7 +1935,91 @@ final class WindowManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 
+    // MARK: - The side workspace
+
+    /// Where windows of unplugged displays wait to be put somewhere ("+N" in the bar, first).
+    static let side = "side"
+
+    /// Workspaces of displays that went away: windows a preset places go there, the rest to the
+    /// side workspace; workspaces that only existed for that display go.
+    private func setAside(_ names: Set<String>) {
+        var moved = false
+        for name in names.sorted(by: Self.nameOrder) where name != Self.side {
+            guard let ws = workspaces[name] else { continue }
+            // Still on screen or pinned in the arrangement now: it stays as it is.
+            if displayShowing(name) != nil || homeDisplay(name) != nil { continue }
+            for id in ws.allWindows {
+                guard let w = windows[id] else { continue }
+                if let home = presets.first(where: { $0.value.slot(for: w.app, title: w.title) != nil })?.key, home != name {
+                    moveQuietly(id, from: ws, to: workspace(home))
+                } else {
+                    moveQuietly(id, from: ws, to: workspace(Self.side))
+                }
+                moved = true
+            }
+            if ws.isEmpty, !isPermanent(name) {
+                workspaces[name] = nil
+                extraPins[name] = nil
+            }
+        }
+        if moved {
+            for name in presets.keys { if displayShowing(name) != nil { layout(workspace(name), animated: false) } }
+            Log.app.info("set aside: \(self.workspaces[Self.side]?.allWindows.count ?? 0) windows on the side")
+        }
+        dropEmptySide()
+    }
+
+    /// Workspaces that always exist: 1…layout.workspaces and the presets in effect.
+    private func isPermanent(_ name: String) -> Bool {
+        if presets[name] != nil { return true }
+        if let n = Int(name), (1...max(1, config.layout.workspaces)).contains(n) { return true }
+        return false
+    }
+
+    /// Moves a window between workspaces without focusing anything; out of sight unless shown.
+    private func moveQuietly(_ id: WindowID, from: Workspace, to: Workspace) {
+        guard let w = windows[id] else { return }
+        let floating = from.isFloating(id)
+        from.remove(id)
+        to.insert(id, area: area(of: to), floating: floating, slot: presets[to.name]?.slot(for: w.app, title: w.title))
+        if displayShowing(to.name) == nil { hide(w, from: to) }
+    }
+
+    /// The side workspace goes once everything on it has a place (and it isn't on screen).
+    private func dropEmptySide() {
+        guard let s = workspaces[Self.side], s.isEmpty else { return }
+        if displayShowing(Self.side) != nil {
+            // Sorted while looking at it: back to where you were, then it goes.
+            guard !droppingSide else { return }
+            droppingSide = true
+            let back = lastWorkspace.flatMap { $0 != Self.side && workspaces[$0] != nil ? $0 : nil } ?? numberedWorkspaces.first ?? "1"
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                defer { droppingSide = false }
+                guard workspaces[Self.side]?.isEmpty == true, displayShowing(Self.side) != nil else { return }
+                show(back)
+                if displayShowing(Self.side) == nil { workspaces[Self.side] = nil }
+                publish("windowsChanged", ["workspaces": query()])
+                runHook(config.hooks.windowsChanged, [:])
+            }
+            return
+        }
+        workspaces[Self.side] = nil
+    }
+
+    /// paw 0.1 named extra workspaces "+1", "+2"…; without their display they are set aside.
+    private func migrateOldExtras() {
+        let old = workspaces.keys.filter { $0.hasPrefix("+") }
+        guard !old.isEmpty else { return }
+        for name in old {
+            guard let ws = workspaces[name] else { continue }
+            for id in ws.allWindows { moveQuietly(id, from: ws, to: workspace(Self.side)) }
+            if displayShowing(name) == nil { workspaces[name] = nil }
+        }
+    }
+
     private func scheduleSave() {
+        dropEmptySide()
         scheduleWindowsHook()
         saveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.saveState() }
