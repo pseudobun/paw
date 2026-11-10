@@ -93,6 +93,11 @@ final class WindowManager {
         })
         observers.append(ws.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            // Menu bar apps (Cryptomator) start as accessories and turn regular when they show a
+            // window; paw skipped them then, so take them on the first time they come forward.
+            if let self, app.activationPolicy == .regular, !self.tracker.isObserving(app.processIdentifier) {
+                self.adopt(app, state: nil)
+            }
             self?.syncFocus(app.processIdentifier)
         })
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
