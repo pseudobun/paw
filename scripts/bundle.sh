@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-out="${1:-build}"
+out="${1:-build.noindex}"
 bundle_id="${PAW_BUNDLE_ID:-dev.paw.app}"
 version="$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)"
 short="$(echo "$version" | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' || echo 0.1.0)"

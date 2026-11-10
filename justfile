@@ -16,16 +16,16 @@ build:
 test:
     swift test
 
-# Release paw.app into ./build
+# Release paw.app into ./build.noindex (.noindex keeps Spotlight from listing a second paw)
 bundle:
-    scripts/bundle.sh build
+    scripts/bundle.sh build.noindex
 
 # Release build → /Applications/paw.app, CLI → /opt/homebrew/bin/paw, relaunch
 install: bundle
     -paw quit 2>/dev/null; pkill -x paw
     @for i in $(seq 1 30); do pgrep -x paw >/dev/null || break; sleep 0.1; done
     rm -rf "{{app_dir}}/paw.app"
-    cp -R build/paw.app "{{app_dir}}/paw.app"
+    cp -R build.noindex/paw.app "{{app_dir}}/paw.app"
     ln -sf "{{app_dir}}/paw.app/Contents/MacOS/paw" "{{cli_link}}"
     open "{{app_dir}}/paw.app"
     @echo "installed {{app_dir}}/paw.app, CLI at {{cli_link}}"
@@ -65,7 +65,7 @@ icons path="":
     scripts/gen-app-icons.sh {{path}}
 
 # Render the indicators with your config to a PNG
-preview out="build/preview.png":
+preview out="build.noindex/preview.png":
     swift build -q
     mkdir -p "$(dirname "{{out}}")"
     .build/debug/paw preview "{{out}}"
