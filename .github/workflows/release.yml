@@ -1,0 +1,120 @@
+name: Release
+
+# Push a tag vX.Y.Z[-pre] matching the VERSION file (`just release`).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      SIGN_IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_APP_CERT }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Resolve version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ "$VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match VERSION ($FILE_VERSION)"; exit 1
+          fi
+          case "$VERSION" in *-*) PRERELEASE=true ;; *) PRERELEASE=false ;; esac
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "PRERELEASE=$PRERELEASE" >> "$GITHUB_ENV"
+          echo "ZIP=build.noindex/release/paw-$VERSION-macos.zip" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: swift test
+
+      - name: Import Developer ID certificate
+        uses: apple-actions/import-codesign-certs@v6
+        with:
+          p12-file-base64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          p12-password: ${{ secrets.MACOS_CERT_PASSWORD }}
+
+      - name: Build and sign universal paw.app
+        run: |
+          PAW_VERSION="$VERSION" PAW_BUILD="$GITHUB_RUN_NUMBER" PAW_SIGN_IDENTITY="$SIGN_IDENTITY" \
+            PAW_TIMESTAMP=1 PAW_ARCHS="arm64 x86_64" scripts/bundle.sh build.noindex/release
+          codesign --verify --strict --verbose=2 build.noindex/release/paw.app
+          codesign -dv build.noindex/release/paw.app 2>&1 | grep -E "Authority|Runtime|Identifier"
+
+      - name: Notarize and staple
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          KEY="$RUNNER_TEMP/notary.p8"
+          echo "$ASC_PRIVATE_KEY" | base64 --decode > "$KEY"
+          APP=build.noindex/release/paw.app
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --key "$KEY" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" \
+            --wait --timeout 40m --output-format json | tee "$RUNNER_TEMP/notary.json"
+          STATUS="$(plutil -extract status raw "$RUNNER_TEMP/notary.json" 2>/dev/null || echo unknown)"
+          if [ "$STATUS" != "Accepted" ]; then
+            ID="$(plutil -extract id raw "$RUNNER_TEMP/notary.json" 2>/dev/null || true)"
+            [ -n "$ID" ] && xcrun notarytool log "$ID" --key "$KEY" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" || true
+            echo "::error::notarization: $STATUS"; exit 1
+          fi
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+          spctl --assess --type execute --verbose "$APP"
+
+      - name: Package
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent build.noindex/release/paw.app "$ZIP"
+          SHA256="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
+          echo "SHA256=$SHA256" >> "$GITHUB_ENV"
+          printf '%s  %s\n' "$SHA256" "$(basename "$ZIP")" > "$ZIP.sha256"
+          # Release notes: this version's CHANGELOG section
+          awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          cat >> "$RUNNER_TEMP/notes.md" <<NOTES
+
+          ### Install
+
+          \`\`\`sh
+          brew install --cask pseudobun/tap/paw
+          \`\`\`
+          NOTES
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          [ "$PRERELEASE" = true ] && flags+=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" "$ZIP" "$ZIP.sha256" \
+            --title "paw $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag "${flags[@]}"
+
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          TAP="$RUNNER_TEMP/homebrew-tap"
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/pseudobun/homebrew-tap.git" "$TAP"
+          mkdir -p "$TAP/Casks"
+          sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$SHA256/" packaging/paw.rb.template > "$TAP/Casks/paw.rb"
+          cd "$TAP"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/paw.rb
+          git diff --cached --quiet || git commit -m "paw $VERSION"
+          git push

@@ -4,7 +4,7 @@
 app_dir := "/Applications"
 cli_link := "/opt/homebrew/bin/paw"
 local_identity := "paw Local Signing"
-launch_agent := env("HOME") / "Library/LaunchAgents/dev.paw.app.plist"
+launch_agent := env("HOME") / "Library/LaunchAgents/com.pseudobun.paw.plist"
 
 default: build
 
@@ -24,6 +24,7 @@ bundle:
 install: bundle
     -paw quit 2>/dev/null; pkill -x paw
     @for i in $(seq 1 30); do pgrep -x paw >/dev/null || break; sleep 0.1; done
+    @just _migrate-legacy
     rm -rf "{{app_dir}}/paw.app"
     cp -R build.noindex/paw.app "{{app_dir}}/paw.app"
     ln -sf "{{app_dir}}/paw.app/Contents/MacOS/paw" "{{cli_link}}"
@@ -52,7 +53,7 @@ local-cert:
 # Start paw at login with launchd instead of the openAtLogin login item
 launchd: install
     mkdir -p "$(dirname "{{launch_agent}}")"
-    sed "s|/Applications|{{app_dir}}|" examples/dev.paw.app.plist > "{{launch_agent}}"
+    sed "s|/Applications|{{app_dir}}|" examples/com.pseudobun.paw.plist > "{{launch_agent}}"
     -launchctl bootout gui/$(id -u) "{{launch_agent}}" 2>/dev/null
     @# install opened paw itself; hand it to launchd so KeepAlive restarts it after a crash
     -pkill -x paw
@@ -76,8 +77,37 @@ examples: build
 
 # Follow paw's log
 log:
-    log stream --level info --predicate 'subsystem == "dev.paw.app"'
+    log stream --level info --predicate 'subsystem == "com.pseudobun.paw"'
 
 # Re-render Resources/AppIcon.icns from Resources/icon/paw-icon.svg
 icon:
     swift scripts/make-icon.swift
+
+# Universal release build zipped into build.noindex/release (CI signs and notarizes it)
+release-zip:
+    PAW_ARCHS="arm64 x86_64" scripts/bundle.sh build.noindex/release
+    cd build.noindex/release && ditto -c -k --sequesterRsrc --keepParent paw.app "paw-$(tr -d '[:space:]' < ../../VERSION)-macos.zip"
+
+# Tag VERSION and push it: the release workflow builds, notarizes, publishes and updates the tap
+release:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    v="$(tr -d '[:space:]' < VERSION)"
+    [ -z "$(git status --porcelain)" ] || { echo "working tree not clean"; exit 1; }
+    [ "$(git branch --show-current)" = main ] || { echo "not on main"; exit 1; }
+    grep -q "^## \[$v\]" CHANGELOG.md || { echo "CHANGELOG.md has no [$v] section"; exit 1; }
+    git tag -s "v$v" -m "paw $v"
+    git push origin main "v$v"
+
+# Move data from the pre-0.1 bundle id (dev.paw.app) to com.pseudobun.paw
+_migrate-legacy:
+    #!/usr/bin/env bash
+    for d in "Library/Application Support" "Library/Caches"; do
+      old="$HOME/$d/dev.paw.app"; new="$HOME/$d/com.pseudobun.paw"
+      if [ -d "$old" ] && [ ! -e "$new" ]; then mv "$old" "$new" && echo "moved $old"; fi
+    done
+    old="$HOME/Library/LaunchAgents/dev.paw.app.plist"
+    if [ -f "$old" ]; then
+      launchctl bootout gui/$(id -u) "$old" 2>/dev/null || true
+      rm -f "$old"; echo "removed $old (run just launchd to install the new one)"
+    fi

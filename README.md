@@ -1,14 +1,233 @@
 <div align="center">
 
-<h1>paw</h1>
+<img src="docs/assets/logo.svg" width="128" height="128" alt="paw logo">
 
-A tiling window manager for macOS with stack indicators, in the style of sketchybar.
-bsp and stack layouts, virtual workspaces, workspace presets, key bindings and a CLI in one
-app: no yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift + AppKit.
+# paw
+
+**A tiling window manager for macOS, with stacks you can see.**
+
+bsp and stack layouts, virtual workspaces, presets, key bindings and a CLI in one native app.<br>
+No yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift and AppKit.
+
+[![CI](https://github.com/pseudobun/paw/actions/workflows/ci.yml/badge.svg)](https://github.com/pseudobun/paw/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/pseudobun/paw?include_prereleases&label=release&color=ead186)](https://github.com/pseudobun/paw/releases)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-111?logo=apple)](#requirements)
+[![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](Package.swift)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+[Install](#install) · [Features](#features) · [Configure](#configure) · [Commands](#commands) · [Status bar](#status-bar) · [Development](#development)
+
+<br>
+
+<img src="docs/assets/preview.png" width="820" alt="paw tiling two windows, with stack indicators beside each stack">
+
+<sub>Two tiles in bsp, each a stack. The islands beside them show every window in the stack.</sub>
 
 </div>
 
+> [!NOTE]
+> paw is in **beta**. It runs as a daily driver, but config keys and commands may still change
+> before 1.0. Read the [changelog](CHANGELOG.md) when you upgrade.
+
+## Install
+
+<table>
+<tr>
+<td width="56" align="center"><b>1</b></td>
+<td>
+
+**Install with Homebrew**
+
+```sh
+brew install --cask pseudobun/tap/paw
+```
+
+This puts `paw.app` in `/Applications` and the `paw` CLI on your `PATH`. Always use the full
+`pseudobun/tap/paw` name: a bare `paw` cask in Homebrew is a different app.
+
+</td>
+</tr>
+<tr>
+<td align="center"><b>2</b></td>
+<td>
+
+**Stop other window managers**
+
+Quit anything else that moves windows or grabs hotkeys, so they don't fight paw:
+
+```sh
+yabai --stop-service; skhd --stop-service   # if you use them
+```
+
+Also quit AeroSpace, Amethyst, Rectangle and the like.
+
+</td>
+</tr>
+<tr>
+<td align="center"><b>3</b></td>
+<td>
+
+**Start paw and allow Accessibility**
+
+```sh
+open -a paw
+```
+
+Then **System Settings → Privacy & Security → Accessibility → paw**. paw waits for the grant and
+starts tiling right after.
+
+</td>
+</tr>
+<tr>
+<td align="center"><b>4</b></td>
+<td>
+
+**Tune macOS for tiling**
+
+In **System Settings → Desktop & Dock**:
+
+- turn off *Automatically rearrange Spaces based on most recent use*
+- under *Windows*, turn off *Drag windows to screen edges to tile* and *Hold ⌥ key while dragging
+  windows to tile*
+
+Keep one native Space per display; paw's workspaces replace Spaces.
+
+</td>
+</tr>
+<tr>
+<td align="center"><b>5</b></td>
+<td>
+
+**Check it works**
+
+```sh
+paw status     # trusted: yes, bindings: ok
+```
+
+Press `ctrl+←/→` to move focus, `hyper+w` for bsp, `hyper+tab` for the overview. Your config is at
+`~/.config/paw/config.json5` and applies the moment you save it.
+
+</td>
+</tr>
+</table>
+
+**Start at login:** set `openAtLogin: true` in the config.<br>
+**Upgrade:** `brew upgrade --cask pseudobun/tap/paw`.<br>
+**Uninstall:** `brew uninstall --cask pseudobun/tap/paw` (add `--zap` to remove the config and state too).
+
+Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
+again (it remembers which workspace each window was on) or run `paw recover`.
+
+<details>
+<summary><b>Build from source instead</b></summary>
+
+<br>
+
+Needs Xcode or the Command Line Tools (Swift 6) and [`just`](https://github.com/casey/just).
+
+```sh
+git clone https://github.com/pseudobun/paw.git && cd paw
+just local-cert   # once: a self-signed certificate, so Accessibility survives rebuilds
+just install      # → /Applications/paw.app, CLI → /opt/homebrew/bin/paw, then starts paw
+```
+
+If you have an Apple Development or Developer ID certificate, `just install` signs with it
+instead of the self-signed one (or set `PAW_SIGN_IDENTITY`). Without either it signs ad hoc,
+and macOS asks for Accessibility again after every rebuild.
+
+`just launchd` starts paw at login with a LaunchAgent that restarts it after a crash.
+`just uninstall` removes it all.
+
+</details>
+
+## Requirements
+
+- macOS 14 Sonoma or later. Release builds are universal; paw is developed and tested on Apple
+  Silicon
+- The **Accessibility** permission
+- Optional: the **Screen Recording** permission, for live window pictures in the overview
+  (`overview.thumbnails`)
+- Optional: [sketchybar-app-font](https://github.com/kvndrsslr/sketchybar-app-font) in
+  `~/Library/Fonts` for app glyphs in the indicators (without it they show the app's own icon),
+  and a Nerd Font such as `brew install --cask font-geist-mono-nerd-font` for their text
+- Optional: something that turns Caps Lock into a **hyper key** (⌘⌃⌥⇧), e.g.
+  [Karabiner-Elements](https://karabiner-elements.pqrs.org) or [Hyperkey](https://hyperkey.app),
+  since several default bindings use `hyper`. Rebind them if you don't have one
+
 ## Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Tiling
+Layouts per workspace: `bsp`, `columns`, `master`, `stack` and `float`. A weighted tree lets a
+split hold any number of tiles, each with its share, so thirds come naturally. A tile that
+closes gives its space to its neighbour.
+
+</td>
+<td width="50%" valign="top">
+
+### Stacks you can see
+Any tile can hold several windows. An island beside each stack shows one icon per window in the
+app's own colour. Click to focus, scroll to cycle, hover for the title.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### Virtual workspaces
+Like AeroSpace: instant switching with no Mission Control and no SIP changes. ⌘Tab to a window
+on a hidden workspace switches to it.
+
+</td>
+<td valign="top">
+
+### Presets and setups
+Say which apps share which tile on which workspace. `initiate` opens them and arranges every
+workspace in one go. Setups per display arrangement (laptop, home, office) apply by themselves.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### Mouse that helps
+Drag a window and a preview shows where it lands: split, swap, stack (⌥) or dock. Drag the gap
+between tiles to resize, double-click it to even out. Middle-button gestures switch workspaces.
+
+</td>
+<td valign="top">
+
+### Overview
+`hyper+tab` shows every workspace as a card and the selected one large, with live window
+pictures. Type to filter, arrows to move, drag windows between workspaces.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### Built for scripts and bars
+Every binding is also a CLI command (`paw focus west`, `paw workspace 3`).
+`paw subscribe` streams JSON events over a private socket for sketchybar and friends.
+
+</td>
+<td valign="top">
+
+### One config file
+Commented JSON5 with every default, hot-reloaded on save. A broken file keeps the last good
+config. The Settings window writes the same file, so people and agents can both edit it.
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>Everything paw does</b></summary>
+
+<br>
 
 - **Layouts** per workspace: `bsp` (new windows split the focused tile, wide tiles side by side;
   see Canvas),
@@ -86,52 +305,7 @@ app: no yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift + AppKit.
   work
 - **Private CLI socket**: the CLI talks to paw over a Unix socket only your user can reach
 
-## Requirements
-
-- macOS 14+ on Apple Silicon
-- Xcode or the Command Line Tools (Swift 6), [`just`](https://github.com/casey/just)
-- The **Accessibility** permission
-- One native Space per display (paw's workspaces replace Spaces); in System Settings → Desktop &
-  Dock, turn off "Automatically rearrange Spaces based on most recent use", and under Windows turn
-  off "Drag windows to screen edges to tile" and "Hold ⌥ key while dragging windows to tile" (their
-  outlines show next to paw's drop preview)
-- Optional: [sketchybar-app-font](https://github.com/kvndrsslr/sketchybar-app-font) in
-  `~/Library/Fonts` for app icons in the indicators (without it they show the app's initial), and
-  a Nerd Font such as `brew install --cask font-geist-mono-nerd-font` for their text
-- Optional: the **Screen Recording** permission, for window pictures in the overview
-  (`overview.thumbnails`)
-- Optional: something that turns Caps Lock into a **hyper key** (⌘⌃⌥⇧), e.g.
-  [Karabiner-Elements](https://karabiner-elements.pqrs.org) or [Hyperkey](https://hyperkey.app),
-  since several default bindings use `hyper`. Rebind them if you don't have one
-
-## Install
-
-```sh
-git clone https://github.com/pseudobun/paw.git && cd paw
-just local-cert   # once: a self-signed certificate, so Accessibility survives rebuilds
-just install      # → /Applications/paw.app, CLI → /opt/homebrew/bin/paw, then starts paw
-```
-
-Then System Settings → Privacy & Security → Accessibility → enable paw. paw waits for the grant
-and starts managing windows right after. `paw status` should show `trusted: yes` and
-`bindings: ok`.
-
-If you have an Apple Development certificate, `just install` signs with it instead of the
-self-signed one (or set `PAW_SIGN_IDENTITY`). Without either it signs ad hoc, and macOS asks for
-Accessibility again after every rebuild.
-
-Stop other window managers and hotkey daemons first so they don't fight over windows, e.g.
-`yabai --stop-service; skhd --stop-service`, and quit AeroSpace, Amethyst, Rectangle and the like.
-
-Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
-again (it remembers which workspace each window was on) or run `paw recover`.
-
-Uninstall: `just uninstall`.
-
-### Start at login
-
-`openAtLogin: true` in the config, or `just launchd` (a LaunchAgent that restarts paw after a
-crash).
+</details>
 
 ## Configure
 
@@ -345,3 +519,28 @@ overview's geometry, neighbours, commands, key specs, easing, config.
 `Sources/paw`: `WM/` (accessibility, tracking, animator, bindings, workspaces, mouse: drop preview,
 seams, gestures), `Stacks/` and `UI/` (indicators, overview, HUD), `App/` (socket, events), `CLI/`. `just examples` regenerates `examples/config.json5` from the built-in
 template. Manual checks: [TESTING.md](TESTING.md).
+
+### Releasing
+
+The version lives in [`VERSION`](VERSION). To ship one: bump `VERSION`, add its section to
+[`CHANGELOG.md`](CHANGELOG.md), commit, then `just release`. That tags `vX.Y.Z` and pushes it;
+the [release workflow](.github/workflows/release.yml) tests, builds a universal `paw.app`,
+signs it with Developer ID, notarizes and staples it, publishes the GitHub release and updates
+the cask in [`pseudobun/homebrew-tap`](https://github.com/pseudobun/homebrew-tap). Versions with
+a suffix (`0.2.0-beta.1`) are published as pre-releases.
+
+## Contributing
+
+Issues and pull requests are welcome. Run `just test` before you open one, and go through the
+relevant parts of [TESTING.md](TESTING.md) for anything that touches windows. Commit messages
+follow [Conventional Commits](https://www.conventionalcommits.org).
+
+## Credits
+
+App glyphs come from [sketchybar-app-font](https://github.com/kvndrsslr/sketchybar-app-font).
+Ideas borrowed with thanks from [yabai](https://github.com/koekeishiya/yabai),
+[AeroSpace](https://github.com/nikitabobko/AeroSpace) and TrellisWM.
+
+## License
+
+[MIT](LICENSE) © Urban Vidovič
