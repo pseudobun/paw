@@ -34,6 +34,19 @@ enum StackRenderer {
             } else {
                 color = item.hasFocus ? c.accent : item.isActive ? c.fg : (focused ? c.muted : c.dim)
             }
+            if icons.mapped(item.app) == nil,
+               let image = AppColors.shared.image(for: item.app, side: Int((style.a.appIconSize * 1.3 * scale).rounded())) {
+                // No glyph in the font: the app's own icon, faded like the glyphs behind it.
+                let side = (style.a.appIconSize * 1.3).rounded()
+                let img = CALayer()
+                img.contents = image
+                img.contentsGravity = .resizeAspect
+                img.frame = CGRect(x: (frame.midX - side / 2).rounded(), y: (frame.midY - side / 2).rounded(),
+                                   width: side, height: side)
+                img.opacity = item.isActive || item.hasFocus ? 1 : (focused ? 0.55 : 0.35)
+                root.addSublayer(img)
+                continue
+            }
             let t = TextLayer()
             t.contentsScale = scale
             t.centered = true

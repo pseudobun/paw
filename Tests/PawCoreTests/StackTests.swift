@@ -83,6 +83,8 @@ struct IconTests {
         #expect(m.glyph(for: "Spotify") == ":spotify:")
         #expect(m.glyph(for: "Adobe Photoshop 2026") == ":photoshop:")
         #expect(m.glyph(for: "Some Unknown App") == ":default:")
+        #expect(m.mapped("Some Unknown App") == nil)
+        #expect(m.mapped("Adobe Photoshop 2026") == ":photoshop:")
     }
 
     @Test func parsesLuaWithEscapes() {

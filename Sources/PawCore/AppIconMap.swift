@@ -20,9 +20,14 @@ public struct AppIconMap: Sendable, Equatable {
 
     /// Same lookup as `app_icons.get` in Lua: exact name, then name prefix, then the default.
     public func glyph(for app: String) -> String {
+        mapped(app) ?? fallback
+    }
+
+    /// The app's own glyph, or nil when only the default one would show.
+    public func mapped(_ app: String) -> String? {
         if let g = exact[app] { return g }
         for (p, g) in prefix where app.hasPrefix(p) { return g }
-        return fallback
+        return nil
     }
 
     /// Entries in `overrides` win over the map.

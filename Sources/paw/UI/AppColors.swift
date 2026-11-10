@@ -5,6 +5,20 @@ import PawCore
 final class AppColors {
     static let shared = AppColors()
     private var cache: [String: ARGB?] = [:]
+    private var images: [String: CGImage?] = [:]
+
+    /// The app's own icon, for apps sketchybar-app-font has no glyph for.
+    func image(for app: String, side: Int) -> CGImage? {
+        let key = "\(app)@\(side)"
+        if let i = images[key] { return i }
+        var i: CGImage?
+        if !app.isEmpty, let url = Self.appURL(app) {
+            var rect = CGRect(x: 0, y: 0, width: side, height: side)
+            i = NSWorkspace.shared.icon(forFile: url.path).cgImage(forProposedRect: &rect, context: nil, hints: nil)
+        }
+        images[key] = i
+        return i
+    }
 
     /// The colour for an app's icon: the config's override, else the picked one; nil when off or
     /// the icon has no clear colour.
