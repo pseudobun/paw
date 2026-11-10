@@ -4,9 +4,34 @@ import Sparkle
 
 /// Sparkle updates from the appcast on GitHub (SUFeedURL in Info.plist). Only for a paw.app
 /// that carries Sparkle and a public key, i.e. release builds; local builds skip it.
+///
+/// Checks you start (menu, `paw update`) first probe the feed without UI: Sparkle's own "up to
+/// date" and error alerts are modal and would stall the main queue, and with it window
+/// management and the CLI, until dismissed. Only a found update opens Sparkle's (non-modal) window.
 @MainActor
 final class Updater: NSObject {
     static let shared = Updater()
+
+    enum State: Equatable {
+        case idle, checking
+        case available(String)
+        case upToDate
+        case failed(String)
+
+        var text: String {
+            switch self {
+            case .idle: return "idle"
+            case .checking: return "checking"
+            case .available(let v): return "paw \(v) is available"
+            case .upToDate: return "paw \(AppPaths.version) is the newest version"
+            case .failed(let e): return "update check failed: \(e)"
+            }
+        }
+    }
+
+    private(set) var state = State.idle
+    /// Runs once the probe started by `checkNow` has an answer.
+    var onResult: ((State) -> Void)?
 
     private var controller: SPUStandardUpdaterController?
 
@@ -16,7 +41,7 @@ final class Updater: NSObject {
         guard controller == nil, AppPaths.isAppBundle,
               let key = AppPaths.appBundle.object(forInfoDictionaryKey: "SUPublicEDKey") as? String, !key.isEmpty
         else { return }
-        let c = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+        let c = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
         controller = c
         apply(config)
         do { try c.updater.start() } catch {
@@ -32,12 +57,43 @@ final class Updater: NSObject {
         u.updateCheckInterval = 24 * 60 * 60
     }
 
-    /// "Check for Updates…": shows Sparkle's window, also when paw is up to date.
+    /// Menu and `paw update`: probe, then show Sparkle's window only for a new version.
     func checkNow() {
-        guard let controller else { return }
-        NSApp.activate(ignoringOtherApps: true)
-        controller.checkForUpdates(nil)
+        guard let u = controller?.updater, state != .checking else { return }
+        guard u.canCheckForUpdates else {
+            // A check (or an update) is already under way; bring its window forward.
+            NSApp.activate(ignoringOtherApps: true)
+            controller?.checkForUpdates(nil)
+            return
+        }
+        state = .checking
+        u.checkForUpdateInformation()
     }
 
-    var canCheck: Bool { controller?.updater.canCheckForUpdates ?? false }
+    private func finish(_ s: State) {
+        guard state == .checking else { return }
+        state = s
+        Log.app.info("updates: \(s.text, privacy: .public)")
+        if case .available = s {
+            NSApp.activate(ignoringOtherApps: true)
+            controller?.checkForUpdates(nil)
+        }
+        onResult?(s)
+    }
+}
+
+extension Updater: SPUUpdaterDelegate {
+    nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        let v = item.displayVersionString
+        Task { @MainActor in self.finish(.available(v)) }
+    }
+
+    nonisolated func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
+        Task { @MainActor in self.finish(.upToDate) }
+    }
+
+    nonisolated func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
+        let message = error.map { ($0 as NSError).localizedDescription } ?? "no answer"
+        Task { @MainActor in self.finish(.failed(message)) }
+    }
 }

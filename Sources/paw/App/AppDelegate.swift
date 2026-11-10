@@ -42,7 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         updateLoginItem(settings.config.openAtLogin)
-        MainActor.assumeIsolated { Updater.shared.start(settings.config.updates) }
+        MainActor.assumeIsolated {
+            Updater.shared.start(settings.config.updates)
+            Updater.shared.onResult = { [weak self] state in self?.showUpdateResult(state) }
+        }
         setUpStatusItem()
         Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
     }
@@ -140,6 +143,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wm.run([.initiate(name)])
     }
 
+    /// "Up to date" and errors as the workspace HUD, which doesn't block like an alert.
+    private func showUpdateResult(_ state: Updater.State) {
+        if case .available = state { return }
+        guard let wm, let display = wm.displays.first else { return }
+        wm.hud.show(label: state.text, apps: [], in: display.area, icons: settings.icons,
+                    config: settings.config, duration: 2.5)
+    }
+
     @objc private func checkForUpdates() { MainActor.assumeIsolated { Updater.shared.checkNow() } }
     @objc private func initiateCurrent() { wm.run([.initiate(nil)]) }
     @objc private func reloadConfig() { settings.load() }
@@ -181,7 +192,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard available else {
                 return ["error": "this build has no updater (built from source?); use git pull && just install, or brew upgrade --cask pseudobun/tap/paw"]
             }
-            checkForUpdates()
+            if rest != "status" { checkForUpdates() }
+            let state = MainActor.assumeIsolated { Updater.shared.state }
+            return ["state": state == .checking ? "checking" : "done", "message": state.text]
         case "status":
             let names = wm.displays.map { wm.label($0.workspace) }.joined(separator: ", ")
             return ["version": AppPaths.version, "pid": "\(ProcessInfo.processInfo.processIdentifier)",
@@ -226,7 +239,7 @@ extension AppDelegate: NSMenuDelegate {
         if MainActor.assumeIsolated({ Updater.shared.isAvailable }) {
             let item = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
             item.target = self
-            item.isEnabled = MainActor.assumeIsolated { Updater.shared.canCheck }
+            item.isEnabled = MainActor.assumeIsolated { Updater.shared.state != .checking }
             menu.addItem(item)
         }
         menu.addItem(.separator())

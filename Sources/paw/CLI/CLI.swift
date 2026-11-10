@@ -86,11 +86,19 @@ enum CLI {
         return 0
     }
 
+    /// Starts a check, then waits up to 30 s for its answer.
     static func update(_ args: [String]) -> Int32 {
-        guard let r = request("update", timeout: 10) else { return 1 }
+        var r = request("update", timeout: 10)
+        let deadline = Date().addingTimeInterval(30)
+        while let reply = r, reply["state"] as? String == "checking", Date() < deadline {
+            usleep(300_000)
+            r = request("update status", timeout: 10)
+        }
+        guard let r else { return 1 }
         if let e = r["error"] as? String, !e.isEmpty { fputs("paw: \(e)\n", stderr); return 1 }
-        print("paw \(AppPaths.version): checking for updates (see the paw window)")
-        return 0
+        let message = r["message"] as? String ?? ""
+        print(message)
+        return message.hasPrefix("update check failed") ? 1 : 0
     }
 
     static func runWM(_ words: [String]) -> Int32 {
