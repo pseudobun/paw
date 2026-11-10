@@ -47,6 +47,7 @@ ditto "$sparkle" "$app/Contents/Frameworks/Sparkle.framework"
 rm -rf "$app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" "$app/Contents/Frameworks/Sparkle.framework/XPCServices"
 strip -x "$app/Contents/MacOS/paw"
 cp Resources/AppIcon.icns Resources/menubar.svg "$app/Contents/Resources/"
+cp -R Resources/Fonts "$app/Contents/Resources/"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
