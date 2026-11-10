@@ -22,8 +22,9 @@ bundle:
 
 # Release build → /Applications/paw.app, CLI → /opt/homebrew/bin/paw, relaunch
 install: bundle
-    -paw quit 2>/dev/null; pkill -x paw
-    @for i in $(seq 1 30); do pgrep -x paw >/dev/null || break; sleep 0.1; done
+    @# paw.app runs without arguments; `MacOS/paw$` spares CLI processes such as a bar's `paw subscribe`
+    -paw quit 2>/dev/null; pkill -f 'MacOS/paw$'
+    @for i in $(seq 1 30); do pgrep -f 'MacOS/paw$' >/dev/null || break; sleep 0.1; done
     @just _migrate-legacy
     rm -rf "{{app_dir}}/paw.app"
     cp -R build.noindex/paw.app "{{app_dir}}/paw.app"
@@ -32,7 +33,7 @@ install: bundle
     @echo "installed {{app_dir}}/paw.app, CLI at {{cli_link}}"
 
 uninstall:
-    -paw quit 2>/dev/null; pkill -x paw
+    -paw quit 2>/dev/null; pkill -f 'MacOS/paw$'
     -launchctl bootout gui/$(id -u) "{{launch_agent}}" 2>/dev/null
     rm -rf "{{app_dir}}/paw.app" "{{cli_link}}" "{{launch_agent}}"
 
@@ -56,8 +57,8 @@ launchd: install
     sed "s|/Applications|{{app_dir}}|" examples/com.pseudobun.paw.plist > "{{launch_agent}}"
     -launchctl bootout gui/$(id -u) "{{launch_agent}}" 2>/dev/null
     @# install opened paw itself; hand it to launchd so KeepAlive restarts it after a crash
-    -pkill -x paw
-    @for i in $(seq 1 30); do pgrep -x paw >/dev/null || break; sleep 0.1; done
+    -pkill -f 'MacOS/paw$'
+    @for i in $(seq 1 30); do pgrep -f 'MacOS/paw$' >/dev/null || break; sleep 0.1; done
     launchctl bootstrap gui/$(id -u) "{{launch_agent}}"
     @echo "loaded {{launch_agent}}"
 
