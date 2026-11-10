@@ -105,6 +105,10 @@ private struct GeneralTab: View {
             AnimationSection(c: $c)
             InitiateSetWorkspaceSection(c: $c)
             Section { Toggle("Open at login", isOn: $c.openAtLogin) }
+            Section("Updates") {
+                Toggle("Check for new versions every day", isOn: $c.updates.check)
+                Toggle("Install them without asking", isOn: $c.updates.automatic).disabled(!c.updates.check)
+            }
         }
         .formStyle(.grouped)
     }
