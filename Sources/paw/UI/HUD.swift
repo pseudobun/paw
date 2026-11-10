@@ -65,8 +65,8 @@ final class WorkspaceHUD {
 }
 
 /// While a workspace is being moved (`move-workspace next|prev`, hyper+š/đ): the workspaces on
-/// either side of it and where it is now, held on screen as long as hyper is; a bar marks the
-/// start or the end when there is nowhere further to go.
+/// either side of it and where it is now, held on screen as long as hyper is; an empty dashed
+/// slot marks the start or the end when there is nowhere further to go.
 final class MoveHUD {
     struct Cell {
         let label: String
@@ -79,7 +79,7 @@ final class MoveHUD {
     private var shownAt = Date.distantPast
 
     /// `area` in AX coordinates.
-    /// `side`: the side workspace, shown dimmed behind the wall at the start (it stays first).
+    /// `side`: the side workspace, shown dimmed before the start (it stays first).
     func show(prev: Cell?, current: Cell, next: Cell?, side: Cell? = nil, in area: CGRect, icons: AppIconMap, config: PawConfig) {
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         let c = style.colors
@@ -112,12 +112,25 @@ final class MoveHUD {
             return t
         }
         /// The edge: nothing further that way.
-        func wall() -> CALayer {
-            let w = CALayer()
-            w.bounds = CGRect(x: 0, y: 0, width: 3, height: 26)
-            w.cornerRadius = 1.5
-            w.backgroundColor = c.bad.withAlpha(0.8).cg
-            return w
+        /// The end of the order: an empty dashed slot saying so.
+        func end(_ word: String) -> CALayer {
+            let t = style.text(word, c.dim, font: style.font)
+            let w = (t.size().width + 20).rounded()
+            let slot = CAShapeLayer()
+            slot.contentsScale = scale
+            slot.bounds = CGRect(x: 0, y: 0, width: w, height: 28)
+            slot.path = CGPath(roundedRect: slot.bounds.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 14, cornerHeight: 14, transform: nil)
+            slot.fillColor = nil
+            slot.strokeColor = c.dim.withAlpha(0.7).cg
+            slot.lineWidth = 1
+            slot.lineDashPattern = [4, 3]
+            let label = TextLayer()
+            label.contentsScale = scale
+            label.centered = true
+            label.text = t
+            label.frame = slot.bounds
+            slot.addSublayer(label)
+            return slot
         }
 
         if prev == nil, let side {
@@ -125,11 +138,11 @@ final class MoveHUD {
             s.opacity = 0.45
             parts.append(s)
         }
-        parts.append(prev.map { cellLayer($0, active: false) } ?? wall())
+        parts.append(prev.map { cellLayer($0, active: false) } ?? end("start"))
         parts.append(text("‹", prev == nil ? c.dim : c.muted))
         parts.append(cellLayer(current, active: true))
         parts.append(text("›", next == nil ? c.dim : c.muted))
-        parts.append(next.map { cellLayer($0, active: false) } ?? wall())
+        parts.append(next.map { cellLayer($0, active: false) } ?? end("end"))
 
         let width = parts.reduce(0) { $0 + $1.bounds.width } + gap * CGFloat(parts.count - 1) + pad * 2
         let root = CALayer()
