@@ -53,6 +53,7 @@ final class WindowManager {
     private var mouseMonitor: Any?
     private var lastHover = Date.distantPast
     private var observers: [NSObjectProtocol] = []
+    private var pruneTimer: Timer?
 
     init(settings: Settings) {
         self.settings = settings
@@ -98,6 +99,7 @@ final class WindowManager {
             if let self, app.activationPolicy == .regular, !self.tracker.isObserving(app.processIdentifier) {
                 self.adopt(app, state: nil)
             }
+            self?.pruneDead()
             self?.syncFocus(app.processIdentifier)
         })
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -107,6 +109,8 @@ final class WindowManager {
         observers.append(ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.scheduleDisplaysChanged()
         })
+        // Catches windows that vanish without any notification (see pruneDead).
+        pruneTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.pruneDead() }
         layoutAll(animated: false)
         if setupChanged { applySetup() }
         if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier { syncFocus(pid, force: true) }
@@ -361,6 +365,17 @@ final class WindowManager {
         for w in windows.values where w.pid == pid { remove(w.id) }
     }
 
+    /// Drops windows macOS no longer has. Some apps (Find My) quit as their last window closes
+    /// without a destroyed element paw can match or a terminate notification reaching it.
+    private func pruneDead() {
+        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return }
+        let alive = Set(list.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value })
+        let dead = windows.keys.filter { !alive.contains($0) }
+        guard !dead.isEmpty else { return }
+        Log.app.info("pruning \(dead.count) closed windows")
+        for id in dead { remove(id) }
+    }
+
     private func window(for el: AXUIElement) -> Window? {
         if let id = el.windowID, let w = windows[id] { return w }
         return windows.values.first { CFEqual($0.element, el) }
@@ -373,7 +388,7 @@ final class WindowManager {
         case .created(let el, let pid):
             windowCreated(el, pid: pid, retries: 3)
         case .destroyed(let el):
-            if let w = window(for: el) { remove(w.id) }
+            if let w = window(for: el) { remove(w.id) } else { pruneDead() }
         case .minimized(let el):
             if let w = window(for: el) { remove(w.id) }
         case .deminimized(let el):
