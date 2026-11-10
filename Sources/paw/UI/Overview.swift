@@ -627,7 +627,7 @@ final class OverviewView: NSView {
             return f
         }()
         let l = currentLayout()
-        f.frame = CGRect(x: l.search.minX + 34, y: l.search.minY + (l.search.height - 20) / 2, width: l.search.width - 48, height: 20)
+        f.frame = CGRect(x: l.search.minX + 40, y: l.search.minY + (l.search.height - 20) / 2, width: l.search.width - 54, height: 20)
         f.font = style.font
         f.textColor = style.colors.fg.ns
         f.placeholderAttributedString = NSAttributedString(string: "Type to find a window",
@@ -752,7 +752,14 @@ final class OverviewView: NSView {
         (controller.query.isEmpty ? c.border : c.accent.withAlpha(0.7)).ns.setStroke()
         path.lineWidth = 1
         path.stroke()
-        draw("⌕", in: CGRect(x: r.minX + 14, y: r.minY, width: 18, height: r.height), font: style.bold, color: c.muted, centerY: true)
+        // The magnifying glass, as large as the text.
+        let glass = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search")?
+            .withSymbolConfiguration(.init(pointSize: 15, weight: .semibold).applying(.init(paletteColors: [c.muted.ns])))
+        if let glass {
+            let g = glass.size
+            glass.draw(in: CGRect(x: r.minX + 14, y: r.midY - g.height / 2, width: g.width, height: g.height),
+                       from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        }
         hits.append((r, .search))
     }
 
