@@ -26,6 +26,7 @@ First public beta.
 - `indicator.enabled` to turn the stack indicators off
 - Windows of an unplugged display go to their preset workspace, or wait on a side workspace
   (`+N` in the bar) until you sort them
+- Move a whole workspace to another display, or its contents along the workspaces
 - Homebrew cask: `brew install --cask pseudobun/tap/paw`
 - Updates through Sparkle: a daily check that offers new versions (`updates.check`), silent
   installs if you want them (`updates.automatic`), "Check for Updates…" in the menu bar and
