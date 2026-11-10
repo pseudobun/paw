@@ -377,7 +377,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | Section | Keys |
 |---|---|
 | `layout` | `default` (`stack`; also `bsp columns master float`), `minTileWidth` (0: off), `minTileHeight` (0), `placeholders` (true: a placeholder for windows that won't shrink to their tile; false: they stick out), `placeholderMinWidth` (160), `placeholderMinHeight` (120), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10), `unassignedWorkspace` ("": windows of apps no preset places stay put; or a workspace) |
-| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends) |
+| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends), `wrapWorkspaces` (false: workspace next/prev stop at the first and last) |
 | `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
 | `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |
 | `modes` | `"name": { "key": "command" }`; while `mode <name>` is on its keys come first. Default: `resize` |
@@ -419,7 +419,7 @@ matches by pattern.
 | `hyper+e`, `alt+r` | balance, rotate |
 | `hyper+r` | resize mode: `←↑→↓`/`hjkl` grow, `shift+` shrink, `e` balance, `esc`/`return` done |
 | `hyper+tab` | overview |
-| `hyper+]`, `hyper+[` (đ, š on a Slovenian keyboard) | move the workspace one place right / left (on to the next display at the end) |
+| `hyper+]`, `hyper+[` (đ, š on a Slovenian keyboard) | move the workspace one place right / left (on to the next display at the end); while hyper is held a strip shows its neighbours, a red bar at either end, and the side workspace locked at the start |
 | `hyper+j`, `hyper+k` | zoom in, out |
 | `hyper+z`, `hyper+y` | undo, redo |
 | `hyper+o`, `hyper+i` | focus back, forward (vim's jump list) |

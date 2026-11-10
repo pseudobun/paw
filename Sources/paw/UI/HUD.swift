@@ -63,3 +63,115 @@ final class WorkspaceHUD {
         panel.orderOut(nil)
     }
 }
+
+/// While a workspace is being moved (`move-workspace next|prev`, hyper+š/đ): the workspaces on
+/// either side of it and where it is now, held on screen as long as hyper is; a bar marks the
+/// start or the end when there is nowhere further to go.
+final class MoveHUD {
+    struct Cell {
+        let label: String
+        let apps: [String]
+    }
+
+    var style = Style(PawConfig.Appearance())
+    private let panel = TitlePanel()
+    private var timer: Timer?
+    private var shownAt = Date.distantPast
+
+    /// `area` in AX coordinates.
+    /// `side`: the side workspace, shown dimmed behind the wall at the start (it stays first).
+    func show(prev: Cell?, current: Cell, next: Cell?, side: Cell? = nil, in area: CGRect, icons: AppIconMap, config: PawConfig) {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        let c = style.colors
+        let h: CGFloat = 46, pad: CGFloat = 8, gap: CGFloat = 6
+        var parts: [CALayer] = []
+
+        func cellLayer(_ cell: Cell, active: Bool) -> CALayer {
+            var segs: [Island.Segment] = [.init(text: style.text(cell.label, active ? c.accent : c.muted, font: style.bold),
+                                                gapAfter: cell.apps.isEmpty ? 0 : 8)]
+            for (i, app) in cell.apps.prefix(5).enumerated() {
+                let color = AppColors.shared.color(for: app, icons: config.icons) ?? c.fg
+                segs.append(.init(text: style.appGlyph(icons.glyph(for: app), app: app, color: active ? color : color.withAlpha(0.55)),
+                                  gapAfter: i == min(4, cell.apps.count - 1) ? 0 : 6))
+            }
+            if cell.apps.isEmpty, !active { segs[0] = .init(text: style.text(cell.label, c.dim, font: style.bold)) }
+            let l = Island.make(segs, style: style, scale: scale)
+            l.backgroundColor = (active ? c.islandHi : c.island.withAlpha(0)).cg
+            l.borderColor = (active ? c.accent : c.border).cg
+            l.borderWidth = active ? 1.5 : 0
+            l.shadowOpacity = 0
+            l.cornerRadius = l.bounds.height / 2
+            return l
+        }
+        func text(_ s: String, _ color: ARGB) -> CALayer {
+            let t = TextLayer()
+            t.contentsScale = scale
+            t.centered = true
+            t.text = style.text(s, color, font: style.bold)
+            t.bounds = CGRect(x: 0, y: 0, width: 14, height: 28)
+            return t
+        }
+        /// The edge: nothing further that way.
+        func wall() -> CALayer {
+            let w = CALayer()
+            w.bounds = CGRect(x: 0, y: 0, width: 3, height: 26)
+            w.cornerRadius = 1.5
+            w.backgroundColor = c.bad.withAlpha(0.8).cg
+            return w
+        }
+
+        if prev == nil, let side {
+            let s = cellLayer(side, active: false)
+            s.opacity = 0.45
+            parts.append(s)
+        }
+        parts.append(prev.map { cellLayer($0, active: false) } ?? wall())
+        parts.append(text("‹", prev == nil ? c.dim : c.muted))
+        parts.append(cellLayer(current, active: true))
+        parts.append(text("›", next == nil ? c.dim : c.muted))
+        parts.append(next.map { cellLayer($0, active: false) } ?? wall())
+
+        let width = parts.reduce(0) { $0 + $1.bounds.width } + gap * CGFloat(parts.count - 1) + pad * 2
+        let root = CALayer()
+        root.contentsScale = scale
+        root.bounds = CGRect(x: 0, y: 0, width: width, height: h)
+        style.decorate(root, radius: h / 2)
+        var x = pad
+        for p in parts {
+            p.frame = CGRect(x: x, y: ((h - p.bounds.height) / 2).rounded(), width: p.bounds.width, height: p.bounds.height)
+            root.addSublayer(p)
+            x += p.bounds.width + gap
+        }
+        let ax = CGRect(x: (area.midX - width / 2).rounded(), y: area.minY + 10, width: width, height: h)
+        panel.show(root, at: ScreenGeometry.cocoa(fromAX: ax, primaryHeight: NSScreen.screens.first?.frame.height ?? 0))
+        panel.alphaValue = 0.95
+        shownAt = Date()
+        watchHyper()
+    }
+
+    /// Stays while hyper is held (⌘⌃⌥⇧ together, or the Caps Lock / F20 key a hyper-key app
+    /// turns into them), then fades.
+    private func watchHyper() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.06, repeats: true) { [weak self] t in
+            guard let self else { t.invalidate(); return }
+            let flags = CGEventSource.flagsState(.combinedSessionState)
+            let hyper = flags.contains([.maskCommand, .maskControl, .maskAlternate, .maskShift])
+            let held = hyper || CGEventSource.keyState(.hidSystemState, key: 0x5A) || CGEventSource.keyState(.hidSystemState, key: 0x39)
+            let age = Date().timeIntervalSince(shownAt)
+            guard !held && age > 0.35 || age > 15 else { return }
+            t.invalidate()
+            hide()
+        }
+    }
+
+    func hide() {
+        timer?.invalidate()
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            if (self?.panel.alphaValue ?? 1) < 0.05 { self?.panel.orderOut(nil) }
+        })
+    }
+}

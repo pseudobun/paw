@@ -263,6 +263,8 @@ enum SettingsCatalog {
                   "Focus the window under the pointer when it moves."),
                 f(\.focus.wrapStacks, "focus.wrapStacks", "Stacks wrap around", .toggle,
                   "focus stack.next/prev go from the last window to the first; off: they stop."),
+                f(\.focus.wrapWorkspaces, "focus.wrapWorkspaces", "Workspaces wrap around", .toggle,
+                  "workspace next/prev go from the last workspace to the first; off: they stop at either end."),
             ]),
         ])
     }
