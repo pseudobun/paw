@@ -180,7 +180,7 @@ public enum ConfigTemplate {
 
           // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.
           // Commands (also `paw <command>`; chain with ";"):
-          //   focus west|east|north|south|stack.next|stack.prev   swap|warp|stack <dir>   unstack [all]
+          //   focus west|east|north|south|stack.next|stack.prev   swap|warp|stack <dir>   swap stack.next|stack.prev   unstack [all]
           //   layout bsp|stack|float   toggle float|zoom|split   balance   rotate 90|180|270
           //   resize <dir> <points>   grid rows:cols:x:y:w:h   workspace <n>|next|prev|last|new|close
           //   move-to <n>|next|prev [--follow]   display <dir>|next|n   move-to-display <dir> [--follow]

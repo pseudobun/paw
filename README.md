@@ -15,7 +15,7 @@ app: no yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift + AppKit.
   (`layout.barTop`)
 - **Stacks**: any tile can hold several windows. `stack <dir>` puts the focused window on the
   stack that way (merging stacks), `unstack` takes it out into its own tile, `unstack all` splits
-  the whole stack; `focus stack.next|prev` goes through it
+  the whole stack; `focus stack.next|prev` goes through it, `swap stack.next|prev` reorders it
 - **Moving**: `focus`, `swap`, `warp` in four directions (at the screen edge they go to the next
   display), `resize`, `balance`, `rotate`, `toggle float|zoom|split`, `grid`; dragging a tiled
   window onto another tile swaps them
@@ -216,6 +216,7 @@ Bindings and the CLI take the same commands; chain several with `;`
 | `focus west\|east\|north\|south` | Focus the tile that way (next display at the edge) |
 | `focus stack.next\|stack.prev\|stack.first\|stack.last` | Through the focused stack |
 | `swap <dir>` | Swap places with the window that way (to the next display at the edge) |
+| `swap stack.next\|stack.prev` | Move the window down / up its stack |
 | `warp <dir>` | Move into that tile's place, splitting it |
 | `stack <dir>` | Put the window on the stack that way |
 | `unstack [all]` | Take the window (every window) out of its stack |

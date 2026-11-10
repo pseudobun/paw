@@ -844,6 +844,10 @@ final class WindowManager {
         case .swap(let d):
             guard let id = fid else { return }
             if ws.swap(id, d, area: area) { relayout(); focusWindow(id, warp: true) } else { execute(.moveToDisplay(.dir(d), follow: true)) }
+        case .swapStack(let by):
+            guard let id = fid, ws.moveInStack(id, by: by) else { return }
+            relayout()
+            focusWindow(id, warp: false)
         case .warp(let d):
             guard let id = fid else { return }
             if ws.warp(id, d, area: area) { relayout(); focusWindow(id, warp: true) }

@@ -325,6 +325,15 @@ public final class Workspace {
         return t.windows[t.active]
     }
 
+    /// Moves `w` one place through its stack, keeping it the visible window; false at either end.
+    @discardableResult
+    public func moveInStack(_ w: WindowID, by offset: Int) -> Bool {
+        guard let t = tile(of: w), let i = t.windows.firstIndex(of: w), t.windows.indices.contains(i + offset) else { return false }
+        t.windows.swapAt(i, i + offset)
+        t.active = i + offset
+        return true
+    }
+
     /// Makes `w` the visible window of its stack.
     public func activate(_ w: WindowID) {
         guard let t = tile(of: w), let i = t.windows.firstIndex(of: w) else { return }

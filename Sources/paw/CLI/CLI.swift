@@ -42,6 +42,7 @@ enum CLI {
         Window commands (the same as in config bindings; chain with ";"):
           focus west|east|north|south|stack.next|stack.prev|stack.first|stack.last
           swap <dir>          swap with the window that way (another display when there is none)
+          swap stack.next|stack.prev   move the window down / up its stack
           warp <dir>          move the window into that tile's place, splitting it
           stack <dir>         put the window on the stack that way
           unstack [all]       take the window (or every window) out of its stack

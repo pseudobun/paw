@@ -115,6 +115,17 @@ struct TreeTests {
         #expect(ws.tiles[0].activeWindow == 2)
     }
 
+    @Test func moveInStackReordersAndKeepsTheWindowOnTop() {
+        let ws = Workspace(name: "s", layout: .stack)
+        for id: WindowID in [1, 2, 3] { ws.insert(id, area: area) }
+        #expect(ws.moveInStack(1, by: 1))
+        #expect(ws.tiles[0].windows == [2, 1, 3] && ws.tiles[0].activeWindow == 1)
+        #expect(ws.moveInStack(1, by: -1))
+        #expect(ws.tiles[0].windows == [1, 2, 3])
+        #expect(!ws.moveInStack(1, by: -1))
+        #expect(!ws.moveInStack(3, by: 1))
+    }
+
     @Test func warpMovesToThatSide() {
         let ws = bsp([1, 2, 3]) // 1 | (2 / 3)
         #expect(ws.warp(1, .east, area: area))
@@ -202,6 +213,9 @@ struct CommandTests {
     @Test func parsesEverything() throws {
         #expect(try Command.parse("focus left") == .focus(.dir(.west)))
         #expect(try Command.parse("focus stack.next") == .focus(.stackNext))
+        #expect(try Command.parse("swap stack.next") == .swapStack(1))
+        #expect(try Command.parse("swap prev") == .swapStack(-1))
+        #expect(try Command.parse("swap up") == .swap(.north))
         #expect(try Command.parse("swap east") == .swap(.east))
         #expect(try Command.parse("stack north") == .stack(.north))
         #expect(try Command.parse("unstack all") == .unstack(all: true))

@@ -12,6 +12,8 @@ public enum Command: Equatable, Sendable {
 
     case focus(FocusTarget)
     case swap(Direction)
+    /// Moves the focused window one place through its stack (negative: towards the top).
+    case swapStack(Int)
     case warp(Direction)
     case stack(Direction)
     case unstack(all: Bool)
@@ -84,7 +86,12 @@ public enum Command: Equatable, Sendable {
             case "stack.last": return .focus(.stackLast)
             default: return .focus(.dir(try dir(0)))
             }
-        case "swap": return .swap(try dir(0))
+        case "swap":
+            switch try arg(0).lowercased() {
+            case "stack.next", "next": return .swapStack(1)
+            case "stack.prev", "prev": return .swapStack(-1)
+            default: return .swap(try dir(0))
+            }
         case "warp": return .warp(try dir(0))
         case "stack": return .stack(try dir(0))
         case "unstack": return .unstack(all: args.first == "all")
