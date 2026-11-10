@@ -6,6 +6,24 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.6</title>
+      <pubDate>Tue, 10 Nov 2026 21:25:11 +0000</pubDate>
+      <sparkle:version>79</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
+<ul>
+<li><b>updates:</b> update silently in the background (<a href="https://github.com/pseudobun/paw/issues/32">#32</a>) (<a href="https://github.com/pseudobun/paw/commit/9a4a577fde31e23fec13c5548a889f3804749430">9a4a577</a>)</li>
+</ul>
+<h3>Bug Fixes</h3>
+<ul>
+<li>address the 2026-11-10 security audit (<a href="https://github.com/pseudobun/paw/issues/27">#27</a>) (<a href="https://github.com/pseudobun/paw/commit/c00f134ba1104dd955150940ff2ff2f18fc34d11">c00f134</a>)</li>
+<li>focus placeholders when following the mouse (<a href="https://github.com/pseudobun/paw/issues/30">#30</a>) (<a href="https://github.com/pseudobun/paw/commit/d24c8ced383c8094184965378db97cd611b9e645">d24c8ce</a>)</li>
+<li>raise restored placeholders after toggling full screen (<a href="https://github.com/pseudobun/paw/issues/31">#31</a>) (<a href="https://github.com/pseudobun/paw/commit/e0438911d82b730d3b8f274efbb20ac0af7418bf">e043891</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.6">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.6/paw-0.1.0-beta.6-macos.zip" type="application/octet-stream" sparkle:edSignature="6N/cCXoR/MND1z+wnl7sW9MZ/XBqGILLTlehzythoRItvvfoyxY0m+Qab4o6NGpgTj0KzcoLWhWnvkoh66iyAw==" length="3243962"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.5</title>
       <pubDate>Tue, 10 Nov 2026 19:32:52 +0000</pubDate>
       <sparkle:version>73</sparkle:version>
