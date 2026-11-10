@@ -32,7 +32,8 @@ enum StackRenderer {
                 // The app's colour, full on the window on top, faded on the ones behind it.
                 color = brand.withAlpha(item.isActive ? 1 : (focused ? 0.55 : 0.35))
             } else {
-                color = item.hasFocus ? c.accent : item.isActive ? c.fg : (focused ? c.muted : c.dim)
+                // No colour of its own (a white or grey icon): white, like the icon, not gold.
+                color = item.hasFocus || item.isActive ? c.fg : (focused ? c.muted : c.dim)
             }
             if icons.mapped(item.app) == nil,
                let image = AppColors.shared.image(for: item.app, side: Int((style.a.appIconSize * 1.3 * scale).rounded())) {
@@ -60,8 +61,8 @@ enum StackRenderer {
     /// The hover island: icon, app and window title.
     static func titleLayer(_ item: Stack.Item, style: Style, icons: AppIconMap, scale: CGFloat) -> CALayer {
         let c = style.colors
-        var segs: [Island.Segment] = [.init(text: style.appGlyph(icons.glyph(for: item.app), app: item.app,
-                                                                 color: item.hasFocus ? c.accent : c.fg), gapAfter: 6)]
+        let color = AppColors.shared.color(for: item.app, icons: PawConfig.Icons()) ?? c.fg
+        var segs: [Island.Segment] = [.init(text: style.appGlyph(icons.glyph(for: item.app), app: item.app, color: color), gapAfter: 6)]
         segs.append(.init(text: style.text(item.app, c.fg, font: style.bold), gapAfter: 8))
         let title = item.title.count > 70 ? String(item.title.prefix(69)) + "…" : item.title
         if !title.isEmpty, title != item.app { segs.append(.init(text: style.text(title, c.muted))) }

@@ -2,7 +2,7 @@ import Foundation
 
 /// What a binding or `paw <command>` does. Several commands chain with ";".
 public enum Command: Equatable, Sendable {
-    public enum FocusTarget: Equatable, Sendable { case dir(Direction), stackNext, stackPrev, stackFirst, stackLast }
+    public enum FocusTarget: Equatable, Sendable { case dir(Direction), stackNext, stackPrev, stackFirst, stackLast, back, forward }
     public enum WorkspaceTarget: Equatable, Sendable { case name(String), next, prev, last }
     public enum DisplayTarget: Equatable, Sendable { case dir(Direction), next, prev, index(Int) }
     public enum Toggle: String, Sendable { case float, zoom, split }
@@ -36,6 +36,16 @@ public enum Command: Equatable, Sendable {
     /// Turns a mode on (again: off); nil turns any mode off.
     case mode(String?)
     case exec(String)
+    /// Undo / redo the last layout change of the focused workspace.
+    case undo
+    case redo
+    /// Focus the window that best matches (app or title).
+    case find(String)
+    /// The overview of every workspace and window (again: close it).
+    case overview
+    /// Through the tree: in (true) shows the branch holding the focused window, one level
+    /// deeper each time; out goes back up.
+    case zoom(in: Bool)
     case retile
     case recover
     case reload
@@ -47,6 +57,11 @@ public enum Command: Equatable, Sendable {
     public static func parse(_ text: String) throws -> Command {
         let raw = text.trimmingCharacters(in: .whitespaces)
         if raw.hasPrefix("exec ") { return .exec(String(raw.dropFirst(5)).trimmingCharacters(in: .whitespaces)) }
+        if raw.hasPrefix("find ") {
+            let q = String(raw.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            guard !q.isEmpty else { throw ConfigProblem("“\(raw)”: find <app or title>") }
+            return .find(q)
+        }
         var words = raw.split(separator: " ").map(String.init)
         let follow = words.contains("--follow")
         words.removeAll { $0 == "--follow" }
@@ -84,6 +99,8 @@ public enum Command: Equatable, Sendable {
             case "stack.prev", "prev": return .focus(.stackPrev)
             case "stack.first": return .focus(.stackFirst)
             case "stack.last": return .focus(.stackLast)
+            case "back", "previous": return .focus(.back)
+            case "forward": return .focus(.forward)
             default: return .focus(.dir(try dir(0)))
             }
         case "swap":
@@ -97,7 +114,7 @@ public enum Command: Equatable, Sendable {
         case "unstack": return .unstack(all: args.first == "all")
         case "layout":
             let s = try arg(0).lowercased()
-            guard let k = LayoutKind(rawValue: s) else { throw ConfigProblem("“\(raw)”: layout is bsp, stack or float") }
+            guard let k = LayoutKind(rawValue: s) else { throw ConfigProblem("“\(raw)”: layout is bsp, columns, master, stack or float") }
             return .layout(k)
         case "toggle":
             let s = try arg(0).lowercased()
@@ -132,6 +149,15 @@ public enum Command: Equatable, Sendable {
         case "mode":
             let name = try arg(0)
             return ["exit", "off", "default", "none"].contains(name.lowercased()) ? .mode(nil) : .mode(name)
+        case "undo": return .undo
+        case "redo": return .redo
+        case "overview", "expose": return .overview
+        case "zoom":
+            switch try arg(0).lowercased() {
+            case "in": return .zoom(in: true)
+            case "out": return .zoom(in: false)
+            default: throw ConfigProblem("“\(raw)”: zoom in or zoom out")
+            }
         case "retile": return .retile
         case "recover": return .recover
         case "reload": return .reload

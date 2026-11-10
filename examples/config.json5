@@ -3,7 +3,7 @@
 // The settings window (paw settings, or the menu bar icon) writes this file too.
 {
   layout: {
-    // New workspaces: "bsp", "stack" or "float"
+    // New workspaces: "bsp", "columns", "master", "stack" or "float"
     default: "stack",
     gap: 10,
     padding: { top: 2, bottom: 2, left: 24, right: 24 },
@@ -15,6 +15,11 @@
     // Where initiate and setup switches put windows of apps no preset or rule places:
 // a workspace ("4"), or "" to leave them on the workspace they're on
     unassignedWorkspace: "",
+    // bsp: tiles never get smaller than this; when more windows don't fit, the tree grows past
+    // the screen and the screen follows focus (like TrellisWM's canvas). 0: off, tiles shrink
+    // freely and only windows whose app refuses the size get a placeholder
+    minTileWidth: 0,
+    minTileHeight: 0,
   },
 
   focus: {
@@ -44,6 +49,7 @@
     //   tiles: [
     //     { apps: ["Discord", "Spotify"], size: 1 },   // one stack, first app on top
     //     { apps: ["Ghostty", "/^Alacritty$/"], size: 1 },
+    //     { apps: ["Ghostty"], title: "paw", launch: "open -na Ghostty --args --working-directory=~/repos/paw" },
     //   ],
     //   display: "builtin",           // pin: "builtin", "external", "main", "secondary", 1, 2… or a name ("DELL")
     // },
@@ -67,7 +73,8 @@
   // app: name or /regex/; title / unlessTitle: substring or /regex/
   // manage: false leaves windows alone, float: true floats them, workspace: where they open
   rules: [
-    { app: "/^(System Settings|System Information|Calculator|Archive Utility|Raycast|Alfred|CleanShot X|1Password)$/", float: true },
+    { app: "/^(System Settings|System Information|Calculator|Archive Utility|Raycast|Alfred|1Password)$/", float: true },
+    { app: "/^(CleanShot X|Screen Studio|Shottr|Loom|OBS|Kap|Xnapper)$/", manage: false },
     { app: "Google Chrome", unlessTitle: "Google Chrome", float: true },
     { app: "Brave Browser", unlessTitle: "Brave", float: true },
     { app: "Zen", unlessTitle: "Zen", float: true },
@@ -133,8 +140,49 @@
     windowFocused: "",
     windowsChanged: "",
     modeChanged: "",
-    // sketchybar can keep a bar for an unplugged display; see examples/sketchybar/displays_changed.sh
     displaysChanged: "",
+  },
+
+  mouse: {
+    // Drop a dragged tile on a tile's edge to split it there, on the gap between tiles to make
+    // room there, at the screen's edge to dock beside everything, in a tile's middle to swap
+    // (holding stackModifier: to stack). A preview shows where it lands.
+    dropZones: true,
+    stackModifier: "alt", // alt, cmd, ctrl or shift
+    // Drag the gap between two tiles to resize both; double-click it to even them out
+    seamHandles: true,
+    // Hold a mouse button (middle, back, forward), drag left/right/up/down (or "click"), release
+    gestures: [
+      { button: "middle", direction: "left", command: "workspace prev" },
+      { button: "middle", direction: "right", command: "workspace next" },
+      { button: "middle", direction: "up", command: "overview" },
+    ],
+    // No gestures while one of these is in front (they pan or orbit with the middle button)
+    gestureIgnoreApps: ["/CAD/", "/Fusion/", "/Slicer$/", "/Bambu ?Studio/", "Blender", "FreeCAD", "SketchUp", "Shapr3D", "/KiCad/", "Figma", "Affinity Designer", "/Unity|Unreal/", "Godot", "Minecraft"],
+    // Hold it and scroll or pinch over a window to zoom through the tree towards it ("off": never)
+    zoomModifier: "alt",
+  },
+
+  // overview (hyper+tab): every workspace and its windows. Arrows move, Return goes there,
+  // typing filters, drag a window onto a workspace or next to another window, Esc closes.
+  overview: {
+    // Window pictures: "auto" (if Screen Recording is already allowed), "on" (asks), "off" (icons)
+    thumbnails: "auto",
+  },
+
+  // The island that flashes the workspace's number and apps when you switch
+  hud: {
+    workspace: true,
+    durationMs: 600,
+  },
+
+  // A line around the focused window (or a placeholder that has focus)
+  border: {
+    enabled: false,
+    color: "0xccead186", // 0xAARRGGBB or "#RRGGBB"
+    width: 2,
+    radius: 12,
+    offset: 2,
   },
 
   // `paw initiate` (also `paw reset`): opens the apps, waits for their windows, then arranges
@@ -149,14 +197,17 @@
 
   // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.
   // Commands (also `paw <command>`; chain with ";"):
-  //   focus west|east|north|south|stack.next|stack.prev   swap|warp|stack <dir>   unstack [all]
-  //   layout bsp|stack|float   toggle float|zoom|split   balance   rotate 90|180|270
+  //   focus west|east|north|south|stack.next|stack.prev   swap|warp|stack <dir>   swap stack.next|stack.prev   unstack [all]
+  //   layout bsp|columns|master|stack|float   toggle float|zoom|split   balance   rotate 90|180|270
+  //   undo   redo   focus back|forward   find <app or title>   overview   zoom in|out
   //   resize <dir> <points>   grid rows:cols:x:y:w:h   workspace <n>|next|prev|last|new|close
   //   move-to <n>|next|prev [--follow]   display <dir>|next|n   move-to-display <dir> [--follow]
   //   arrange [workspace|all]   initiate   mode <name>|exit   retile   recover   reload   exec <shell command>
   // Setting bindings replaces this whole list.
   bindings: {
+    "hyper+o": "focus back",
     "ctrl+right": "focus east",
+    "hyper+i": "focus forward",
     "ctrl+up": "focus north",
     "ctrl+down": "focus south",
     "hyper+right": "focus stack.next",
@@ -248,7 +299,12 @@
     "cmd+ralt+0": "move-to 10 --follow",
     "ralt+shift+0": "move-to 10",
     "hyper+r": "mode resize",
+    "hyper+z": "undo",
+    "hyper+y": "redo",
+    "hyper+tab": "overview",
     "cmd+alt+r": "recover",
+    "hyper+j": "zoom in",
+    "hyper+k": "zoom out",
   },
 
   // While a mode is on (`mode resize`, hyper+r), its keys come before the bindings above and an

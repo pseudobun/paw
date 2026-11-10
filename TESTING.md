@@ -24,7 +24,19 @@
 - [ ] `shift+alt+wasd` / `shift+ctrl+wasd` resize; `hyper+e` balance; `alt+r` rotate
 - [ ] `hyper+r` → RESIZE island at the top; arrows/hjkl grow, shift shrinks, `esc` leaves (island goes)
 - [ ] `ctrl+alt+return` zoom; `ctrl+alt+space` float (centred, 2/3); `ctrl+alt+c` float in the middle cell; `ctrl+shift+return` floats full size
-- [ ] Drag a tiled window onto another tile and let go → they swap; drop elsewhere → snaps back
+- [ ] Drag a tiled window: an accent preview follows the pointer. Middle of a tile → swap; with ⌥ → stack; outer edge of a tile → splits it on that side; on the gap between tiles → a new tile there, siblings equal; past the screen's edge → docks beside everything; on its own tile → snaps back
+- [ ] Drag a tiled window onto another display → it joins that display's workspace where you dropped it
+- [ ] Hover the gap between two tiles → a line fades in, cursor ↔/↕; drag it → both sides resize live, the next tile gives way once one is small; double-click → even
+- [ ] Drag a tiled window's edge with the mouse → the tile resizes (neighbours follow) instead of snapping back
+- [ ] bsp (`hyper+w`): open windows until they'd get smaller than 640×400 → the screen shows only the branch around the focused one; `ctrl+arrows` past the edge pans to the next ones; the overview shows the whole canvas with the on-screen part outlined
+- [ ] Squeeze a window whose app has a minimum size (System Settings-like apps, Codex, T3) → after a moment it leaves, a placeholder (icon, title, "needs more room") takes its tile; click it → gold outline, `ctrl+alt+arrows` swaps it; in a bigger tile the window shows again; drag it like a window; double-click → zooms in until it fits; `paw retile` forgets the learned sizes
+- [ ] `hyper+j` on `A | (B / C)` with B focused → B and C fill the workspace, A hides; again → B alone; `hyper+k` twice → all back; HUD shows the level; switching workspace drops the zoom
+- [ ] ⌥-scroll up / ⌥-pinch out over a window zooms in towards it, animated; down / pinch in zooms out
+- [ ] Overview: drag across empty stage (or ⇧-drag over windows) → those windows' branch fills the screen
+- [ ] `ctrl+arrows` past the edge onto a display with an empty workspace → pointer and HUD go there
+- [ ] Resizing (keys, seam, window edge) stops where a neighbour reaches its minimum; shrinking back zooms back out by itself
+- [ ] `hyper+z` undoes the last swap/warp/resize/drop on the workspace, `hyper+y` redoes
+- [ ] `hyper+w/s/f` again; `paw layout columns` → equal columns, new windows add a column; `paw layout master` → 62% left, the rest in rows
 - [ ] Animations: smooth? Try `animation.curve: "spring"`, `durationMs: 250`, `resize: "animate"`, `enabled: false`
 
 ## Workspaces
@@ -35,14 +47,38 @@
 - [ ] ⌘Tab to an app whose window is on another workspace → paw switches there
 - [ ] Two displays: each shows its own workspace; `workspace N` for one shown on the other display just focuses it
 - [ ] Close a window → focus stays on the same workspace (doesn't jump to another window of that app elsewhere)
-- [ ] Minimise / ⌘H an app → its tile closes; restore → it comes back
+- [ ] Minimise / ⌘H an app → its tile closes; restore → it comes back to the same tile and size
+- [ ] Quit an app whose windows were tiled, open it again → same tiles
+- [ ] `just install` (paw restarts) → every workspace keeps its tiles, sizes and stacks
+- [ ] Switching workspaces flashes the HUD (number + app icons); `hud.workspace: false` turns it off
+- [ ] `hyper+o` / `hyper+i` go back and forward through focused windows, switching workspaces; `paw find zed` goes to Zed
 - [ ] `paw quit` → every window back on screen; start again → windows return to their workspaces
+
+## Overview
+
+- [ ] `border.enabled: true` (Settings → Look → Focus border) → a line around the focused window; follows focus, swaps, stacks, floating windows; around a focused placeholder too; colour/width change live
+
+- [ ] `hyper+tab` → every display dims; rail of workspace cards, the current one large; `hyper+tab`/`esc` closes
+- [ ] Arrows move the gold outline; past the left/right edge → previous/next workspace; `tab`, `1`–`9`
+- [ ] Type "saf" → Safari selected (maybe on another workspace), others dimmed, cards show match counts; `esc` clears, `esc` closes
+- [ ] `return` goes there; `shift+return` brings it to the current workspace
+- [ ] Drag a window onto a card → it moves there (overview stays open); onto the stage → drop zones with preview
+- [ ] Stack: click one of its icons → that window; double-click a card → that workspace; `+` → new workspace
+- [ ] Screen Recording allowed (`overview.thumbnails: "on"`) → window pictures, hidden workspaces too
+- [ ] Middle-button drag up → overview; left/right → previous/next workspace; plain middle click still pastes / opens a link in a new tab
+
+## Events
+
+- [ ] `paw subscribe` → a `snapshot` line, then lines as you switch, focus, open/close windows, resize; `seq` counts up
+- [ ] `paw subscribe --reconnect` keeps going across `paw quit` / `open -a paw`
+- [ ] sketchybar spaces update through the bridge (`pgrep -fl "paw subscribe"`), hooks for them empty
 
 ## Presets and rules
 
 - [ ] Add a `workspaces` preset (README example), then `paw arrange 1` → apps in the right tiles and sizes
 - [ ] Quit the preset apps, `paw initiate` → they open and land on their workspaces, `initiate.focus` is shown
 - [ ] Quit and reopen an app from a preset → it lands in its tile
+- [ ] A tile with `title` gets only matching windows; `launch` runs from `initiate` when none is open
 - [ ] System Settings, Raycast, CleanShot float; a Brave extension popup floats, the main Brave window tiles
 - [ ] `rules: [{ app: "Slack", workspace: "9" }]` → new Slack window opens on 9 without stealing focus
 

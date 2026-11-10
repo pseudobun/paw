@@ -17,6 +17,7 @@ enum CLI {
         "icon": icon,
         "color": color,
         "setups": setups,
+        "subscribe": subscribe,
         "preview": Preview.run,
     ]
 
@@ -46,7 +47,7 @@ enum CLI {
           warp <dir>          move the window into that tile's place, splitting it
           stack <dir>         put the window on the stack that way
           unstack [all]       take the window (or every window) out of its stack
-          layout bsp|stack|float      toggle float|zoom|split      balance      rotate 90|180|270
+          layout bsp|columns|master|stack|float      toggle float|zoom|split      balance      rotate 90|180|270
           resize <dir> <points>       grid rows:cols:x:y:w:h
           workspace <n>|next|prev|last|new|close      move-to <n>|next|prev [--follow]
           display <dir>|next|prev|<n>                 move-to-display <dir>|<n> [--follow]
@@ -55,11 +56,21 @@ enum CLI {
           initiate [setup]    open the preset apps and arrange every workspace (also: reset);
                               with a setup name, use that setup whatever displays are connected
           setups [--json]     the setups in the config, * marks the one for the connected displays
+          undo | redo         the focused workspace's last layout change
+          focus back|forward  windows focused before, across workspaces
+          find <text>         go to the window whose app or title matches best
+          overview            every workspace and window (again: close)
           retile | recover | reload | exec <shell command>
 
         paw itself:
           status              version, windows, workspaces per display, binding problems
           query [--json]      workspaces and their windows (for sketchybar)
+          subscribe [events…] [--reconnect] [--exec <command>]
+                              events as JSON lines, a snapshot first; events: workspaceChanged
+                              windowFocused windowsChanged layoutChanged modeChanged displaysChanged
+                              setupChanged configReloaded (default: all). --reconnect waits for paw
+                              and starts over when it restarts; --exec runs a command per event
+                              ($PAW_EVENT, $PAW_SEQ, $PAW_DATA) instead of printing it
           hide | show         hide / show the stack indicators
           reload              reload ~/.config/paw/config.json5 and print problems
           config path | check | show | template | format
@@ -115,6 +126,68 @@ enum CLI {
             if let v = r[k] as? String, !v.isEmpty { print("\(k): \(v)") }
         }
         return 0
+    }
+
+    static func subscribe(_ args: [String]) -> Int32 {
+        var args = args
+        var exec: String?
+        if let i = args.firstIndex(of: "--exec") {
+            guard args.indices.contains(i + 1) else { fputs("paw: --exec <command>\n", stderr); return 64 }
+            exec = args[i + 1]
+            args.removeSubrange(i...(i + 1))
+        }
+        let reconnect = args.contains("--reconnect")
+        let events = args.filter { !$0.hasPrefix("--") }.flatMap { $0.split(separator: ",").map(String.init) }
+        if let bad = events.first(where: { !EventBus.names.contains($0) }) {
+            fputs("paw: unknown event \(bad); events: \(EventBus.names.dropFirst().joined(separator: " "))\n", stderr)
+            return 64
+        }
+        let request = (["subscribe"] + (events.isEmpty ? [] : [events.joined(separator: ",")])).joined(separator: " ")
+        signal(SIGPIPE, SIG_IGN)
+        var warned = false
+        while true {
+            let end = IPC.stream(request) { line in
+                if let exec {
+                    run(exec, event: line)
+                    return
+                }
+                print(line)
+                // The reader went away (`paw subscribe | head`): stop.
+                if fflush(stdout) != 0 || ferror(stdout) != 0 { exit(0) }
+            }
+            guard reconnect else {
+                switch end {
+                case .notRunning: fputs("paw is not running (open -a paw)\n", stderr)
+                case .failed(let why): fputs("paw: \(why)\n", stderr)
+                }
+                return 1
+            }
+            if !warned { fputs("paw: waiting for paw…\n", stderr); warned = true }
+            Thread.sleep(forTimeInterval: 1)
+        }
+    }
+
+    /// `--exec`: the command once per event, one after another, with $PAW_EVENT, $PAW_SEQ and
+    /// $PAW_DATA (the event's data as JSON).
+    private static func run(_ command: String, event line: String) {
+        guard let obj = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any] else { return }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", command]
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + (env["PATH"] ?? "/usr/bin:/bin")
+        env["PAW_EVENT"] = obj["event"] as? String ?? ""
+        env["PAW_SEQ"] = "\(obj["seq"] ?? 0)"
+        if let data = obj["data"], let json = try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys]) {
+            env["PAW_DATA"] = String(decoding: json, as: UTF8.self)
+        }
+        p.environment = env
+        do {
+            try p.run()
+            p.waitUntilExit()
+        } catch {
+            fputs("paw: \(error.localizedDescription)\n", stderr)
+        }
     }
 
     // MARK: - Local commands

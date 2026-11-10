@@ -1,10 +1,6 @@
 -- paw workspaces for sketchybar (SbarLua: https://github.com/FelixKratz/SbarLua).
--- require("paw_spaces") from your sketchybar init.lua, and in ~/.config/paw/config.json5:
---
---   hooks: {
---     workspaceChanged: "sketchybar --trigger paw_workspace_change",
---     windowsChanged: "sketchybar --trigger paw_windows_change",
---   },
+-- require("paw_spaces") from your sketchybar init.lua. Events come from one long-lived
+-- `paw subscribe` (a snapshot first, reconnects when paw restarts), so no hooks are needed.
 --
 -- One item per paw workspace: its name plus the apps on it (app names here; with
 -- sketchybar-app-font, swap app_label for that font's icon map). Click switches, right-click
@@ -15,8 +11,16 @@ local colors = { fg = 0xfffbfbf9, dim = 0xff5f5f52, accent = 0xffead186, hi = 0x
 
 local function app_label(app) return app end
 
-sbar.add("event", "paw_workspace_change")
-sbar.add("event", "paw_windows_change")
+sbar.add("event", "paw_snapshot")
+sbar.add("event", "paw_workspaceChanged")
+sbar.add("event", "paw_windowsChanged")
+
+-- The bridge: each paw event becomes `sketchybar --trigger paw_<event>`. "[p]aw" keeps pkill
+-- from matching its own shell; the old bridge goes when sketchybar (re)loads.
+sbar.exec("pkill -f '[p]aw subscribe.*--trigger paw_'", function()
+  sbar.exec("nohup paw subscribe workspaceChanged,windowsChanged --reconnect "
+    .. "--exec 'sketchybar --trigger paw_$PAW_EVENT' >/dev/null 2>&1 &")
+end)
 
 local slots, names = {}, {}
 for i = 1, SLOTS do
@@ -65,5 +69,5 @@ local function refresh()
 end
 
 local watcher = sbar.add("item", "paw.watcher", { drawing = false, updates = true })
-watcher:subscribe({ "paw_workspace_change", "paw_windows_change", "system_woke", "display_change" }, refresh)
+watcher:subscribe({ "paw_snapshot", "paw_workspaceChanged", "paw_windowsChanged", "system_woke", "display_change" }, refresh)
 refresh()

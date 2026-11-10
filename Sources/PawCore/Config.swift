@@ -21,6 +21,14 @@ public struct PawConfig: Codable, Equatable, Sendable {
     public var appearance = Appearance()
     public var icons = Icons()
     public var hooks = Hooks()
+    /// Dragging windows, seams between tiles, mouse-button gestures.
+    public var mouse = Mouse()
+    /// The overview of every workspace (`overview`, hyper+tab).
+    public var overview = Overview()
+    /// The island that flashes when the workspace changes.
+    public var hud = HUD()
+    /// A line around the focused window (or placeholder).
+    public var border = Border()
     /// `paw initiate`: open the preset apps and arrange every workspace.
     public var initiate = Initiate()
     /// Start paw when you log in (only for the installed paw.app).
@@ -39,6 +47,11 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var barBottom = 0.0
         /// How many workspaces exist from the start (1…N); more come with `workspace new`.
         public var workspaces = 10
+        /// bsp: tiles never get smaller than this; when they would, the tree grows past the
+        /// screen and the screen follows focus. 0 (default): tiles shrink freely, and only windows
+        /// whose app won't go that small get a placeholder.
+        public var minTileWidth = 0.0
+        public var minTileHeight = 0.0
         /// Where `initiate` and setup switches put windows of apps no preset or rule places:
         /// a workspace name, or "" to leave them on the workspace they're on.
         public var unassignedWorkspace = ""
@@ -189,6 +202,73 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public init() {}
     }
 
+    public struct Mouse: Codable, Equatable, Sendable {
+        /// Dropping a dragged tiled window: on a tile's edge splits it there, on a seam between
+        /// tiles makes room there, at the workspace's edge docks beside everything, in a tile's
+        /// middle swaps (holding `stackModifier`: stacks). A preview shows where it lands.
+        public var dropZones = true
+        /// Modifier held while dropping to stack instead of swap: "alt", "cmd", "ctrl", "shift".
+        public var stackModifier = "alt"
+        /// Drag the gap between tiles to resize both sides; double-click it to even them out.
+        public var seamHandles = true
+        /// Hold a mouse button, drag in a direction, release: runs the command.
+        public var gestures: [Gesture] = Defaults.gestures
+        /// Apps (name or /regex/) that keep their own middle-button drags (panning in CAD and 3D
+        /// apps): no gestures while one of them is in front.
+        public var gestureIgnoreApps: [String] = Defaults.gestureIgnoreApps
+        /// Hold this and scroll (or pinch) over a window to zoom through the tree towards it:
+        /// "alt", "cmd", "ctrl", "shift", or "off".
+        public var zoomModifier = "alt"
+        public init() {}
+    }
+
+    public struct Gesture: Codable, Equatable, Sendable {
+        /// "middle", "back" or "forward" (buttons 3–5).
+        public var button: String
+        /// "left", "right", "up", "down" (drag), or "click".
+        public var direction: String
+        public var command: String
+        public init(button: String, direction: String, command: String) {
+            self.button = button
+            self.direction = direction
+            self.command = command
+        }
+        /// CGEvent's button number: middle 2, back 3, forward 4.
+        public var buttonNumber: Int? {
+            switch button.lowercased() {
+            case "middle", "3": return 2
+            case "back", "4": return 3
+            case "forward", "5": return 4
+            default: return nil
+            }
+        }
+    }
+
+    public struct Overview: Codable, Equatable, Sendable {
+        /// Window pictures: "auto" (when Screen Recording is already allowed), "on" (asks for
+        /// it), "off" (app icons only).
+        public var thumbnails = "auto"
+        public init() {}
+    }
+
+    public struct Border: Codable, Equatable, Sendable {
+        public var enabled = false
+        public var color = ARGB(0xccea_d186)
+        public var width = 2.0
+        /// Corner radius; macOS 26 windows are about 16.
+        public var radius = 12.0
+        /// How far outside the window the line sits.
+        public var offset = 2.0
+        public init() {}
+    }
+
+    public struct HUD: Codable, Equatable, Sendable {
+        /// Flash the workspace's number and apps when it changes.
+        public var workspace = true
+        public var durationMs = 600.0
+        public init() {}
+    }
+
     public struct Indicator: Codable, Equatable, Sendable {
         /// "auto" (outside, on the side nearer the screen edge, like stackline), "left", "right",
         /// "insideLeft", "insideRight".
@@ -272,22 +352,23 @@ struct Fields<K: CodingKey> {
 
 extension PawConfig {
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case layout, focus, animation, bindings, modes, workspaces, setups, rules, indicator, appearance, icons, hooks, initiate, openAtLogin
+        case layout, focus, animation, bindings, modes, workspaces, setups, rules, indicator, appearance, icons, hooks, mouse, overview, hud, border, initiate, openAtLogin
     }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.layout, &layout); try f(.focus, &focus); try f(.animation, &animation); try f(.bindings, &bindings); try f(.modes, &modes)
         try f(.workspaces, &workspaces); try f(.setups, &setups); try f(.rules, &rules); try f(.indicator, &indicator); try f(.appearance, &appearance)
-        try f(.icons, &icons); try f(.hooks, &hooks); try f(.initiate, &initiate); try f(.openAtLogin, &openAtLogin)
+        try f(.icons, &icons); try f(.hooks, &hooks); try f(.mouse, &mouse); try f(.overview, &overview); try f(.hud, &hud); try f(.border, &border); try f(.initiate, &initiate); try f(.openAtLogin, &openAtLogin)
     }
 }
 
 extension PawConfig.Layout {
-    enum CodingKeys: String, CodingKey, CaseIterable { case `default`, gap, padding, barTop, barBottom, workspaces, unassignedWorkspace }
+    enum CodingKeys: String, CodingKey, CaseIterable { case `default`, gap, padding, barTop, barBottom, workspaces, unassignedWorkspace, minTileWidth, minTileHeight }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.default, &`default`); try f(.gap, &gap); try f(.padding, &padding); try f(.barTop, &barTop)
         try f(.barBottom, &barBottom); try f(.workspaces, &workspaces); try f(.unassignedWorkspace, &unassignedWorkspace)
+        try f(.minTileWidth, &minTileWidth); try f(.minTileHeight, &minTileHeight)
     }
 }
 
@@ -305,6 +386,39 @@ extension PawConfig.Animation {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.enabled, &enabled); try f(.durationMs, &durationMs); try f(.curve, &curve); try f(.resize, &resize)
         try f(.maxWindows, &maxWindows)
+    }
+}
+
+extension PawConfig.Mouse {
+    enum CodingKeys: String, CodingKey, CaseIterable { case dropZones, stackModifier, seamHandles, gestures, gestureIgnoreApps, zoomModifier }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.dropZones, &dropZones); try f(.stackModifier, &stackModifier); try f(.seamHandles, &seamHandles); try f(.gestures, &gestures)
+        try f(.gestureIgnoreApps, &gestureIgnoreApps); try f(.zoomModifier, &zoomModifier)
+    }
+}
+
+extension PawConfig.Overview {
+    enum CodingKeys: String, CodingKey, CaseIterable { case thumbnails }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.thumbnails, &thumbnails)
+    }
+}
+
+extension PawConfig.Border {
+    enum CodingKeys: String, CodingKey, CaseIterable { case enabled, color, width, radius, offset }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.enabled, &enabled); try f(.color, &color); try f(.width, &width); try f(.radius, &radius); try f(.offset, &offset)
+    }
+}
+
+extension PawConfig.HUD {
+    enum CodingKeys: String, CodingKey, CaseIterable { case workspace, durationMs }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.workspace, &workspace); try f(.durationMs, &durationMs)
     }
 }
 
@@ -437,6 +551,10 @@ public enum ConfigLoader {
             "indicator": Set(PawConfig.Indicator.CodingKeys.allCases.map(\.rawValue)),
             "appearance": Set(PawConfig.Appearance.CodingKeys.allCases.map(\.rawValue)),
             "icons": Set(PawConfig.Icons.CodingKeys.allCases.map(\.rawValue)),
+            "mouse": Set(PawConfig.Mouse.CodingKeys.allCases.map(\.rawValue)),
+            "overview": Set(PawConfig.Overview.CodingKeys.allCases.map(\.rawValue)),
+            "hud": Set(PawConfig.HUD.CodingKeys.allCases.map(\.rawValue)),
+            "border": Set(PawConfig.Border.CodingKeys.allCases.map(\.rawValue)),
         ]
         let top = Set(PawConfig.CodingKeys.allCases.map(\.rawValue))
         let colorKeys = Set(PawConfig.Colors.CodingKeys.allCases.map(\.rawValue))
@@ -468,6 +586,14 @@ public enum ConfigLoader {
         }
         if !["hover", "never"].contains(c.indicator.titles) { w.append("indicator.titles: “\(c.indicator.titles)” is not hover or never") }
         if !["start", "animate", "end"].contains(c.animation.resize) { w.append("animation.resize: start, animate or end") }
+        if !["auto", "on", "off"].contains(c.overview.thumbnails) { w.append("overview.thumbnails: auto, on or off") }
+        if !["alt", "cmd", "ctrl", "shift"].contains(c.mouse.stackModifier) { w.append("mouse.stackModifier: alt, cmd, ctrl or shift") }
+        if !["alt", "cmd", "ctrl", "shift", "off"].contains(c.mouse.zoomModifier) { w.append("mouse.zoomModifier: alt, cmd, ctrl, shift or off") }
+        for (i, g) in c.mouse.gestures.enumerated() {
+            if g.buttonNumber == nil { w.append("mouse.gestures[\(i)]: button is middle, back or forward") }
+            if !["left", "right", "up", "down", "click"].contains(g.direction) { w.append("mouse.gestures[\(i)]: direction is left, right, up, down or click") }
+            do { _ = try Command.parseAll(g.command) } catch { w.append("mouse.gestures[\(i)]: \(error)") }
+        }
         return w
     }
 }

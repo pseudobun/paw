@@ -19,7 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.start()
         wm = WindowManager(settings: settings)
         settings.onChange = { [weak self] in self?.apply() }
-        let server = IPC.Server { [weak self] text in self?.command(text) ?? ["error": "paw is shutting down"] }
+        let server = IPC.Server(handler: { [weak self] text in self?.command(text) ?? ["error": "paw is shutting down"] },
+                                subscribe: { [weak self] fd, text in
+            guard let self, let wm = self.wm else { close(fd); return }
+            EventBus.shared.add(fd: fd, request: text, snapshot: wm.snapshotEvent())
+        })
         do {
             try server.start()
             ipc = server
@@ -44,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         ipc?.stop()
+        EventBus.shared.closeAll()
         wm?.restoreAll()
     }
 
@@ -73,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func apply() {
         wm.configChanged()
+        wm.publish("configReloaded", ["error": settings.error ?? "", "warnings": settings.warnings])
         if let e = settings.error { Log.app.error("config: \(e, privacy: .public)") }
         for w in settings.warnings { Log.app.warning("config: \(w, privacy: .public)") }
         updateLoginItem(settings.config.openAtLogin)

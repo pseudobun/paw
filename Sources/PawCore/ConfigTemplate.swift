@@ -14,7 +14,7 @@ public enum ConfigTemplate {
         // The settings window (paw settings, or the menu bar icon) writes this file too.
         {
           layout: {
-            // New workspaces: "bsp", "stack" or "float"
+            // New workspaces: "bsp", "columns", "master", "stack" or "float"
             default: \(str(l.default.rawValue)),
             gap: \(num(l.gap)),
             padding: { top: \(num(l.padding.top)), bottom: \(num(l.padding.bottom)), left: \(num(l.padding.left)), right: \(num(l.padding.right)) },
@@ -26,6 +26,11 @@ public enum ConfigTemplate {
             // Where initiate and setup switches put windows of apps no preset or rule places:
         // a workspace ("4"), or "" to leave them on the workspace they're on
             unassignedWorkspace: \(str(l.unassignedWorkspace)),
+            // bsp: tiles never get smaller than this; when more windows don't fit, the tree grows past
+            // the screen and the screen follows focus (like TrellisWM's canvas). 0: off, tiles shrink
+            // freely and only windows whose app refuses the size get a placeholder
+            minTileWidth: \(num(l.minTileWidth)),
+            minTileHeight: \(num(l.minTileHeight)),
           },
 
           focus: {
@@ -58,6 +63,7 @@ public enum ConfigTemplate {
             //   tiles: [
             //     { apps: ["Discord", "Spotify"], size: 1 },   // one stack, first app on top
             //     { apps: ["Ghostty", "/^Alacritty$/"], size: 1 },
+            //     { apps: ["Ghostty"], title: "paw", launch: "open -na Ghostty --args --working-directory=~/repos/paw" },
             //   ],
             //   display: "builtin",           // pin: "builtin", "external", "main", "secondary", 1, 2… or a name ("DELL")
             // },
@@ -168,6 +174,45 @@ public enum ConfigTemplate {
             displaysChanged: \(str(c.hooks.displaysChanged)),
           },
 
+          mouse: {
+            // Drop a dragged tile on a tile's edge to split it there, on the gap between tiles to make
+            // room there, at the screen's edge to dock beside everything, in a tile's middle to swap
+            // (holding stackModifier: to stack). A preview shows where it lands.
+            dropZones: \(c.mouse.dropZones),
+            stackModifier: \(str(c.mouse.stackModifier)), // alt, cmd, ctrl or shift
+            // Drag the gap between two tiles to resize both; double-click it to even them out
+            seamHandles: \(c.mouse.seamHandles),
+            // Hold a mouse button (middle, back, forward), drag left/right/up/down (or "click"), release
+            gestures: [
+        \(c.mouse.gestures.map { "      { button: \(str($0.button)), direction: \(str($0.direction)), command: \(str($0.command)) },\n" }.joined())    ],
+            // No gestures while one of these is in front (they pan or orbit with the middle button)
+            gestureIgnoreApps: [\(c.mouse.gestureIgnoreApps.map(str).joined(separator: ", "))],
+            // Hold it and scroll or pinch over a window to zoom through the tree towards it ("off": never)
+            zoomModifier: \(str(c.mouse.zoomModifier)),
+          },
+
+          // overview (hyper+tab): every workspace and its windows. Arrows move, Return goes there,
+          // typing filters, drag a window onto a workspace or next to another window, Esc closes.
+          overview: {
+            // Window pictures: "auto" (if Screen Recording is already allowed), "on" (asks), "off" (icons)
+            thumbnails: \(str(c.overview.thumbnails)),
+          },
+
+          // The island that flashes the workspace's number and apps when you switch
+          hud: {
+            workspace: \(c.hud.workspace),
+            durationMs: \(num(c.hud.durationMs)),
+          },
+
+          // A line around the focused window (or a placeholder that has focus)
+          border: {
+            enabled: \(c.border.enabled),
+            color: \(str(c.border.color.description)), // 0xAARRGGBB or "#RRGGBB"
+            width: \(num(c.border.width)),
+            radius: \(num(c.border.radius)),
+            offset: \(num(c.border.offset)),
+          },
+
           // `paw initiate` (also `paw reset`): opens the apps, waits for their windows, then arranges
           // every preset. apps: [] means every plain app name in the presets.
           initiate: {
@@ -181,7 +226,8 @@ public enum ConfigTemplate {
           // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.
           // Commands (also `paw <command>`; chain with ";"):
           //   focus west|east|north|south|stack.next|stack.prev   swap|warp|stack <dir>   swap stack.next|stack.prev   unstack [all]
-          //   layout bsp|stack|float   toggle float|zoom|split   balance   rotate 90|180|270
+          //   layout bsp|columns|master|stack|float   toggle float|zoom|split   balance   rotate 90|180|270
+          //   undo   redo   focus back|forward   find <app or title>   overview   zoom in|out
           //   resize <dir> <points>   grid rows:cols:x:y:w:h   workspace <n>|next|prev|last|new|close
           //   move-to <n>|next|prev [--follow]   display <dir>|next|n   move-to-display <dir> [--follow]
           //   arrange [workspace|all]   initiate   mode <name>|exit   retile   recover   reload   exec <shell command>
@@ -225,7 +271,8 @@ public enum ConfigTemplate {
             if w.axis != .horizontal { parts.append("axis: \(str(w.axis.rawValue))") }
             if !w.tiles.isEmpty {
                 let tiles = w.tiles.map { t in
-                    "{ apps: [\(t.apps.map(str).joined(separator: ", "))]" + (t.size.map { ", size: \(num($0))" } ?? "") + " }"
+                    "{ apps: [\(t.apps.map(str).joined(separator: ", "))]" + (t.size.map { ", size: \(num($0))" } ?? "")
+                        + (t.title.map { ", title: \(str($0))" } ?? "") + (t.launch.map { ", launch: \(str($0))" } ?? "") + " }"
                 }
                 parts.append("tiles: [ \(tiles.joined(separator: ", ")) ]")
             }
@@ -268,7 +315,7 @@ public enum ConfigTemplate {
         let cmd = bindings[key] ?? ""
         let verb = cmd.split(separator: " ").first.map(String.init) ?? ""
         let rank = ["focus", "swap", "stack", "warp", "unstack", "layout", "toggle", "grid", "balance", "rotate", "resize",
-                    "workspace", "move-to", "mode", "recover", "exec"].firstIndex(of: verb) ?? 99
+                    "workspace", "move-to", "mode", "undo", "redo", "overview", "find", "recover", "exec"].firstIndex(of: verb) ?? 99
         let num = Int(cmd.split(separator: " ").dropFirst().first ?? "") ?? 0
         return String(format: "%02d %03d %@ %@", rank, num, cmd, key)
     }

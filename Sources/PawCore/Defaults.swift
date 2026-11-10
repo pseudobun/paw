@@ -22,6 +22,13 @@ public enum Defaults {
             "ctrl+alt+u": "unstack",
             "hyper+e": "balance",
             "hyper+r": "mode resize",
+            "hyper+tab": "overview",
+            "hyper+j": "zoom in",
+            "hyper+k": "zoom out",
+            "hyper+z": "undo",
+            "hyper+y": "redo",
+            "hyper+o": "focus back",
+            "hyper+i": "focus forward",
             "shift+alt+a": "resize west 40",
             "shift+alt+s": "resize south 40",
             "shift+alt+w": "resize north 40",
@@ -62,8 +69,23 @@ public enum Defaults {
         }(),
     ]
 
+    /// Middle button: drag left/right for the previous/next workspace, up for the overview.
+    public static let gestures: [PawConfig.Gesture] = [
+        .init(button: "middle", direction: "left", command: "workspace prev"),
+        .init(button: "middle", direction: "right", command: "workspace next"),
+        .init(button: "middle", direction: "up", command: "overview"),
+    ]
+
+    /// Apps that pan, orbit or scroll with a middle-button drag.
+    public static let gestureIgnoreApps = [
+        "/CAD/", "/Fusion/", "/Slicer$/", "/Bambu ?Studio/", "Blender", "FreeCAD", "SketchUp", "Shapr3D", "/KiCad/",
+        "Figma", "Affinity Designer", "/Unity|Unreal/", "Godot", "Minecraft",
+    ]
+
     public static let rules: [PawConfig.Rule] = [
-        .init(app: "/^(System Settings|System Information|Calculator|Archive Utility|Raycast|Alfred|CleanShot X|1Password)$/", float: true),
+        .init(app: "/^(System Settings|System Information|Calculator|Archive Utility|Raycast|Alfred|1Password)$/", float: true),
+        // Screenshot and recording tools: their overlays and toolbars are none of paw's business.
+        .init(app: "/^(CleanShot X|Screen Studio|Shottr|Loom|OBS|Kap|Xnapper)$/", manage: false),
         // Browser popups float; their main windows (title ends in the browser name) tile.
         .init(app: "Google Chrome", unlessTitle: "Google Chrome", float: true),
         .init(app: "Brave Browser", unlessTitle: "Brave", float: true),

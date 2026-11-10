@@ -37,7 +37,14 @@ final class WindowTracker {
         guard AXObserverCreate(pid, callback, &observer) == .success, let observer else { return }
         let appElement = AXUIElementCreateApplication(pid)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-        for n in Self.appNotifications { AXObserverAddNotification(observer, appElement, n as CFString, refcon) }
+        var ok = true
+        for n in Self.appNotifications {
+            let r = AXObserverAddNotification(observer, appElement, n as CFString, refcon)
+            if r != .success && r != .notificationAlreadyRegistered && n == kAXWindowCreatedNotification { ok = false }
+        }
+        // Apps still starting up (Electron, ChatGPT) refuse at first: not observed yet, so the next
+        // launch check or activation tries again.
+        guard ok else { return }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
         observers[pid] = observer
     }

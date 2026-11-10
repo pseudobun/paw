@@ -19,9 +19,19 @@ final class Window {
         self.pid = pid
         self.app = app
         self.frame = frame
+        refreshTitle()
     }
 
-    var title: String { element.string(kAXTitleAttribute) ?? "" }
+    /// Kept up to date from title-changed notifications: reading it over AX each time (for every
+    /// indicator, every focus change) is slow with busy apps.
+    private(set) var title = ""
+
+    @discardableResult
+    func refreshTitle() -> Bool {
+        let t = element.string(kAXTitleAttribute) ?? ""
+        defer { title = t }
+        return t != title
+    }
     var isMinimized: Bool { element.bool(kAXMinimizedAttribute) ?? false }
 
     func readFrame() -> CGRect? {

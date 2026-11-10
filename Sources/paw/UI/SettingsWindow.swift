@@ -334,6 +334,25 @@ private struct LookTab: View {
                 Toggle("Click an icon to focus its window", isOn: $c.indicator.clickToFocus)
                 Toggle("Scroll to go through the stack", isOn: $c.indicator.scrollToCycle)
             }
+            Section("Focus border") {
+                Toggle("Line around the focused window", isOn: $c.border.enabled)
+                ColorRow("Colour", $c.border.color)
+                HStack {
+                    NumberField("Width", value: $c.border.width)
+                    NumberField("Radius", value: $c.border.radius)
+                    NumberField("Offset", value: $c.border.offset)
+                }
+            }
+            Section("Mouse, overview, HUD") {
+                Toggle("Drop zones when dragging a tiled window", isOn: $c.mouse.dropZones)
+                Toggle("Drag the gaps between tiles to resize", isOn: $c.mouse.seamHandles)
+                Picker("Window pictures in the overview", selection: $c.overview.thumbnails) {
+                    Text("when allowed").tag("auto")
+                    Text("on (asks for Screen Recording)").tag("on")
+                    Text("off").tag("off")
+                }
+                Toggle("Flash the workspace when switching", isOn: $c.hud.workspace)
+            }
             Section("App icons") {
                 Toggle("Each icon in the app's own colour", isOn: $c.icons.brandColors)
                 TextField("Icon map (sketchybar app_icons.lua)", text: $c.icons.map)

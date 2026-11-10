@@ -21,6 +21,7 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("QuartzCore"),
                 .linkedFramework("ServiceManagement"),
+                .linkedFramework("ScreenCaptureKit"),
             ]
         ),
         .testTarget(name: "PawCoreTests", dependencies: ["PawCore"]),

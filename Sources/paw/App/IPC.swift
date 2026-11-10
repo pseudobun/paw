@@ -40,14 +40,50 @@ enum IPC {
         return .success(obj)
     }
 
+    /// Sends `command` and hands every line the app writes back to `onLine` until it closes the
+    /// connection. Returns why it ended.
+    static func stream(_ command: String, onLine: (String) -> Void) -> ClientError {
+        guard FileManager.default.fileExists(atPath: socketPath) else { return .notRunning }
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return .failed("socket: \(String(cString: strerror(errno)))") }
+        defer { close(fd) }
+        configure(fd, timeout: 5)
+        guard var addr = address(socketPath) else { return .failed("socket path too long") }
+        let connected = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        guard connected == 0 else { return .notRunning }
+        guard writeAll(fd, Data(command.utf8)) else { return .failed("write: \(String(cString: strerror(errno)))") }
+        shutdown(fd, SHUT_WR)
+        var tv = timeval(tv_sec: 0, tv_usec: 0) // events can be minutes apart
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        var pending = Data()
+        while true {
+            let n = read(fd, &buffer, buffer.count)
+            if n < 0, errno == EINTR { continue }
+            guard n > 0 else { return .notRunning }
+            pending.append(contentsOf: buffer[0..<n])
+            while let nl = pending.firstIndex(of: 0x0a) {
+                onLine(String(decoding: pending[pending.startIndex..<nl], as: UTF8.self))
+                pending.removeSubrange(pending.startIndex...nl)
+            }
+        }
+    }
+
     // MARK: - Server
 
     final class Server {
         private let handler: (String) -> [String: Any]
+        private let subscribe: (Int32, String) -> Void
         private var listener: Int32 = -1
 
         /// `handler` runs on the main thread with the request text and returns the reply.
-        init(handler: @escaping (String) -> [String: Any]) { self.handler = handler }
+        /// `subscribe` (main thread) takes over the connection of a `subscribe …` request.
+        init(handler: @escaping (String) -> [String: Any], subscribe: @escaping (Int32, String) -> Void) {
+            self.handler = handler
+            self.subscribe = subscribe
+        }
 
         func start() throws {
             try IPC.prepareDirectory()
@@ -92,7 +128,8 @@ enum IPC {
         }
 
         private func serve(_ fd: Int32) {
-            defer { close(fd) }
+            var keep = false
+            defer { if !keep { close(fd) } }
             IPC.configure(fd, timeout: 5)
             var uid: uid_t = 0, gid: gid_t = 0
             guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else {
@@ -104,6 +141,11 @@ enum IPC {
                 return
             }
             let text = String(decoding: data, as: UTF8.self)
+            if text == "subscribe" || text.hasPrefix("subscribe ") {
+                keep = true
+                DispatchQueue.main.async { [subscribe] in subscribe(fd, text) }
+                return
+            }
             let reply = DispatchQueue.main.sync { handler(text) }
             let out = (try? JSONSerialization.data(withJSONObject: reply, options: [.sortedKeys])) ?? Data("{}".utf8)
             _ = IPC.writeAll(fd, out)

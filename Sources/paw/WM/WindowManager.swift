@@ -54,6 +54,43 @@ final class WindowManager {
     private var lastHover = Date.distantPast
     private var observers: [NSObjectProtocol] = []
     private var pruneTimer: Timer?
+    private var layoutEventWork: DispatchWorkItem?
+    /// Per workspace: trees before each layout change (undo) and after undoing (redo).
+    private var undoStack: [String: [WorkspaceSnapshot]] = [:]
+    private var redoStack: [String: [WorkspaceSnapshot]] = [:]
+    private var lastUndoRecord: (name: String, kind: String, at: Date)?
+    /// Windows focused, oldest first, for `focus back|forward`.
+    private var history: [WindowID] = []
+    private var historyIndex = -1
+    private var navigatingHistory = false
+    /// Where minimized windows and windows of hidden or quit apps were, to put them back.
+    private var ghosts: [Ghost] = []
+    private struct Ghost {
+        let app: String
+        let title: String
+        let workspace: String
+        let anchor: Anchor?
+        let floating: Bool
+        /// Windows of a quit app come back only for a while; the layout moves on.
+        var expires: Date = .distantFuture
+    }
+    let hud = WorkspaceHUD()
+    let placeholders = Placeholders()
+    let border = FocusBorder()
+    /// Sizes apps keep their windows at, at least (learned when a window sticks out of its tile).
+    private var windowMins: [WindowID: CGSize] = [:]
+    private var overflowSuspects: [WindowID: CGSize] = [:]
+    private var overflowWork: [String: DispatchWorkItem] = [:]
+    private var relayingOutClamped = false
+    /// The window paw just focused, until macOS catches up (the border goes there at once).
+    private var pawFocus: (id: WindowID, at: Date)?
+    /// The window server and AX calls that focus a window take 20–40 ms; they run here, in
+    /// order, while the border, indicators and pointer move at once.
+    private let focusQueue = DispatchQueue(label: "paw.focus", qos: .userInteractive)
+    let dropPreview = DropPreview()
+    lazy var seams = SeamHandles(wm: self)
+    lazy var gestures = MouseGestures(wm: self)
+    lazy var overview = OverviewController(wm: self)
 
     init(settings: Settings) {
         self.settings = settings
@@ -72,12 +109,18 @@ final class WindowManager {
         hotkeys.run = { [weak self] in self?.run($0) }
         indicators.onFocus = { [weak self] id in self?.focusWindow(id, warp: false) }
         configChanged()
+        gestures.start()
         if !hotkeys.start() { Log.app.error("key bindings: event tap not allowed (Accessibility)") }
 
         rebuildDisplays()
         let state = StateFile.load()
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
-            adopt(app, state: state)
+            adopt(app, state: state.windows)
+        }
+        // The trees as they were when paw quit or crashed: tiles, sizes, stacks.
+        for (name, snap) in state.trees {
+            guard let ws = workspaces[name], !ws.isEmpty else { continue }
+            ws.restore(snap, area: area(of: ws))
         }
         let ws = NSWorkspace.shared.notificationCenter
         observers.append(ws.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] n in
@@ -85,7 +128,7 @@ final class WindowManager {
             // Give the app a moment to make its first window.
             // Some (Brave) make it after a window-created notification could reach paw; look again.
             for delay in [0.4, 1.5, 4.0] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.adopt(app, state: nil) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.adopt(app, state: nil, fresh: true) }
             }
         })
         observers.append(ws.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] n in
@@ -101,6 +144,8 @@ final class WindowManager {
             }
             self?.pruneDead()
             self?.syncFocus(app.processIdentifier)
+            // Another app in front (one paw doesn't manage, say): the border follows at once.
+            self?.updateIndicators()
         })
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                                 object: nil, queue: .main) { [weak self] _ in
@@ -119,10 +164,17 @@ final class WindowManager {
 
     func configChanged() {
         hotkeys.set(config.bindings, modes: config.modes)
+        gestures.configChanged()
         if let m = mode, config.modes[m] == nil { setMode(nil) }
         for p in hotkeys.problems { Log.app.warning("bindings: \(p, privacy: .public)") }
         indicators.configChanged()
         updateFocusFollowsMouse()
+        for ws in workspaces.values { ws.canvasMin = CGSize(width: config.layout.minTileWidth, height: config.layout.minTileHeight) }
+        // Windows a rule now leaves alone (manage: false) are let go, where they are.
+        for w in windows.values where config.rules.contains(where: { $0.manage == false && $0.matches(app: w.app, title: w.title) }) {
+            if w.isHidden { w.isHidden = false; w.setFrame(w.floatFrame ?? w.frame) }
+            remove(w.id)
+        }
         if !displays.isEmpty {
             rebuildDisplays()
             layoutAll(animated: true)
@@ -140,7 +192,9 @@ final class WindowManager {
             w.isHidden = false
             offset = (offset + 30).truncatingRemainder(dividingBy: 300)
         }
-        StateFile.clear()
+        // Kept, so paw started again (just install, a login) puts everything back as it was.
+        saveWork?.cancel()
+        saveState()
     }
 
     // MARK: - Displays and workspaces
@@ -176,6 +230,7 @@ final class WindowManager {
     /// macOS moved around, and retile everything.
     private func displaysChanged() {
         let before = displays.map { "\($0.id)@\($0.frame)" }
+        let prevWorkspace = displays.isEmpty ? "" : label(focusedWorkspace.name)
         rebuildDisplays()
         let after = displays.map { "\($0.id)@\($0.frame)" }
         Log.app.info("displays changed: \(after.joined(separator: ", "), privacy: .public)")
@@ -200,8 +255,9 @@ final class WindowManager {
         layoutAll(animated: false)
         if setupChanged { applySetup() }
         if before != after {
-            runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": focusedWorkspace.name, "PAW_PREV_WORKSPACE": focusedWorkspace.name])
+            emitWorkspaceChanged(prev: prevWorkspace)
             runHook(config.hooks.displaysChanged, ["PAW_DISPLAYS": "\(displays.count)"])
+            publish("displaysChanged", ["displays": displays.count, "workspaces": query()])
         }
         scheduleSave()
     }
@@ -233,6 +289,8 @@ final class WindowManager {
             used = []
             for i in displays.indices { displays[i].workspace = "" }
             Log.app.info("setup: \(match?.name ?? "default", privacy: .public)")
+            let name = match?.name ?? ""
+            DispatchQueue.main.async { [weak self] in self?.publish("setupChanged", ["setup": name]) }
         }
         for n in 1...max(1, l.workspaces) { _ = workspace("\(n)") }
         for name in presets.keys { _ = workspace(name) }
@@ -263,6 +321,8 @@ final class WindowManager {
     func workspace(_ name: String) -> Workspace {
         if let w = workspaces[name] { return w }
         let w = Workspace(name: name, layout: presets[name]?.layout ?? config.layout.default)
+        w.canvasMin = CGSize(width: config.layout.minTileWidth, height: config.layout.minTileHeight)
+        w.windowMins = windowMins
         workspaces[name] = w
         return w
     }
@@ -300,13 +360,19 @@ final class WindowManager {
 
     // MARK: - Windows
 
-    private func adopt(_ app: NSRunningApplication, state: [WindowID: String]?) {
+    /// `fresh`: the app just launched, so its windows are new ones: they go next to the focused
+    /// window and take focus, like any window opened later.
+    private func adopt(_ app: NSRunningApplication, state: [WindowID: String]?, fresh: Bool = false) {
         guard app.activationPolicy == .regular, app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
         tracker.observe(app)
         if app.isHidden { return }
         let el = AXUIElementCreateApplication(app.processIdentifier)
-        for w in el.elements(kAXWindowsAttribute) { add(w, pid: app.processIdentifier, state: state, initial: true) }
+        var added: [WindowID] = []
+        for w in el.elements(kAXWindowsAttribute) {
+            if let win = add(w, pid: app.processIdentifier, state: state, initial: !fresh) { added.append(win.id) }
+        }
         if state == nil { layoutVisible(animated: true) }
+        if fresh, let id = added.last, let ws = workspaceOf(id), displayShowing(ws.name) != nil { focusWindow(id, warp: true) }
     }
 
     /// Starts managing a window; nil when it isn't one paw manages.
@@ -327,7 +393,7 @@ final class WindowManager {
         tracker.watch(window: el, pid: pid)
 
         let float = rules.contains { $0.float == true } || subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute)
-        var presetName = presets.first { $0.value.slot(for: appName) != nil }?.key
+        var presetName = presets.first { $0.value.slot(for: appName, title: title) != nil }?.key
         // A new window of an app you already use on this workspace (a second Finder window moved
         // here, then ⌘K) stays with it instead of jumping to the app's preset workspace.
         if !initial, presetName != nil, focusedWorkspace.allWindows.contains(where: { $0 != id && windows[$0]?.pid == pid }) {
@@ -337,9 +403,17 @@ final class WindowManager {
         if name == nil, initial, let di = displays.indices.first(where: { displays[$0].frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }) {
             name = displays[di].workspace
         }
+        // Back where it was before it was minimized, hidden or its app quit.
+        let ghost = state == nil && !rules.contains(where: { $0.workspace != nil }) ? takeGhost(app: appName, title: title) : nil
+        if let ghost { name = ghost.workspace }
         let ws = workspace(name ?? focusedWorkspace.name)
         if float { w.floatFrame = frame }
-        ws.insert(id, area: area(of: ws), floating: float, slot: presets[ws.name]?.slot(for: appName))
+        if let a = ghost?.anchor, !float, ghost?.floating == false, ws.insert(id, at: a) {
+            // placed by its anchor
+        } else {
+            ws.insert(id, area: area(of: ws), floating: float || ghost?.floating == true,
+                      slot: presets[ws.name]?.slot(for: appName, title: title))
+        }
         if !initial || ws.focused == nil { ws.focused = id }
         if displayShowing(ws.name) == nil { hide(w, from: ws) }
         if !initial { layout(ws, animated: true) }
@@ -349,6 +423,9 @@ final class WindowManager {
 
     private func remove(_ id: WindowID, relayout: Bool = true) {
         guard let w = windows.removeValue(forKey: id) else { return }
+        windowMins[id] = nil
+        overflowSuspects[id] = nil
+        for ws in workspaces.values { ws.windowMins[id] = nil }
         animator.cancel(id)
         let ws = workspaceOf(id)
         let wasFocused = ws?.focused == id
@@ -367,7 +444,7 @@ final class WindowManager {
 
     private func appTerminated(_ pid: pid_t) {
         tracker.forget(pid)
-        for w in windows.values where w.pid == pid { remove(w.id) }
+        for w in windows.values where w.pid == pid { remember(w.id, for: 300); remove(w.id) }
     }
 
     /// Drops windows macOS no longer has. Some apps (Find My) quit as their last window closes
@@ -395,19 +472,19 @@ final class WindowManager {
         case .destroyed(let el):
             if let w = window(for: el) { remove(w.id) } else { pruneDead() }
         case .minimized(let el):
-            if let w = window(for: el) { remove(w.id) }
+            if let w = window(for: el) { remember(w.id); remove(w.id) }
         case .deminimized(let el):
             if let id = add(el, pid: el.pid, state: nil, initial: false)?.id { focusWindow(id, warp: true) }
         case .appHidden(let pid):
-            for w in windows.values where w.pid == pid { remove(w.id) }
+            for w in windows.values where w.pid == pid { remember(w.id); remove(w.id) }
         case .appShown(let pid):
             if let app = NSRunningApplication(processIdentifier: pid) { adopt(app, state: nil) }
         case .focused(let pid):
             syncFocus(pid)
         case .moved(let el), .resized(let el):
             if let w = window(for: el) { userMoved(w) }
-        case .titleChanged:
-            updateIndicators()
+        case .titleChanged(let el):
+            if let w = window(for: el), w.refreshTitle() { updateIndicators() }
         }
     }
 
@@ -426,14 +503,22 @@ final class WindowManager {
     private func syncFocus(_ pid: pid_t, force: Bool = false) {
         guard force || Date() > ignoreFocusUntil else { return }
         let app = AXUIElementCreateApplication(pid)
-        guard let el = app.element(kAXFocusedWindowAttribute), let id = el.windowID, windows[id] != nil,
-              let ws = workspaceOf(id) else { return }
+        guard let el = app.element(kAXFocusedWindowAttribute), let id = el.windowID else { return }
+        if windows[id] == nil {
+            // A window paw never heard about (some apps, ChatGPT among them, make theirs before
+            // their accessibility notifications work): take it on now that it has focus.
+            guard let running = NSRunningApplication(processIdentifier: pid), running.activationPolicy == .regular else { return }
+            tracker.observe(running)
+            guard add(el, pid: pid, state: nil, initial: false) != nil else { return }
+        }
+        guard windows[id] != nil, let ws = workspaceOf(id) else { return }
         if let di = displayShowing(ws.name) {
             focusedDisplay = di
             ws.focused = id
             ws.activate(id)
+            if ws.frameCamera(on: id, area: displays[di].area, gap: config.layout.gap) { layout(ws, animated: true) }
             updateIndicators()
-            runHook(config.hooks.windowFocused, ["PAW_WINDOW": "\(id)", "PAW_APP": windows[id]?.app ?? ""])
+            focusChanged(id)
         } else {
             // Right after paw switches (to an empty workspace, say), macOS hands focus to some
             // window it just hid; following that would switch straight back.
@@ -443,8 +528,9 @@ final class WindowManager {
         }
     }
 
-    /// A tiled window the user dragged: wait for the mouse button, then swap it with the tile
-    /// under the pointer, or snap it back.
+    /// A tiled window the user dragged or resized: follow it until the mouse button is up.
+    /// Moving shows where it would land (drop zones) and puts it there; resizing an edge
+    /// changes the tile sizes; anything else snaps back.
     private func userMoved(_ w: Window) {
         if let until = suppressMoves[w.id], until > Date() { return }
         if w.isHidden || animator.isRunning { return }
@@ -454,32 +540,68 @@ final class WindowManager {
             w.floatFrame = w.frame
             return
         }
-        dragTimer?.invalidate()
-        dragTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] t in
-            guard let self, NSEvent.pressedMouseButtons == 0 else { return }
-            t.invalidate()
-            dragTimer = nil
+        guard dragTimer == nil else { return }
+        // Only a drag with the mouse counts; an app moving or clamping its own window snaps back.
+        var sawMouse = NSEvent.pressedMouseButtons != 0
+        let expected = TreeLayout.windowFrames(ws, in: area(of: ws), gap: config.layout.gap)[w.id] ?? w.frame
+        dragTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] t in
+            guard let self else { t.invalidate(); return }
+            let current = w.readFrame() ?? w.frame
+            // A resize keeps the opposite edge where it was. Moving to another display can change
+            // the size too (macOS fits the window to it), but then every edge moves.
+            let sized = abs(current.width - expected.width) > 2 || abs(current.height - expected.height) > 2
+            let xKept = abs(current.minX - expected.minX) <= 2 || abs(current.maxX - expected.maxX) <= 2
+            let yKept = abs(current.minY - expected.minY) <= 2 || abs(current.maxY - expected.maxY) <= 2
+            let resized = sized && xKept && yKept
             let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
-            // Dropped on another display: the window moves to the workspace shown there, next to
-            // the tile under the mouse (instead of snapping back to its old tile).
-            if let di = displays.firstIndex(where: { $0.frame.contains(p) }), displays[di].workspace != ws.name {
-                let to = workspace(displays[di].workspace)
-                let toFrames = TreeLayout.tileFrames(to, in: displays[di].area, gap: config.layout.gap)
-                if let under = to.tiles.first(where: { toFrames[ObjectIdentifier($0)]?.contains(p) == true }) {
-                    to.focused = under.activeWindow
+            if NSEvent.pressedMouseButtons != 0 {
+                sawMouse = true
+                guard config.mouse.dropZones, !resized, let hit = dropTarget(at: p, dragging: w.id), let target = hit.target,
+                      let area = displayArea(hit.display),
+                      let f = DropZones.preview(target, in: hit.ws, area: area, gap: config.layout.gap, dragging: w.id) else {
+                    dropPreview.hide()
+                    return
                 }
-                focusedDisplay = di
-                moveWindow(w.id, to: to.name, follow: true)
+                dropPreview.show(f, style: indicators.style)
                 return
             }
-            let frames = TreeLayout.tileFrames(ws, in: area(of: ws), gap: config.layout.gap)
-            if let own = ws.tile(of: w.id), let target = ws.tiles.first(where: { $0 !== own && frames[ObjectIdentifier($0)]?.contains(p) == true }),
-               let other = target.activeWindow, let i = own.windows.firstIndex(of: w.id), let j = target.windows.firstIndex(of: other) {
-                own.windows[i] = other
-                target.windows[j] = w.id
+            t.invalidate()
+            dragTimer = nil
+            dropPreview.hide()
+            guard let ws = workspaceOf(w.id) else { return }
+            guard sawMouse else { layout(ws, animated: true); return }
+            if resized {
+                // An edge (or corner) dragged: the tile sizes follow it.
+                recordUndo(ws, kind: "command")
+                let a = area(of: ws)
+                if abs(current.minX - expected.minX) > 2 { _ = ws.resize(w.id, .west, by: expected.minX - current.minX, area: a) }
+                if abs(current.maxX - expected.maxX) > 2 { _ = ws.resize(w.id, .east, by: current.maxX - expected.maxX, area: a) }
+                if abs(current.minY - expected.minY) > 2 { _ = ws.resize(w.id, .north, by: expected.minY - current.minY, area: a) }
+                if abs(current.maxY - expected.maxY) > 2 { _ = ws.resize(w.id, .south, by: current.maxY - expected.maxY, area: a) }
+                layout(ws, animated: true)
+                return
             }
-            _ = w.readFrame()
-            layout(ws, animated: true)
+            guard let hit = dropTarget(at: p, dragging: w.id) else { layout(ws, animated: true); return }
+            if hit.ws !== ws {
+                // Dropped on another display: it moves to the workspace shown there.
+                focusedDisplay = hit.display
+                drop(w.id, on: config.mouse.dropZones ? hit.target : nil, in: hit.ws)
+                focusWindow(w.id, warp: false)
+                return
+            }
+            if config.mouse.dropZones {
+                drop(w.id, on: hit.target, in: ws)
+            } else {
+                // Without drop zones: swap with the tile under the pointer.
+                let frames = TreeLayout.tileFrames(ws, in: area(of: ws), gap: config.layout.gap)
+                if let own = ws.tile(of: w.id), let under = ws.tiles.first(where: { $0 !== own && frames[ObjectIdentifier($0)]?.contains(p) == true }),
+                   let other = under.activeWindow {
+                    drop(w.id, on: .swap(tile: other), in: ws)
+                } else {
+                    layout(ws, animated: true)
+                }
+            }
+            focusWindow(w.id, warp: false)
         }
     }
 
@@ -498,17 +620,44 @@ final class WindowManager {
     func layout(_ ws: Workspace, animated: Bool) {
         guard let di = displayShowing(ws.name) else { return }
         let area = displays[di].area
+        // A canvas keeps the focused window on screen with its tiles at their minimum size.
+        if let f = ws.focused, ws.tile(of: f) != nil { ws.frameCamera(on: f, area: area, gap: config.layout.gap) }
         let frames = TreeLayout.windowFrames(ws, in: area, gap: config.layout.gap)
         var targets: [(Window, CGRect)] = []
+        var clamped = false
         let until = Date().addingTimeInterval(config.animation.durationMs / 1000 + 0.35)
         for t in ws.tiles {
+            // The window on top can't get this small: the whole stack waits out of sight and a
+            // placeholder takes the tile (the stack's indicator still goes through it).
+            let topCramped = t.activeWindow.map { isCramped($0, in: frames) } ?? false
             for id in t.windows {
                 guard let w = windows[id], let r = frames[id] else { continue }
+                if topCramped || isCramped(id, in: frames) {
+                    if !w.isHidden { hide(w, from: ws) }
+                    continue
+                }
+                _ = r
                 suppressMoves[id] = until
-                if w.isHidden { w.isHidden = false; w.setFrame(r); continue }
+                if w.isHidden { w.isHidden = false; w.setFrame(r); if learnClamp(w, r) { clamped = true }; continue }
                 // Windows behind a stack's top one move without animation.
-                if animated && (id == t.activeWindow || ws.zoomed == id) { targets.append((w, r)) } else if w.frame.integral != r.integral { w.setFrame(r) }
+                if animated && (id == t.activeWindow || ws.zoomed == id) {
+                    targets.append((w, r))
+                } else if w.frame.integral != r.integral {
+                    w.setFrame(r)
+                    if learnClamp(w, r) { clamped = true }
+                }
             }
+        }
+        // A window its app kept bigger than its tile: lay out again now, with a placeholder there.
+        if clamped, !relayingOutClamped {
+            relayingOutClamped = true
+            layout(ws, animated: animated)
+            relayingOutClamped = false
+            return
+        }
+        // Zoomed into a branch: the rest of the tree waits out of sight.
+        for id in ws.tiledWindows where frames[id] == nil {
+            if let w = windows[id], !w.isHidden { hide(w, from: ws) }
         }
         for id in ws.floating {
             guard let w = windows[id], w.isHidden else { continue }
@@ -519,6 +668,204 @@ final class WindowManager {
         animator.animate(targets)
         updateIndicators()
         scheduleSave()
+        scheduleLayoutEvent(ws.name)
+        if !targets.isEmpty { scheduleOverflowCheck(ws.name, after: config.animation.durationMs / 1000 + 0.05) }
+    }
+
+    /// After a layout settles: windows larger than their tile (apps with a minimum size) are
+    /// remembered at that size, once it shows twice in a row, and the workspace is laid out again.
+    private func scheduleOverflowCheck(_ name: String, after delay: Double) {
+        overflowWork[name]?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.checkOverflow(name) }
+        overflowWork[name] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func checkOverflow(_ name: String) {
+        guard let di = displayShowing(name) else { return }
+        // Windows still moving: look again once they've landed.
+        if animator.isRunning { scheduleOverflowCheck(name, after: 0.15); return }
+        let ws = workspace(name)
+        let frames = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)
+        var learned = false, suspect = false
+        for t in ws.tiles {
+            guard let id = t.activeWindow, let w = windows[id], !w.isHidden, let r = frames[id], ws.zoomed != id,
+                  let actual = w.element.frame else { continue }
+            let over = CGSize(width: actual.width > r.width + 4 ? actual.width : 0, height: actual.height > r.height + 4 ? actual.height : 0)
+            guard over.width > 0 || over.height > 0 else { overflowSuspects[id] = nil; continue }
+            // After an animation the app has had its frames; a second look only when it's still resizing.
+            if overflowSuspects[id] == nil || abs(overflowSuspects[id]!.width - over.width) < 4 && abs(overflowSuspects[id]!.height - over.height) < 4 {
+                let old = windowMins[id] ?? .zero
+                let m = CGSize(width: max(old.width, over.width), height: max(old.height, over.height))
+                windowMins[id] = m
+                for other in workspaces.values { other.windowMins[id] = m }
+                overflowSuspects[id] = nil
+                learned = true
+                Log.app.info("\(w.app, privacy: .public) needs at least \(Int(m.width))×\(Int(m.height))")
+            } else {
+                overflowSuspects[id] = over
+                suspect = true
+            }
+        }
+        if learned { layout(ws, animated: false) } else if suspect { scheduleOverflowCheck(name, after: 0.4) }
+    }
+
+    /// The focus border: around the focused window's tile (or its placeholder, or a floating
+    /// window), while its app is in front.
+    private func updateBorder(cramped: Set<WindowID>) {
+        guard config.border.enabled, !overview.isOpen, let id = focusedID, let w = windows[id],
+              let ws = workspaceOf(id), let di = displayShowing(ws.name) else { border.hide(); return }
+        let placeholder = cramped.contains(id)
+        let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let justFocused = pawFocus.map { $0.id == id && Date().timeIntervalSince($0.at) < 1 } ?? false
+        guard placeholder || justFocused || frontPid == w.pid else { border.hide(); return }
+        let frame = ws.isFloating(id) ? w.frame : TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id]
+        border.show(frame, window: id, above: !placeholder, screen: displays[di].frame, config: config.border)
+    }
+
+    private func isCramped(_ id: WindowID, in frames: [WindowID: CGRect]) -> Bool {
+        guard let m = windowMins[id], let r = frames[id] else { return false }
+        return m.width > r.width + 2 || m.height > r.height + 2
+    }
+
+    /// Whether `id` is shown as a placeholder right now.
+    func isCramped(_ id: WindowID) -> Bool {
+        guard windowMins[id] != nil, let ws = workspaceOf(id), let di = displayShowing(ws.name) else { return false }
+        return isCramped(id, in: TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap))
+    }
+
+    /// A placeholder dragged: the same drop zones as a window.
+    func placeholderDragged(_ id: WindowID, to p: CGPoint) {
+        guard let hit = dropTarget(at: p, dragging: id), let target = hit.target, let area = displayArea(hit.display),
+              let f = DropZones.preview(target, in: hit.ws, area: area, gap: config.layout.gap, dragging: id) else {
+            dropPreview.hide()
+            return
+        }
+        dropPreview.show(f, style: indicators.style)
+    }
+
+    func placeholderDropped(_ id: WindowID, at p: CGPoint) {
+        dropPreview.hide()
+        guard let hit = dropTarget(at: p, dragging: id) else { return }
+        if let from = workspaceOf(id), from !== hit.ws { focusedDisplay = hit.display }
+        drop(id, on: hit.target, in: hit.ws)
+        focusWindow(id, warp: false)
+    }
+
+    /// One step through the tree towards `id` (in) or back out, with the HUD saying how deep.
+    func zoom(inward: Bool, toward id: WindowID) {
+        guard let ws = workspaceOf(id), let di = displayShowing(ws.name) else { return }
+        let area = displays[di].area, gap = config.layout.gap
+        let before = TreeLayout.cameraFrames(ws, in: area, gap: gap)
+        guard inward ? ws.zoomIn(toward: id) : ws.zoomOut() else { return }
+        recordUndo(ws, kind: "command")
+        animateCamera(ws, from: before, area: area)
+        let d = ws.zoomDepth(of: id)
+        hud.style = indicators.style
+        var apps: [String] = []
+        for a in ws.tiledWindows.filter(ws.shownWindows.contains).compactMap({ windows[$0]?.app }) where !apps.contains(a) { apps.append(a) }
+        hud.show(label: d.level == 0 ? label(ws.name) : "\(label(ws.name))  \(d.level)/\(d.levels)", apps: apps,
+                 in: displays[di].area, icons: settings.icons, config: config, duration: config.hud.durationMs / 1000)
+        focusWindow(id, warp: false)
+    }
+
+    /// The camera moved: windows glide from where the old camera had them to where the new one
+    /// puts them, those coming in from off screen, those leaving out of it (then parked).
+    private func animateCamera(_ ws: Workspace, from before: [WindowID: CGRect], area: CGRect) {
+        guard config.animation.enabled else { layout(ws, animated: false); return }
+        let after = TreeLayout.cameraFrames(ws, in: area, gap: config.layout.gap)
+        let shown = ws.shownWindows
+        let until = Date().addingTimeInterval(config.animation.durationMs / 1000 + 0.4)
+        var targets: [(Window, CGRect)] = []
+        for t in ws.tiles {
+            // Only each stack's top window moves; the rest follow at the end.
+            guard let id = t.activeWindow, let w = windows[id], let to = after[id] else { continue }
+            if isCramped(id) { continue }
+            suppressMoves[id] = until
+            if w.isHidden {
+                guard shown.contains(id), let from = before[id] else { continue }
+                w.isHidden = false
+                w.setFrame(from)
+            }
+            targets.append((w, to))
+        }
+        animator.animate(targets)
+        DispatchQueue.main.asyncAfter(deadline: .now() + config.animation.durationMs / 1000 + 0.03) { [weak self] in
+            self?.layout(ws, animated: false)
+        }
+    }
+
+    /// An empty workspace has nothing to focus: paw takes the keyboard (so no window elsewhere
+    /// keeps it), the pointer goes there and the HUD says where you are.
+    private func focusEmpty(_ di: Int) {
+        guard displays.indices.contains(di) else { return }
+        let prev = displays.indices.contains(focusedDisplay) ? label(displays[focusedDisplay].workspace) : ""
+        focusedDisplay = di
+        ignoreFocus(0.5)
+        NSApp.activate(ignoringOtherApps: true)
+        if config.focus.mouseFollowsFocus {
+            let a = displays[di].area
+            CGWarpMouseCursorPosition(CGPoint(x: a.midX, y: a.midY))
+            CGAssociateMouseAndMouseCursorPosition(1)
+        }
+        showHUD(displays[di].workspace, on: di)
+        updateIndicators()
+        emitWorkspaceChanged(prev: prev)
+    }
+
+    /// From the overview: work in the region holding these windows.
+    func focusArea(_ ids: [WindowID], in name: String) {
+        let ws = workspace(name)
+        let inRegion = ids.filter { ws.tile(of: $0) != nil }
+        guard !inRegion.isEmpty else { return }
+        let target = ws.focused.flatMap { inRegion.contains($0) ? $0 : nil } ?? inRegion[0]
+        if let di = displayShowing(name) {
+            let before = TreeLayout.cameraFrames(ws, in: displays[di].area, gap: config.layout.gap)
+            guard ws.setView(containing: inRegion) else { return }
+            ws.focused = target
+            animateCamera(ws, from: before, area: displays[di].area)
+            focusWindow(target, warp: true)
+        } else {
+            ws.focused = target
+            show(name)
+            ws.setView(containing: inRegion)
+            layout(ws, animated: false)
+            focusWindow(target, warp: true)
+        }
+    }
+
+    /// ⌥-scroll / ⌥-pinch: zoom towards the window under the pointer (AX point).
+    func zoom(inward: Bool, at p: CGPoint) {
+        let id = topWindow(at: p) ?? focusedID
+        if let id { zoom(inward: inward, toward: id) }
+    }
+
+    /// Right after paw set a window's frame: AX set calls return once the app has applied them,
+    /// so a bigger size read back now is the app's own minimum. Learns it; true when new.
+    private func learnClamp(_ w: Window, _ r: CGRect) -> Bool {
+        guard let s = w.element.size else { return false }
+        let over = CGSize(width: s.width > r.width + 4 ? s.width : 0, height: s.height > r.height + 4 ? s.height : 0)
+        guard over.width > 0 || over.height > 0 else { return false }
+        // Some apps (Chromium) apply a size a moment later: a second look confirms it.
+        overflowSuspects[w.id] = over
+        if let ws = workspaceOf(w.id) { scheduleOverflowCheck(ws.name, after: 0.12) }
+        return false
+    }
+
+    /// From a placeholder: zoom in towards the window until its tile is big enough for it.
+    func makeRoom(for id: WindowID) {
+        guard let ws = workspaceOf(id), let di = displayShowing(ws.name) else { return }
+        let area = displays[di].area
+        func fitsNow() -> Bool {
+            guard let r = TreeLayout.windowFrames(ws, in: area, gap: config.layout.gap)[id] else { return false }
+            let m = windowMins[id] ?? .zero
+            return r.width + 2 >= m.width && r.height + 2 >= m.height
+        }
+        ws.focused = id
+        ws.activate(id)
+        while !fitsNow(), ws.zoomIn(toward: id) {}
+        layout(ws, animated: true)
+        focusWindow(id, warp: true)
     }
 
     private func hideAllExcept(visible: Set<String>) {
@@ -562,9 +909,29 @@ final class WindowManager {
         if let ws = workspaceOf(id) {
             ws.focused = id
             ws.activate(id)
-            if let di = displayShowing(ws.name) { focusedDisplay = di }
+            if let di = displayShowing(ws.name) {
+                focusedDisplay = di
+                // Out of a zoom or off a canvas's screen: bring it into view first.
+                if ws.frameCamera(on: id, area: displays[di].area, gap: config.layout.gap) { layout(ws, animated: true) }
+            }
         }
-        w.focus()
+        // A placeholder: focus is paw's (moves, swaps); the window itself waits out of sight.
+        if isCramped(id) {
+            if warp && config.focus.mouseFollowsFocus, let ws = workspaceOf(id), let di = displayShowing(ws.name),
+               let r = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] {
+                let primary = NSScreen.screens.first?.frame.height ?? 0
+                if !r.contains(ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: primary)) {
+                    CGWarpMouseCursorPosition(CGPoint(x: r.midX, y: r.midY))
+                    CGAssociateMouseAndMouseCursorPosition(1)
+                }
+            }
+            updateIndicators()
+            focusChanged(id)
+            return
+        }
+        let (pid, element) = (w.pid, w.element)
+        focusQueue.async { SkyLight.focus(pid: pid, windowID: id, element: element) }
+        pawFocus = (id, Date())
         if warp && config.focus.mouseFollowsFocus {
             let primary = NSScreen.screens.first?.frame.height ?? 0
             let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: primary)
@@ -574,7 +941,7 @@ final class WindowManager {
             }
         }
         updateIndicators()
-        runHook(config.hooks.windowFocused, ["PAW_WINDOW": "\(id)", "PAW_APP": w.app])
+        focusChanged(id)
     }
 
     private func updateFocusFollowsMouse() {
@@ -590,7 +957,7 @@ final class WindowManager {
     }
 
     /// The front-most managed window under a point, by window-server order.
-    private func topWindow(at p: CGPoint) -> WindowID? {
+    func topWindow(at p: CGPoint) -> WindowID? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
@@ -607,13 +974,18 @@ final class WindowManager {
     func show(_ name: String) {
         let ws = workspace(name)
         if let di = displayShowing(name) {
-            focusedDisplay = di
-            focusWindow(ws.focused ?? ws.allWindows.first, warp: true)
+            if let id = ws.focused ?? ws.allWindows.first {
+                focusedDisplay = di
+                focusWindow(id, warp: true)
+            } else {
+                focusEmpty(di)
+            }
             return
         }
         let di = homeDisplay(name) ?? focusedDisplay
         guard displays.indices.contains(di) else { return }
         let old = displays[di].workspace
+        workspace(old).clearZoom()
         ignoreFocus(0.5)
         for id in workspace(old).allWindows { if let w = windows[id], !w.isHidden { hide(w, from: workspace(old)) } }
         displays[di].workspace = name
@@ -621,8 +993,15 @@ final class WindowManager {
         lastSwitch = Date()
         if old != name { lastWorkspace = old }
         layout(ws, animated: false)
-        if let f = ws.focused ?? ws.allWindows.first { focusWindow(f, warp: true) } else { updateIndicators() }
-        runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": label(name), "PAW_PREV_WORKSPACE": label(old)])
+        if let f = ws.focused ?? ws.allWindows.first {
+            focusWindow(f, warp: true)
+        } else {
+            // Nothing there: no window on another workspace keeps the keys.
+            NSApp.activate(ignoringOtherApps: true)
+            updateIndicators()
+        }
+        emitWorkspaceChanged(prev: label(old))
+        showHUD(name, on: di)
         scheduleSave()
     }
 
@@ -688,6 +1067,7 @@ final class WindowManager {
         hotkeys.mode = name
         updateModeIsland()
         runHook(config.hooks.modeChanged, ["PAW_MODE": name ?? ""])
+        publish("modeChanged", ["mode": name ?? ""])
     }
 
     private func updateModeIsland() {
@@ -730,7 +1110,17 @@ final class WindowManager {
         let cfg = config.initiate
         let apps = cfg.appsToOpen(presets)
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.localizedName))
-        for app in apps where !running.contains(app) { Shell.run("open -g -a \(Self.shellQuote(app))", env: [:]) }
+        // Tiles with `launch` run it when no window matches (a terminal in a project folder, say).
+        var launched = Set<String>()
+        for preset in presets.values {
+            for t in preset.tiles {
+                guard let cmd = t.launch, !cmd.isEmpty,
+                      !windows.values.contains(where: { t.matches(app: $0.app, title: $0.title) }) else { continue }
+                Shell.run(cmd, env: [:])
+                for a in t.apps { launched.insert(a) }
+            }
+        }
+        for app in apps where !running.contains(app) && !launched.contains(app) { Shell.run("open -g -a \(Self.shellQuote(app))", env: [:]) }
         let deadline = Date().addingTimeInterval(cfg.timeout)
         func check() {
             for app in NSWorkspace.shared.runningApplications where apps.contains(app.localizedName ?? "") { adopt(app, state: nil) }
@@ -749,6 +1139,7 @@ final class WindowManager {
     /// the setup's (or initiate's) focus.
     func applySetup() {
         setupChanged = false
+        let prevWorkspace = displays.isEmpty ? "" : label(focusedWorkspace.name)
         arrangeAll()
         for i in displays.indices {
             let pinned = presets.keys.sorted(by: Self.nameOrder).first { displayIndex(for: presets[$0]?.display) == i }
@@ -760,7 +1151,7 @@ final class WindowManager {
         let focus = activeSetup.flatMap { config.setups[$0]?.focus }.flatMap { $0.isEmpty ? nil : $0 } ?? config.initiate.focus
         if !focus.isEmpty { show(focus) }
         layoutAll(animated: false)
-        runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": focusedWorkspace.name, "PAW_PREV_WORKSPACE": focusedWorkspace.name])
+        emitWorkspaceChanged(prev: prevWorkspace)
     }
 
     /// Every preset arranged, the rest on the unassigned workspace, leftover empty extras closed.
@@ -783,7 +1174,7 @@ final class WindowManager {
         for ws in workspaces.values where ws !== to {
             for id in ws.allWindows {
                 guard let w = windows[id] else { continue }
-                let placed = presets.values.contains { $0.slot(for: w.app) != nil }
+                let placed = presets.values.contains { $0.slot(for: w.app, title: w.title) != nil }
                     || config.rules.contains { $0.workspace != nil && $0.matches(app: w.app, title: w.title) }
                 guard !placed else { continue }
                 let floating = ws.isFloating(id)
@@ -804,7 +1195,7 @@ final class WindowManager {
         var touched: [Workspace] = []
         for other in workspaces.values where other !== target {
             let ids = other.allWindows.filter { id in
-                !other.isFloating(id) && windows[id].map { preset.slot(for: $0.app) != nil } == true
+                !other.isFloating(id) && windows[id].map { preset.slot(for: $0.app, title: $0.title) != nil } == true
             }
             guard !ids.isEmpty else { continue }
             for id in ids {
@@ -814,7 +1205,8 @@ final class WindowManager {
             }
             touched.append(other)
         }
-        let list = target.allWindows.compactMap { id in windows[id].map { (id: id, app: $0.app) } }
+        let list = target.allWindows.compactMap { id in windows[id].map { (id: id, app: $0.app, title: $0.title) } }
+        recordUndo(target, kind: "arrange")
         target.arrange(preset, windows: list, area: area(of: target))
         layout(target, animated: true)
         for other in touched { layout(other, animated: true) }
@@ -823,10 +1215,12 @@ final class WindowManager {
 
     private func moveWindow(_ id: WindowID, to name: String, follow: Bool) {
         guard let from = workspaceOf(id), from.name != name, let w = windows[id] else { return }
+        recordUndo(from, kind: "move")
+        recordUndo(workspace(name), kind: "move")
         let floating = from.isFloating(id)
         from.remove(id)
         let to = workspace(name)
-        to.insert(id, area: area(of: to), floating: floating, slot: presets[name]?.slot(for: w.app))
+        to.insert(id, area: area(of: to), floating: floating, slot: presets[name]?.slot(for: w.app, title: w.title))
         to.focused = id
         if displayShowing(name) != nil { layout(to, animated: true) } else { hide(w, from: to) }
         if displayShowing(from.name) != nil { layout(from, animated: true) }
@@ -864,6 +1258,7 @@ final class WindowManager {
         let area = self.area(of: ws)
         let fid = focusedID
         func relayout() { layout(ws, animated: true) }
+        if Self.changesLayout(c) { recordUndo(ws, kind: Self.undoKind(c)) }
         switch c {
         case .focus(let target):
             switch target {
@@ -872,6 +1267,8 @@ final class WindowManager {
             case .stackPrev: if let id = fid, let n = ws.cycleStack(id, by: -1, wrap: config.focus.wrapStacks) { bringForward(n, in: ws) }
             case .stackFirst: if let id = fid, let t = ws.tile(of: id), let n = t.windows.first { focusWindow(n, warp: false) }
             case .stackLast: if let id = fid, let t = ws.tile(of: id), let n = t.windows.last { focusWindow(n, warp: false) }
+            case .back: stepHistory(-1)
+            case .forward: stepHistory(1)
             }
         case .swap(let d):
             guard let id = fid else { return }
@@ -962,7 +1359,11 @@ final class WindowManager {
             if let di = displayTarget(t) {
                 focusedDisplay = di
                 let target = workspace(displays[di].workspace)
-                focusWindow(target.focused ?? target.allWindows.first, warp: true)
+                if let id = target.focused.flatMap({ target.contains($0) ? $0 : nil }) ?? target.allWindows.first {
+                    focusWindow(id, warp: true)
+                } else {
+                    focusEmpty(di)
+                }
             }
         case .moveToDisplay(let t, let follow):
             if let id = fid, let di = displayTarget(t) { moveWindow(id, to: displays[di].workspace, follow: follow) }
@@ -974,7 +1375,22 @@ final class WindowManager {
             if name == "all" { arrangeAll() } else { arrange(name ?? ws.name) }
         case .exec(let cmd):
             Shell.run(cmd, env: [:])
+        case .undo:
+            undo(ws, redo: false)
+        case .redo:
+            undo(ws, redo: true)
+        case .find(let q):
+            if let id = bestMatch(q) { goTo(id) }
+        case .overview:
+            overview.toggle()
+        case .zoom(let inward):
+            if let id = fid { zoom(inward: inward, toward: id) }
         case .retile:
+            // Forget the minimum sizes learned from apps; they are measured again.
+            windowMins = [:]
+            overflowSuspects = [:]
+            ghosts = []
+            for w in workspaces.values { w.windowMins = [:] }
             layoutAll(animated: true)
         case .recover:
             recover()
@@ -1036,6 +1452,398 @@ final class WindowManager {
         layoutAll(animated: true)
     }
 
+    // MARK: - Undo
+
+    static func changesLayout(_ c: Command) -> Bool {
+        switch c {
+        case .swap, .swapStack, .warp, .stack, .unstack, .layout, .toggle, .balance, .rotate, .resize, .grid: return true
+        default: return false
+        }
+    }
+
+    static func undoKind(_ c: Command) -> String {
+        if case .resize = c { return "resize" }
+        return "command"
+    }
+
+    /// Remembers the workspace's tree before a change. Repeated resizes (holding a key) and seam
+    /// drags count as one change.
+    func recordUndo(_ ws: Workspace, kind: String) {
+        if kind != "command", let last = lastUndoRecord, last.name == ws.name, last.kind == kind,
+           Date().timeIntervalSince(last.at) < 1.0 {
+            lastUndoRecord = (ws.name, kind, Date())
+            return
+        }
+        lastUndoRecord = (ws.name, kind, Date())
+        var stack = undoStack[ws.name] ?? []
+        let snap = ws.snapshot()
+        if stack.last == snap { return }
+        stack.append(snap)
+        if stack.count > 50 { stack.removeFirst(stack.count - 50) }
+        undoStack[ws.name] = stack
+        redoStack[ws.name] = []
+    }
+
+    func undo(_ ws: Workspace, redo: Bool) {
+        var from = (redo ? redoStack : undoStack)[ws.name] ?? []
+        guard let snap = from.popLast() else { return }
+        var to = (redo ? undoStack : redoStack)[ws.name] ?? []
+        to.append(ws.snapshot())
+        if redo { redoStack[ws.name] = from; undoStack[ws.name] = to } else { undoStack[ws.name] = from; redoStack[ws.name] = to }
+        lastUndoRecord = nil
+        ws.restore(snap, area: area(of: ws))
+        layout(ws, animated: true)
+        if displayShowing(ws.name) != nil, let f = ws.focused { focusWindow(f, warp: false) }
+    }
+
+    // MARK: - Focus history and search
+
+    private func focusChanged(_ id: WindowID) {
+        runHook(config.hooks.windowFocused, ["PAW_WINDOW": "\(id)", "PAW_APP": windows[id]?.app ?? ""])
+        if let w = windows[id] {
+            publish("windowFocused", ["window": Int(id), "app": w.app, "title": w.title,
+                                      "workspace": workspaceOf(id).map { label($0.name) } ?? ""])
+        }
+        guard !navigatingHistory else { return }
+        if historyIndex >= 0, history.indices.contains(historyIndex), history[historyIndex] == id { return }
+        if historyIndex < history.count - 1 { history.removeSubrange((historyIndex + 1)...) }
+        history.removeAll { $0 == id }
+        history.append(id)
+        if history.count > 100 { history.removeFirst(history.count - 100) }
+        historyIndex = history.count - 1
+    }
+
+    /// `focus back|forward`: through the windows focused before, across workspaces.
+    private func stepHistory(_ step: Int) {
+        history.removeAll { windows[$0] == nil }
+        historyIndex = min(historyIndex, history.count - 1)
+        var i = historyIndex + step
+        while history.indices.contains(i), windows[history[i]] == nil { i += step }
+        guard history.indices.contains(i) else { return }
+        historyIndex = i
+        navigatingHistory = true
+        goTo(history[i])
+        navigatingHistory = false
+    }
+
+    /// Shows the window's workspace (if hidden), brings it forward in its stack and focuses it.
+    func goTo(_ id: WindowID) {
+        guard let ws = workspaceOf(id) else { return }
+        ws.focused = id
+        ws.activate(id)
+        if displayShowing(ws.name) == nil {
+            show(ws.name)
+        } else {
+            layout(ws, animated: false)
+        }
+        focusWindow(id, warp: true)
+    }
+
+    /// The window `find` goes to: app name first, then title, then letters in order; the most
+    /// recently focused wins a tie.
+    func bestMatch(_ q: String) -> WindowID? {
+        let ranked = windows.values.compactMap { w -> (WindowID, Double)? in
+            let s = Self.matchScore(q, app: w.app, title: w.title)
+            guard s > 0 else { return nil }
+            let recent = history.lastIndex(of: w.id).map { Double($0) / 1000 } ?? 0
+            return (w.id, s + recent)
+        }
+        return ranked.max { $0.1 < $1.1 }?.0
+    }
+
+    static func matchScore(_ q: String, app: String, title: String) -> Double {
+        let q = q.lowercased(), a = app.lowercased(), t = title.lowercased()
+        if a == q { return 6 }
+        if a.hasPrefix(q) { return 5 }
+        if a.contains(q) { return 4 }
+        if t.contains(q) { return 3 }
+        func subsequence(_ s: String) -> Bool {
+            var it = s.makeIterator()
+            return q.allSatisfy { c in while let n = it.next() { if n == c { return true } }; return false }
+        }
+        if subsequence(a) { return 2 }
+        if subsequence(t) { return 1 }
+        return 0
+    }
+
+    // MARK: - Putting windows back
+
+    private func remember(_ id: WindowID, for seconds: TimeInterval? = nil) {
+        guard let w = windows[id], let ws = workspaceOf(id) else { return }
+        let title = w.title
+        ghosts.removeAll { $0.app == w.app && $0.title == title }
+        var g = Ghost(app: w.app, title: title, workspace: ws.name, anchor: ws.anchor(of: id), floating: ws.isFloating(id))
+        if let seconds { g.expires = Date().addingTimeInterval(seconds) }
+        ghosts.insert(g, at: 0)
+        if ghosts.count > 40 { ghosts.removeLast(ghosts.count - 40) }
+    }
+
+    private func takeGhost(app: String, title: String) -> Ghost? {
+        ghosts.removeAll { $0.expires < Date() }
+        guard let i = ghosts.firstIndex(where: { $0.app == app && $0.title == title }) ?? ghosts.firstIndex(where: { $0.app == app })
+        else { return nil }
+        return ghosts.remove(at: i)
+    }
+
+    // MARK: - Events
+
+    func publish(_ event: String, _ data: [String: Any]) {
+        guard EventBus.shared.hasSubscribers else { return }
+        EventBus.shared.publish(event, data)
+    }
+
+    private func emitWorkspaceChanged(prev: String) {
+        let now = label(focusedWorkspace.name)
+        runHook(config.hooks.workspaceChanged, ["PAW_WORKSPACE": now, "PAW_PREV_WORKSPACE": prev])
+        publish("workspaceChanged", ["workspace": now, "prev": prev, "display": focusedDisplay + 1, "workspaces": query()])
+    }
+
+    /// Everything a new subscriber needs before the first event.
+    func snapshotEvent() -> [String: Any] {
+        [
+            "workspaces": query(),
+            "workspace": displays.isEmpty ? "" : label(focusedWorkspace.name),
+            "window": focusedID.map { Int($0) } ?? 0,
+            "mode": mode ?? "",
+            "setup": activeSetup ?? "",
+            "displays": displays.enumerated().map { i, d in
+                ["index": i + 1, "id": Int(d.id), "name": d.name, "workspace": label(d.workspace), "focused": i == focusedDisplay] as [String: Any]
+            },
+        ]
+    }
+
+    /// `layoutChanged` once tiles settle: every window's frame on the workspace.
+    private func scheduleLayoutEvent(_ name: String) {
+        guard EventBus.shared.hasSubscribers else { return }
+        layoutEventWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let di = displayShowing(name) else { return }
+            let ws = workspace(name)
+            let frames = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)
+            let tiles = frames.map { id, f in
+                ["window": Int(id), "x": f.minX, "y": f.minY, "w": f.width, "h": f.height] as [String: Any]
+            }.sorted { ($0["window"] as! Int) < ($1["window"] as! Int) }
+            publish("layoutChanged", ["workspace": label(name), "layout": ws.layout.rawValue, "tiles": tiles])
+        }
+        layoutEventWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: work)
+    }
+
+    private func showHUD(_ name: String, on di: Int) {
+        guard config.hud.workspace, displays.indices.contains(di), overview.isOpen == false else { return }
+        hud.style = indicators.style
+        let apps = workspace(name).allWindows.compactMap { windows[$0]?.app }
+        var unique: [String] = []
+        for a in apps where !unique.contains(a) { unique.append(a) }
+        hud.show(label: label(name), apps: unique, in: displays[di].area, icons: settings.icons, config: config,
+                 duration: config.hud.durationMs / 1000)
+    }
+
+    // MARK: - Dragging
+
+    /// The workspace and drop target under a point (AX coordinates), for a window being dragged.
+    func dropTarget(at p: CGPoint, dragging id: WindowID) -> (ws: Workspace, display: Int, target: DropTarget?)? {
+        guard let di = displays.firstIndex(where: { $0.frame.contains(p) }) else { return nil }
+        let ws = workspace(displays[di].workspace)
+        guard ws.layout.isTiled || ws.layout == .stack else { return (ws, di, nil) }
+        let mods = NSEvent.modifierFlags
+        let stackKey: NSEvent.ModifierFlags = switch config.mouse.stackModifier {
+        case "cmd": .command
+        case "ctrl": .control
+        case "shift": .shift
+        default: .option
+        }
+        let t = DropZones.target(at: p, in: ws, area: displays[di].area, gap: config.layout.gap, dragging: id,
+                                 stack: mods.contains(stackKey))
+        return (ws, di, t)
+    }
+
+    /// Drops a window (from any workspace) on `target` in `to`, then lays both out.
+    func drop(_ id: WindowID, on target: DropTarget?, in to: Workspace) {
+        guard let from = workspaceOf(id) else { return }
+        recordUndo(from, kind: "drop")
+        if from !== to { recordUndo(to, kind: "drop") }
+        if from !== to {
+            let floating = from.isFloating(id)
+            from.remove(id)
+            var t = target
+            if case .swap(let a)? = t { t = .stack(tile: a) }
+            if let t, !floating, to.move(id, to: t, area: area(of: to)) {
+            } else {
+                to.insert(id, area: area(of: to), floating: floating, slot: nil)
+            }
+            to.focused = id
+            if displayShowing(to.name) == nil, let w = windows[id] { hide(w, from: to) }
+            layout(from, animated: true)
+            layout(to, animated: true)
+        } else if let target {
+            to.move(id, to: target, area: area(of: to))
+            layout(to, animated: true)
+        } else {
+            layout(to, animated: true)
+        }
+        scheduleSave()
+    }
+
+    // MARK: - Seams
+
+    struct SeamInfo {
+        let key: String
+        let workspace: String
+        let split: ObjectIdentifier
+        let index: Int
+        let axis: Axis
+        let frame: CGRect
+        let splitFrame: CGRect
+    }
+
+    /// Seams between tiles on every shown workspace (AX coordinates).
+    func visibleSeams() -> [SeamInfo] {
+        guard config.mouse.seamHandles else { return [] }
+        var out: [SeamInfo] = []
+        for d in displays {
+            let ws = workspace(d.workspace)
+            guard ws.layout.isTiled, ws.zoomed == nil else { continue }
+            for s in TreeLayout.seams(ws, in: d.area, gap: config.layout.gap) {
+                out.append(SeamInfo(key: "\(ws.name):\(s.split.hashValue):\(s.index)", workspace: ws.name, split: s.split,
+                                    index: s.index, axis: s.axis, frame: s.frame, splitFrame: s.splitFrame))
+            }
+        }
+        return out
+    }
+
+    func seamBegan(_ s: SeamInfo) {
+        recordUndo(workspace(s.workspace), kind: "seam")
+    }
+
+    /// Moves a seam so it sits at `p` (AX), live.
+    func seamDragged(_ s: SeamInfo, to p: CGPoint) {
+        let ws = workspace(s.workspace)
+        guard let node = ws.splits.first(where: { ObjectIdentifier($0) == s.split }) else { return }
+        let r = s.splitFrame
+        let gaps = config.layout.gap * Double(node.children.count - 1)
+        let pos = s.axis == .horizontal ? (p.x - r.minX - config.layout.gap * (Double(s.index) + 0.5)) / max(1, r.width - gaps)
+                                        : (p.y - r.minY - config.layout.gap * (Double(s.index) + 0.5)) / max(1, r.height - gaps)
+        ws.setSeam(node, s.index, at: min(1, max(0, pos)), length: s.axis == .horizontal ? r.width : r.height)
+        layout(ws, animated: false)
+    }
+
+    func seamEnded(_ s: SeamInfo) {
+        layout(workspace(s.workspace), animated: false)
+        scheduleSave()
+    }
+
+    func seamEqualize(_ s: SeamInfo) {
+        let ws = workspace(s.workspace)
+        guard let node = ws.splits.first(where: { ObjectIdentifier($0) == s.split }) else { return }
+        recordUndo(ws, kind: "command")
+        ws.equalizeSeam(node, s.index)
+        layout(ws, animated: true)
+    }
+
+    // MARK: - Overview
+
+    struct OverviewWorkspace {
+        let name: String
+        let label: String
+        let display: Int
+        let visible: Bool
+        let focused: Bool
+        let layout: LayoutKind
+        /// Window frames relative to the workspace's whole tree (0…1), tiled ones first.
+        let windows: [OverviewWindow]
+        /// The whole tree's rect (AX): the display's area, or a larger canvas.
+        let area: CGRect
+        /// What's on screen when zoomed or on a canvas (relative, like the windows); nil: all of it.
+        let camera: CGRect?
+    }
+
+    struct OverviewWindow {
+        let id: WindowID
+        let app: String
+        let title: String
+        let frame: CGRect
+        let floating: Bool
+        /// Other windows in its stack, top one first (empty when alone).
+        let stack: [WindowID]
+        let isActive: Bool
+        let focused: Bool
+        /// On screen now (not outside a zoom or off a canvas's screen).
+        let inCamera: Bool
+    }
+
+    /// The workspaces each display owns, in number order, with every window's place.
+    func overviewModel() -> [OverviewWorkspace] {
+        numbered.map { name in
+            let ws = workspace(name)
+            let di = displayShowing(name) ?? homeDisplay(name) ?? focusedDisplay
+            let screen = displays.indices.contains(di) ? displays[di].area : CGRect(x: 0, y: 0, width: 1440, height: 900)
+            let area = TreeLayout.canvas(ws, in: screen, gap: config.layout.gap)
+            let frames = TreeLayout.windowFrames(ws, in: screen, gap: config.layout.gap, full: true)
+            let shown = ws.shownWindows
+            var camera: CGRect?
+            let fullFrames = TreeLayout.nodeFrames(ws, in: screen, gap: config.layout.gap, full: true)
+            var camRect = ws.shownRoot.flatMap { fullFrames[ObjectIdentifier($0)] }
+            if let s = ws.shownRoot, let r = ws.shownRange {
+                camRect = s.children[r].compactMap { fullFrames[ObjectIdentifier($0)] }.reduce(CGRect.null) { $0.union($1) }
+            }
+            if let s = ws.shownRoot, s !== ws.root || area != screen || ws.shownRange != nil, let f = camRect {
+                camera = CGRect(x: (f.minX - area.minX) / area.width, y: (f.minY - area.minY) / area.height,
+                                width: f.width / area.width, height: f.height / area.height)
+            }
+            var list: [OverviewWindow] = []
+            func rel(_ f: CGRect) -> CGRect {
+                CGRect(x: (f.minX - area.minX) / area.width, y: (f.minY - area.minY) / area.height,
+                       width: f.width / area.width, height: f.height / area.height)
+            }
+            for t in ws.tiles {
+                for id in t.windows {
+                    guard let w = windows[id], let f = frames[id] else { continue }
+                    list.append(OverviewWindow(id: id, app: w.app, title: w.title, frame: rel(f), floating: false,
+                                               stack: t.windows.count > 1 ? t.windows : [], isActive: t.activeWindow == id,
+                                               focused: ws.focused == id, inCamera: shown.contains(id)))
+                }
+            }
+            for id in ws.floating {
+                guard let w = windows[id] else { continue }
+                let f = w.isHidden ? (w.floatFrame ?? CGRect(x: area.midX - 300, y: area.midY - 200, width: 600, height: 400)) : w.frame
+                list.append(OverviewWindow(id: id, app: w.app, title: w.title, frame: rel(f), floating: true, stack: [],
+                                           isActive: true, focused: ws.focused == id, inCamera: true))
+            }
+            return OverviewWorkspace(name: name, label: label(name), display: di, visible: displayShowing(name) != nil,
+                                     focused: name == focusedWorkspace.name, layout: ws.layout, windows: list, area: area,
+                                     camera: camera)
+        }
+    }
+
+    var displayCount: Int { displays.count }
+    func displayName(_ i: Int) -> String { displays.indices.contains(i) ? displays[i].name : "" }
+    var focusedWorkspaceFocus: WindowID? { focusedID }
+    var focusedDisplayIndex: Int { focusedDisplay }
+    func displayFrame(_ i: Int) -> CGRect? { displays.indices.contains(i) ? displays[i].frame : nil }
+    func displayArea(_ i: Int) -> CGRect? { displays.indices.contains(i) ? displays[i].area : nil }
+    func workspaceNamed(_ name: String) -> Workspace { workspace(name) }
+
+    /// From the overview: send a window to a workspace without focusing anything.
+    func sendWindow(_ id: WindowID, to name: String) {
+        guard let from = workspaceOf(id), from.name != name, let w = windows[id] else { return }
+        recordUndo(from, kind: "move")
+        recordUndo(workspace(name), kind: "move")
+        let floating = from.isFloating(id)
+        from.remove(id)
+        let to = workspace(name)
+        to.insert(id, area: area(of: to), floating: floating, slot: presets[name]?.slot(for: w.app, title: w.title))
+        to.focused = id
+        if displayShowing(name) != nil { layout(to, animated: true) } else { hide(w, from: to) }
+        if displayShowing(from.name) != nil { layout(from, animated: true) }
+        scheduleSave()
+    }
+
+    func newWorkspaceFromOverview() -> String {
+        execute(.workspaceNew)
+        return focusedWorkspace.name
+    }
+
     // MARK: - Indicators, hooks, state
 
     func updateIndicators() {
@@ -1054,6 +1862,25 @@ final class WindowManager {
         }
         indicators.apply(stacks)
         if mode != nil { updateModeIsland() }
+        // Placeholders for windows too big for their tile.
+        var holders: [Placeholders.Item] = []
+        for d in displays {
+            let ws = workspace(d.workspace)
+            guard !windowMins.isEmpty, ws.layout.isTiled else { continue }
+            let frames = TreeLayout.windowFrames(ws, in: d.area, gap: config.layout.gap)
+            for t in ws.tiles {
+                guard let id = t.activeWindow, let m = windowMins[id], let r = frames[id], let w = windows[id],
+                      m.width > r.width + 2 || m.height > r.height + 2 else { continue }
+                holders.append(.init(id: id, app: w.app, title: w.title, frame: r, focused: ws.focused == id && focusedWorkspace === ws))
+            }
+        }
+        updateBorder(cramped: Set(holders.map(\.id)))
+        placeholders.apply(holders, style: indicators.style, actions: .init(
+            focus: { [weak self] id in self?.focusWindow(id, warp: false) },
+            zoom: { [weak self] id in self?.makeRoom(for: id) },
+            drag: { [weak self] id, p in self?.placeholderDragged(id, to: p) },
+            drop: { [weak self] id, p in self?.placeholderDropped(id, at: p) }))
+        seams.update()
     }
 
     private func runHook(_ cmd: String, _ env: [String: String]) {
@@ -1063,7 +1890,7 @@ final class WindowManager {
 
     /// Runs hooks.windowsChanged shortly after the workspace → apps picture changes.
     private func scheduleWindowsHook() {
-        guard !config.hooks.windowsChanged.isEmpty else { return }
+        guard !config.hooks.windowsChanged.isEmpty || EventBus.shared.hasSubscribers else { return }
         windowsHookWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
@@ -1073,6 +1900,7 @@ final class WindowManager {
             guard sig != lastWindowsSignature else { return }
             lastWindowsSignature = sig
             runHook(config.hooks.windowsChanged, [:])
+            publish("windowsChanged", ["workspaces": query()])
         }
         windowsHookWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
@@ -1081,14 +1909,21 @@ final class WindowManager {
     private func scheduleSave() {
         scheduleWindowsHook()
         saveWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            var map: [WindowID: String] = [:]
-            for (name, ws) in workspaces { for id in ws.allWindows { map[id] = name } }
-            StateFile.save(map)
-        }
+        let work = DispatchWorkItem { [weak self] in self?.saveState() }
         saveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
+    private func saveState() {
+        do {
+            var map: [WindowID: String] = [:]
+            var trees: [String: WorkspaceSnapshot] = [:]
+            for (name, ws) in workspaces where !ws.isEmpty {
+                for id in ws.allWindows { map[id] = name }
+                trees[name] = ws.snapshot()
+            }
+            StateFile.save(map, trees: trees)
+        }
     }
 
     /// Workspaces for `paw query`.
@@ -1097,6 +1932,7 @@ final class WindowManager {
             let ws = workspace(name)
             let pinned = homeDisplay(name)
             let home = pinned ?? displayShowing(name)
+            let shown = displayShowing(name).map { TreeLayout.windowFrames(ws, in: displays[$0].area, gap: config.layout.gap) } ?? [:]
             return ["name": label(name), "id": name, "visible": displayShowing(name) != nil, "focused": name == focusedWorkspace.name,
                     "displayID": home.map { Int(displays[$0].id) } ?? 0, "pinned": pinned != nil,
                     "arrangement": home.map { Self.arrangement(of: displays[$0].id) } ?? 0,
@@ -1104,32 +1940,55 @@ final class WindowManager {
                     "windows": ws.allWindows.compactMap { id -> [String: Any]? in
                         guard let w = windows[id] else { return nil }
                         let color = AppColors.shared.color(for: w.app, icons: config.icons)?.description ?? ""
+                        let f = shown[id] ?? w.frame
                         return ["id": Int(id), "app": w.app, "title": w.title, "color": color, "floating": ws.isFloating(id),
+                                "frame": ["x": f.minX, "y": f.minY, "w": f.width, "h": f.height], "onScreen": !w.isHidden,
                                 "stacked": (ws.tile(of: id)?.windows.count ?? 0) > 1, "focused": ws.focused == id]
                     }]
         }
     }
 }
 
-/// Which workspace each window was on, so a restart (or a crash) finds parked windows again.
+/// Which workspace each window was on and every workspace's tree, so a restart (or a crash)
+/// finds parked windows again and puts tiles back as they were.
 enum StateFile {
     static var url: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appending(path: AppPaths.bundleID).appending(path: "state.json")
     }
 
-    static func load() -> [WindowID: String] {
-        guard let data = try? Data(contentsOf: url), let d = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
-        var out: [WindowID: String] = [:]
-        for (k, v) in d { if let id = WindowID(k) { out[id] = v } }
+    struct State {
+        var windows: [WindowID: String] = [:]
+        var trees: [String: WorkspaceSnapshot] = [:]
+    }
+
+    private struct File: Codable {
+        var version = 2
+        var savedAt = Date().timeIntervalSince1970
+        var windows: [String: String]
+        var trees: [String: WorkspaceSnapshot]
+    }
+
+    static func load() -> State {
+        guard let data = try? Data(contentsOf: url) else { return State() }
+        var out = State()
+        if let f = try? JSONDecoder().decode(File.self, from: data) {
+            // Older than half a day (paw quit and the windows lived on without it): start fresh.
+            guard Date().timeIntervalSince1970 - f.savedAt < 12 * 3600 else { return State() }
+            for (k, v) in f.windows { if let id = WindowID(k) { out.windows[id] = v } }
+            out.trees = f.trees
+        } else if let d = try? JSONDecoder().decode([String: String].self, from: data) {
+            // paw 0.1: only the workspace of each window.
+            for (k, v) in d { if let id = WindowID(k) { out.windows[id] = v } }
+        }
         return out
     }
 
-    static func save(_ map: [WindowID: String]) {
+    static func save(_ map: [WindowID: String], trees: [String: WorkspaceSnapshot]) {
         var d: [String: String] = [:]
         for (k, v) in map { d["\(k)"] = v }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? JSONEncoder().encode(d).write(to: url)
+        try? JSONEncoder().encode(File(windows: d, trees: trees)).write(to: url, options: .atomic)
     }
 
     static func clear() { try? FileManager.default.removeItem(at: url) }
