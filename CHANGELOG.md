@@ -3,6 +3,19 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.4](https://github.com/pseudobun/paw/compare/v0.1.0-beta.3...v0.1.0-beta.4) (2026-11-10)
+
+
+### Features
+
+* **settings:** add an About page with the version, links and an author footer ([3d81699](https://github.com/pseudobun/paw/commit/3d81699dc908e72a422b2596566b0c65e4770062))
+
+
+### Bug Fixes
+
+* **cask:** use the current depends_on macos syntax ([#23](https://github.com/pseudobun/paw/issues/23)) ([d12e1f2](https://github.com/pseudobun/paw/commit/d12e1f210780d68b8823bccc71b2607e70e1b86f))
+* **overview:** show every app of a stack on the workspace cards ([#21](https://github.com/pseudobun/paw/issues/21)) ([2b88d23](https://github.com/pseudobun/paw/commit/2b88d2397e42f2a66312d2633c6c8f6210eddd33))
+
 ## [0.1.0-beta.3](https://github.com/pseudobun/paw/compare/v0.1.0-beta.2...v0.1.0-beta.3) (2026-11-10)
 
 
