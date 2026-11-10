@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let e = settings.error { Log.app.error("config: \(e, privacy: .public)") }
         for w in settings.warnings { Log.app.warning("config: \(w, privacy: .public)") }
         updateLoginItem(settings.config.openAtLogin)
+        MainActor.assumeIsolated { SettingsWindowController.shared.configDidChange() }
     }
 
     // MARK: - Menu bar
