@@ -30,6 +30,9 @@ final class EventBus {
     /// A client further behind than this many lines is dropped (it reconnects and gets a new
     /// snapshot) instead of holding paw up.
     private let maxPending = 512
+    /// Each subscriber costs a descriptor and a write per event; past this many, new ones are
+    /// turned away so a runaway script can't pile them up on the main thread.
+    static let maxSubscribers = 64
 
     var hasSubscribers: Bool { lock.withLock { !subscribers.isEmpty } }
 
@@ -41,24 +44,46 @@ final class EventBus {
         var tv = timeval(tv_sec: 2, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         let s = Subscriber(fd: fd, events: events)
-        lock.withLock { subscribers.append(s) }
-        send(s, "snapshot", snapshot)
+        let accepted = lock.withLock { () -> Bool in
+            guard subscribers.count < Self.maxSubscribers else { return false }
+            subscribers.append(s)
+            return true
+        }
+        guard accepted else {
+            Log.app.error("ipc: \(Self.maxSubscribers) subscribers already; refusing another")
+            DispatchQueue.global().async {
+                _ = IPC.writeAll(fd, Data("{\"error\":\"too many subscribers\"}\n".utf8))
+                close(fd)
+            }
+            return
+        }
+        guard let body = Self.encode(snapshot) else { return }
+        send(s, "snapshot", body)
     }
 
     /// Sends an event to everyone who wants it. Main thread.
     func publish(_ event: String, _ data: [String: Any]) {
-        let list = lock.withLock { subscribers }
-        for s in list where s.events.map({ $0.contains(event) || event == "snapshot" }) ?? true {
-            send(s, event, data)
-        }
+        let list = lock.withLock { subscribers }.filter { s in s.events.map { $0.contains(event) || event == "snapshot" } ?? true }
+        guard !list.isEmpty, let body = Self.encode(data) else { return }
+        for s in list { send(s, event, body) }
     }
 
-    private func send(_ s: Subscriber, _ event: String, _ data: [String: Any]) {
+    /// `data` as JSON, once per event however many subscribers there are.
+    private static func encode(_ data: [String: Any]) -> Data? {
+        try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys])
+    }
+
+    /// Writes `{"data":…,"event":…,"seq":…,"ts":…}` (keys sorted, as before) around the
+    /// already-encoded `body`.
+    private func send(_ s: Subscriber, _ event: String, _ body: Data) {
         guard !s.dead else { return }
         s.seq += 1
-        let line: [String: Any] = ["seq": s.seq, "ts": Date().timeIntervalSince1970, "event": event, "data": data]
-        guard var out = try? JSONSerialization.data(withJSONObject: line, options: [.sortedKeys]) else { return }
-        out.append(0x0a)
+        guard let name = try? JSONSerialization.data(withJSONObject: event, options: [.fragmentsAllowed]) else { return }
+        var out = Data("{\"data\":".utf8)
+        out.append(body)
+        out.append(Data(",\"event\":".utf8))
+        out.append(name)
+        out.append(Data(",\"seq\":\(s.seq),\"ts\":\(Date().timeIntervalSince1970)}\n".utf8))
         s.pending += 1
         if s.pending > maxPending {
             Log.app.error("subscriber \(s.fd) fell \(s.pending) events behind; dropping it")

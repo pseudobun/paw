@@ -31,7 +31,7 @@ public struct Stack: Equatable, Sendable {
     }
 
     /// Key that stays the same while the stack keeps its place, for reusing its panel.
-    public var key: String { "\(space)|\(Int(frame.minX))|\(Int(frame.minY))" }
+    public var key: String { "\(space)|\(Int(saturating: frame.minX))|\(Int(saturating: frame.minY))" }
     public var hasFocus: Bool { items.contains { $0.hasFocus } }
     public var activeIndex: Int? { items.firstIndex { $0.isActive } }
 }

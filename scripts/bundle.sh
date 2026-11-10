@@ -25,6 +25,9 @@ version="$PAW_VERSION"
 # Shown by Finder and Sparkle ("you have …"): the version without build metadata, e.g. 0.1.0-beta.2.
 short="${version%%+*}"
 build="${PAW_BUILD:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
+# These land in Info.plist: refuse anything that could close a <string> and add keys of its own.
+[[ "$version" =~ ^[0-9A-Za-z.+-]+$ ]] || { echo "bad version: $version" >&2; exit 1; }
+[[ "$build" =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "bad build number: $build" >&2; exit 1; }
 
 # dead_strip + strip -x: about half the size (local symbols aren't needed to run)
 arch_flags=""; for a in ${PAW_ARCHS:-arm64}; do arch_flags="$arch_flags --arch $a"; done
@@ -37,6 +40,8 @@ sparkle="$(find "$bin_dir" "$bin_dir/PackageFrameworks" -maxdepth 1 -name Sparkl
 # EdDSA key that signs updates (private half: the SPARKLE_PRIVATE_KEY secret and olympus' keychain).
 sparkle_key="${PAW_SPARKLE_PUBLIC_KEY-c9vc9GKhX9zHEAUrLSWfN4soCN0vUAhl68AXWjD06Uc=}"
 feed="${PAW_FEED_URL:-https://raw.githubusercontent.com/pseudobun/paw/appcast/appcast.xml}"
+# XML-escaped for the plist below (bundle id, feed and key come from the environment).
+xml() { local s="$1"; s="${s//&/&amp;}"; s="${s//</&lt;}"; s="${s//>/&gt;}"; printf '%s' "$s"; }
 
 app="$out/paw.app"
 rm -rf "$app"
@@ -53,20 +58,20 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleIdentifier</key><string>${bundle_id}</string>
+  <key>CFBundleIdentifier</key><string>$(xml "$bundle_id")</string>
   <key>CFBundleName</key><string>paw</string>
   <key>CFBundleDisplayName</key><string>paw</string>
   <key>CFBundleExecutable</key><string>paw</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>${short}</string>
-  <key>CFBundleVersion</key><string>${build}</string>
-  <key>PawVersion</key><string>${version}</string>
+  <key>CFBundleShortVersionString</key><string>$(xml "$short")</string>
+  <key>CFBundleVersion</key><string>$(xml "$build")</string>
+  <key>PawVersion</key><string>$(xml "$version")</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
-  <key>SUFeedURL</key><string>${feed}</string>
-  <key>SUPublicEDKey</key><string>${sparkle_key}</string>
+  <key>SUFeedURL</key><string>$(xml "$feed")</string>
+  <key>SUPublicEDKey</key><string>$(xml "$sparkle_key")</string>
   <key>SUEnableAutomaticChecks</key><true/>
   <key>NSHumanReadableCopyright</key><string>© Urban Vidovič</string>
 </dict>

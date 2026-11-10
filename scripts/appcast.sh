@@ -36,9 +36,16 @@ python3 - "$file" "$item" "$version" "$notes" "$notes_md" <<'PY'
 import html, re, sys
 path, item, version, link, notes_md = sys.argv[1:]
 
+def link_tag(m):
+    # The notes render in Sparkle's web view: only plain http(s) links, attribute escaped.
+    label, target = m.group(1), html.unescape(m.group(2)).strip()
+    if not re.match(r"https?://[^\s\"'<>]+$", target):
+        return label
+    return f'<a href="{html.escape(target, quote=True)}">{label}</a>'
+
 def inline(t):
     t = html.escape(t, quote=False)
-    t = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', t)
+    t = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", link_tag, t)
     t = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", t)
     return re.sub(r"`([^`]+)`", r"<code>\1</code>", t)
 
@@ -77,7 +84,7 @@ style = ("<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:
          "code{font:12px ui-monospace,monospace}a{color:#0a64d0}"
          "@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style>")
 if notes_md and open(notes_md).read().strip():
-    body = style + to_html(open(notes_md).read()) + f'<p><a href="{link}">Release on GitHub</a></p>'
+    body = style + to_html(open(notes_md).read()) + f'<p><a href="{html.escape(link, quote=True)}">Release on GitHub</a></p>'
     notes = "<description><![CDATA[" + body.replace("]]>", "]]&gt;") + "]]></description>"
 else:
     notes = f"<sparkle:releaseNotesLink>{link}</sparkle:releaseNotesLink>"

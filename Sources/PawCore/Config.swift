@@ -123,9 +123,7 @@ public struct PawConfig: Codable, Equatable, Sendable {
         }
 
         static func text(_ pattern: String, _ s: String) -> Bool {
-            if pattern.count > 2, pattern.hasPrefix("/"), pattern.hasSuffix("/") {
-                return s.range(of: String(pattern.dropFirst().dropLast()), options: [.regularExpression, .caseInsensitive]) != nil
-            }
+            if let body = Pattern.regexBody(pattern) { return Pattern.matches(body, s) }
             return s.localizedCaseInsensitiveContains(pattern)
         }
     }
@@ -603,7 +601,8 @@ public enum ConfigLoader {
         return out
     }
 
-    /// Problems a valid file can still have: bindings that don't parse, two keys on one binding.
+    /// Problems a valid file can still have: bindings that don't parse, two keys on one binding,
+    /// numbers out of range.
     public static func warnings(_ c: PawConfig) -> [String] {
         var w: [String] = []
         var seen: [KeySpec: String] = [:]
@@ -626,6 +625,7 @@ public enum ConfigLoader {
             if !["left", "right", "up", "down", "click"].contains(g.direction) { w.append("mouse.gestures[\(i)]: direction is left, right, up, down or click") }
             do { _ = try Command.parseAll(g.command) } catch { w.append("mouse.gestures[\(i)]: \(error)") }
         }
+        w += c.rangeWarnings
         return w
     }
 }

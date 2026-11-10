@@ -460,8 +460,8 @@ final class OverviewController {
             for w in content.windows where ids.contains(w.windowID) {
                 let cfg = SCStreamConfiguration()
                 let scale = min(1, 720 / max(1, w.frame.width))
-                cfg.width = max(32, Int(w.frame.width * scale * 2))
-                cfg.height = max(32, Int(w.frame.height * scale * 2))
+                cfg.width = min(8192, max(32, Int(saturating: w.frame.width * scale * 2)))
+                cfg.height = min(8192, max(32, Int(saturating: w.frame.height * scale * 2)))
                 cfg.showsCursor = false
                 cfg.ignoreShadowsSingleWindow = true
                 let filter = SCContentFilter(desktopIndependentWindow: w)
@@ -1118,7 +1118,7 @@ final class OverviewView: NSView {
 
     private func drawIcon(_ app: String, in r: CGRect) {
         let scale = window?.backingScaleFactor ?? 2
-        guard let img = AppColors.shared.image(for: app, side: Int((r.width * scale).rounded())) else {
+        guard let img = AppColors.shared.image(for: app, side: Int(saturating: (r.width * scale).rounded())) else {
             let c = style.colors
             draw(String(app.prefix(1)).uppercased(), in: r, font: Style.font(style.a.font, size: r.height * 0.6, weight: "bold"),
                  color: c.fg, align: .center, centerY: true)
