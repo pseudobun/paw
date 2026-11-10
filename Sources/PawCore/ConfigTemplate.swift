@@ -120,6 +120,8 @@ public enum ConfigTemplate {
 
           // Stack indicators: an island next to each stack with one app icon per window
           indicator: {
+            // the islands beside stacks, one icon per window
+            enabled: \(i.enabled),
             // "auto" (outside, on the side nearer the screen edge), "left", "right", "insideLeft", "insideRight"
             side: \(str(i.side.rawValue)),
             offsetX: \(num(i.offsetX)),

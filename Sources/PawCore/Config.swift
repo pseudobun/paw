@@ -286,6 +286,8 @@ public struct PawConfig: Codable, Equatable, Sendable {
     }
 
     public struct Indicator: Codable, Equatable, Sendable {
+        /// Show the islands beside stacks.
+        public var enabled = true
         /// "auto" (outside, on the side nearer the screen edge, like stackline), "left", "right",
         /// "insideLeft", "insideRight".
         public var side = IndicatorLayout.Side.auto
@@ -476,11 +478,11 @@ extension PawConfig.Hooks {
 
 extension PawConfig.Indicator {
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case side, offsetX, offsetY, width, cellHeight, gap, padding, titles, clickToFocus, scrollToCycle, unfocusedOpacity, fadeMs
+        case enabled, side, offsetX, offsetY, width, cellHeight, gap, padding, titles, clickToFocus, scrollToCycle, unfocusedOpacity, fadeMs
     }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.side, &side); try f(.offsetX, &offsetX); try f(.offsetY, &offsetY); try f(.width, &width)
+        try f(.enabled, &enabled); try f(.side, &side); try f(.offsetX, &offsetX); try f(.offsetY, &offsetY); try f(.width, &width)
         try f(.cellHeight, &cellHeight); try f(.gap, &gap); try f(.padding, &padding); try f(.titles, &titles)
         try f(.clickToFocus, &clickToFocus); try f(.scrollToCycle, &scrollToCycle)
         try f(.unfocusedOpacity, &unfocusedOpacity); try f(.fadeMs, &fadeMs)
