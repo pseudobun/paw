@@ -9,6 +9,8 @@ cask "paw" do
 
   depends_on macos: :sonoma
 
+  auto_updates true
+
   app "paw.app"
   binary "#{appdir}/paw.app/Contents/MacOS/paw"
 
