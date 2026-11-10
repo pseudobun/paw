@@ -6,6 +6,19 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.3</title>
+      <pubDate>Tue, 10 Nov 2026 17:27:07 +0000</pubDate>
+      <sparkle:version>66</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
+<ul>
+<li><b>overview:</b> add a canvas mode with every workspace side by side (<a href="https://github.com/pseudobun/paw/issues/18">#18</a>) (<a href="https://github.com/pseudobun/paw/commit/654a156eb2350f3cfec27c3e4f0826f1b8d99743">654a156</a>)</li>
+<li><b>settings:</b> show permissions with request buttons; fix the update window (<a href="https://github.com/pseudobun/paw/issues/20">#20</a>) (<a href="https://github.com/pseudobun/paw/commit/4986b5abd877bbc1e0e35ecbe3bafb05e646e5c9">4986b5a</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.3">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.3/paw-0.1.0-beta.3-macos.zip" type="application/octet-stream" sparkle:edSignature="ID4HjoiWbyZmpUfcoqq4OCl6F9pDm3vFYwiAyyS8ThByNWrOYSCcmj4Qgf8mOD7Ma9qoybQmyFRJy6I3FuqhAQ==" length="3189282"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.2</title>
       <pubDate>Tue, 10 Nov 2026 17:06:56 +0000</pubDate>
       <sparkle:version>63</sparkle:version>
