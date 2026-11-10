@@ -78,11 +78,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "rectangle.3.group", accessibilityDescription: "paw")
+        let image = Self.menuBarPaw() ?? NSImage(systemSymbolName: "pawprint.fill", accessibilityDescription: "paw")
+        image?.isTemplate = true
+        image?.accessibilityDescription = "paw"
+        item.button?.image = image
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
         statusItem = item
+    }
+
+    /// Resources/menubar.svg as an 18 pt template image (light facets → opaque, like hop's bunny).
+    static func menuBarPaw(points: Int = 18) -> NSImage? {
+        guard let url = Bundle.main.url(forResource: "menubar", withExtension: "svg"),
+              let svg = NSImage(contentsOf: url) else { return nil }
+        let image = NSImage(size: NSSize(width: points, height: points))
+        for scale in [1, 2] {
+            let px = points * scale
+            guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
+                                             samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+                  let context = NSGraphicsContext(bitmapImageRep: rep), let p = rep.bitmapData
+            else { return nil }
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = context
+            for _ in 0..<3 { svg.draw(in: NSRect(x: 0, y: 0, width: px, height: px)) }
+            NSGraphicsContext.restoreGraphicsState()
+            for i in stride(from: 0, to: rep.bytesPerRow * px, by: 4) where p[i + 3] > 0 {
+                let alpha = Double(p[i + 3]) / 255
+                let lightness = (Double(p[i]) + Double(p[i + 1]) + Double(p[i + 2])) / 765 / alpha
+                let keep = min(max((lightness - 0.3) / 0.4, 0), 1)
+                (p[i], p[i + 1], p[i + 2], p[i + 3]) = (0, 0, 0, UInt8((alpha * keep * 255).rounded()))
+            }
+            rep.size = image.size
+            image.addRepresentation(rep)
+        }
+        return image
     }
 
     @objc private func openSettings() {
