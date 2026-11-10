@@ -455,7 +455,7 @@ final class OverviewController {
     private func captureThumbnails() {
         guard thumbnailsEnabled else { return }
         let ids = Set(model.flatMap { $0.windows.map(\.id) })
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else { return }
             for w in content.windows where ids.contains(w.windowID) {
                 let cfg = SCStreamConfiguration()
@@ -466,11 +466,8 @@ final class OverviewController {
                 cfg.ignoreShadowsSingleWindow = true
                 let filter = SCContentFilter(desktopIndependentWindow: w)
                 guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg) else { continue }
-                let id = w.windowID
-                await MainActor.run {
-                    self?.thumbnails[id] = image
-                    self?.redraw()
-                }
+                self?.thumbnails[w.windowID] = image
+                self?.redraw()
             }
         }
     }

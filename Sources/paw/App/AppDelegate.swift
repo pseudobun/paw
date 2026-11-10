@@ -162,15 +162,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wm.run([.initiate(name)])
     }
 
-    /// "Up to date" and errors as the workspace HUD, which doesn't block like an alert.
+    /// Update answers as the workspace HUD, which doesn't block like an alert.
     private func showUpdateResult(_ state: Updater.State) {
-        if case .available = state { return }
         guard let wm, let display = wm.displays.first else { return }
         wm.hud.show(label: state.text, apps: [], in: display.area, icons: settings.icons,
                     config: settings.config, duration: 2.5)
     }
 
-    @objc private func checkForUpdates() { MainActor.assumeIsolated { Updater.shared.checkNow() } }
+    @objc private func checkForUpdates() { MainActor.assumeIsolated { Updater.shared.installNow() } }
     @objc private func initiateCurrent() { wm.run([.initiate(nil)]) }
     @objc private func reloadConfig() { settings.load() }
     @objc private func openConfig() { NSWorkspace.shared.open(settings.url) }
@@ -211,9 +210,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard available else {
                 return ["error": "this build has no updater (built from source?); use git pull && just install, or brew upgrade --cask pseudobun/tap/paw"]
             }
-            if rest != "status" { checkForUpdates() }
-            let state = MainActor.assumeIsolated { Updater.shared.state }
-            return ["state": state == .checking ? "checking" : "done", "message": state.text]
+            // "update": install now; "update check": look only; "update status": what's going on.
+            let (state, pending) = MainActor.assumeIsolated { () -> (Updater.State, String?) in
+                switch rest {
+                case "check": Updater.shared.checkOnly()
+                case "status": break
+                default: Updater.shared.installNow()
+                }
+                return (Updater.shared.state, Updater.shared.pending)
+            }
+            return ["state": state == .checking ? "checking" : "done", "message": state.text, "pending": pending ?? ""]
         case "status":
             let names = wm.displays.map { wm.label($0.workspace) }.joined(separator: ", ")
             return ["version": AppPaths.version, "pid": "\(ProcessInfo.processInfo.processIdentifier)",
@@ -256,7 +262,9 @@ extension AppDelegate: NSMenuDelegate {
             menu.addItem(item)
         }
         if MainActor.assumeIsolated({ Updater.shared.isAvailable }) {
-            let item = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+            let pending = MainActor.assumeIsolated { Updater.shared.pending }
+            let item = NSMenuItem(title: pending.map { "Update to paw \($0)" } ?? "Check for Updates…",
+                                  action: #selector(checkForUpdates), keyEquivalent: "")
             item.target = self
             item.isEnabled = MainActor.assumeIsolated { Updater.shared.state != .checking }
             menu.addItem(item)
