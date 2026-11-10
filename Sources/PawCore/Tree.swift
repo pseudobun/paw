@@ -180,6 +180,22 @@ public final class Workspace {
     public var canvasMin = CGSize.zero
     /// Sizes windows refused to go below (paw learns them when an app clamps its window).
     public var windowMins: [WindowID: CGSize] = [:]
+    /// Smallest a tile holding such a window gets when resizing (`layout.placeholderMin…`);
+    /// zero: no floor (placeholders off).
+    public var placeholderMin = CGSize.zero
+
+    /// How small resizing may make `t`: `canvasMin`, and for a tile whose window needs more
+    /// room (a placeholder), up to `placeholderMin`.
+    public func tileFloor(_ t: Node) -> CGSize {
+        var m = canvasMin
+        guard placeholderMin != .zero else { return m }
+        for w in t.windows {
+            guard let need = windowMins[w] else { continue }
+            m.width = max(m.width, min(placeholderMin.width, need.width))
+            m.height = max(m.height, min(placeholderMin.height, need.height))
+        }
+        return m
+    }
 
     /// The smallest a tile can be: `base`, or more when one of its windows needs more.
     public func tileMin(_ t: Node, base: CGSize) -> CGSize {
@@ -711,9 +727,11 @@ public final class Workspace {
     /// The smallest share each child of `p` can have at `length` points: its tiles at their
     /// minimum (`canvasMin`).
     func floors(_ p: Node, length: Double) -> [Double] {
-        guard length > 0, canvasMin != .zero else { return p.children.map { _ in Self.minFraction } }
+        guard length > 0, canvasMin != .zero || (placeholderMin != .zero && !windowMins.isEmpty) else {
+            return p.children.map { _ in Self.minFraction }
+        }
         return p.children.map { c in
-            let m = TreeLayout.minSize(c, min: canvasMin, gap: 0)
+            let m = TreeLayout.minSize(c, min: canvasMin, gap: 0, tile: tileFloor)
             return min(0.95, (p.axis == .horizontal ? m.width : m.height) / length)
         }
     }

@@ -260,7 +260,9 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Apps with a minimum size**: a window that won't shrink to its tile doesn't stick out over its
   neighbours; it waits out of sight and a placeholder with its icon and title takes the tile (click
   it to focus it, then move it with `ctrl+alt+arrows` or drag it somewhere roomier; double-click
-  zooms in until it fits). `retile` forgets the learned sizes
+  zooms in until it fits). Resizing stops before a placeholder gets smaller than
+  `layout.placeholderMinWidth`/`Height`; `layout.placeholders: false` lets such windows stick out
+  instead. `retile` forgets the learned sizes
 - **Zoom through the tree** (TrellisWM's camera, one level at a time): `hyper+j` shows the branch
   holding the focused window over the whole workspace, again one level deeper down to the window
   alone; `hyper+k` steps back out, animated. ⌥-scroll or ⌥-pinch over a window does the same
@@ -374,7 +376,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 
 | Section | Keys |
 |---|---|
-| `layout` | `default` (`stack`; also `bsp columns master float`), `minTileWidth` (0: off), `minTileHeight` (0), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10), `unassignedWorkspace` ("": windows of apps no preset places stay put; or a workspace) |
+| `layout` | `default` (`stack`; also `bsp columns master float`), `minTileWidth` (0: off), `minTileHeight` (0), `placeholders` (true: a placeholder for windows that won't shrink to their tile; false: they stick out), `placeholderMinWidth` (160), `placeholderMinHeight` (120), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10), `unassignedWorkspace` ("": windows of apps no preset places stay put; or a workspace) |
 | `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends) |
 | `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
 | `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |

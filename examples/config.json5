@@ -20,6 +20,12 @@
     // freely and only windows whose app refuses the size get a placeholder
     minTileWidth: 0,
     minTileHeight: 0,
+    // A window whose app won't shrink to its tile waits out of sight and a placeholder with its
+    // icon takes the tile; false: the window keeps its size and sticks out over its neighbours
+    placeholders: true,
+    // resizing stops before a placeholder gets smaller than this
+    placeholderMinWidth: 160,
+    placeholderMinHeight: 120,
   },
 
   focus: {
