@@ -38,6 +38,7 @@ final class Settings {
             config = try ConfigLoader.decode(raw)
             error = nil
             warnings = ConfigLoader.unknownKeys(raw).map { "unknown key \($0)" } + ConfigLoader.warnings(config)
+            config = config.clamped()
         } catch {
             self.error = "\(error)"
             Log.app.error("config: \(self.error ?? "", privacy: .public)")

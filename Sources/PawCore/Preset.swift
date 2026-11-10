@@ -67,10 +67,7 @@ public struct WorkspacePreset: Codable, Equatable, Sendable {
 /// App names in the config: plain names match exactly (any case), `/…/` is a regular expression.
 public enum AppMatcher {
     public static func matches(_ pattern: String, _ app: String) -> Bool {
-        if pattern.count > 2, pattern.hasPrefix("/"), pattern.hasSuffix("/") {
-            let re = String(pattern.dropFirst().dropLast())
-            return app.range(of: re, options: [.regularExpression, .caseInsensitive]) != nil
-        }
+        if let body = Pattern.regexBody(pattern) { return Pattern.matches(body, app) }
         return pattern.caseInsensitiveCompare(app) == .orderedSame
     }
 }
@@ -81,7 +78,7 @@ extension WorkspacePreset {
     public var tilesText: String {
         get {
             tiles.map { t in
-                t.apps.joined(separator: ", ") + (t.size.map { " *" + ($0 == $0.rounded() ? String(Int($0)) : String($0)) } ?? "")
+                t.apps.joined(separator: ", ") + (t.size.map { " *" + ($0 == $0.rounded() ? String(Int(saturating: $0)) : String($0)) } ?? "")
             }.joined(separator: " | ")
         }
         set {

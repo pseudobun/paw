@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var trustTimer: Timer?
     private var statusItem: NSStatusItem?
     private var ipc: IPC.Server?
+    private var ipcRetry: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if isAlreadyRunning() {
@@ -24,12 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let wm = self.wm else { close(fd); return }
             EventBus.shared.add(fd: fd, request: text, snapshot: wm.snapshotEvent())
         })
-        do {
-            try server.start()
-            ipc = server
-        } catch {
-            Log.app.error("ipc: \(String(describing: error), privacy: .public); the CLI cannot reach paw")
-        }
+        startIPC(server)
         // Window management needs Accessibility; wait for the grant instead of quitting.
         if AX.isTrusted {
             wm.start()
@@ -50,7 +46,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
     }
 
+    /// Starts the CLI socket, and keeps trying every 5 s while it can't, so a passing problem
+    /// (something squatting on the socket path) doesn't leave the CLI dead until a restart.
+    private func startIPC(_ server: IPC.Server) {
+        do {
+            try server.start()
+            ipc = server
+            ipcRetry?.invalidate()
+            ipcRetry = nil
+        } catch {
+            Log.app.error("ipc: \(String(describing: error), privacy: .public); the CLI cannot reach paw, retrying")
+            guard ipcRetry == nil else { return }
+            ipcRetry = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                guard let self, self.ipc == nil else { return }
+                self.startIPC(server)
+            }
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        ipcRetry?.invalidate()
         ipc?.stop()
         EventBus.shared.closeAll()
         wm?.restoreAll()
@@ -70,7 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// SIGTERM (pkill, launchd) and SIGINT quit through AppKit, so hidden windows come back.
+    /// SIGPIPE is ignored: a CLI client that hangs up before its reply is written must cost a
+    /// failed write (EPIPE), not the whole app. SO_NOSIGPIPE alone can't promise that, because
+    /// macOS refuses to set it on a socket whose peer already closed.
     private func installSignalHandlers() {
+        signal(SIGPIPE, SIG_IGN)
         for sig in [SIGTERM, SIGINT] {
             signal(sig, SIG_IGN)
             let s = DispatchSource.makeSignalSource(signal: sig, queue: .main)

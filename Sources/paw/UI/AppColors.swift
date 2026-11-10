@@ -9,6 +9,7 @@ final class AppColors {
 
     /// The app's own icon, for apps sketchybar-app-font has no glyph for.
     func image(for app: String, side: Int) -> CGImage? {
+        let side = min(max(side, 1), 1024)
         let key = "\(app)@\(side)"
         if let i = images[key] { return i }
         var i: CGImage?

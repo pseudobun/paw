@@ -94,7 +94,7 @@ final class PlaceholderView: NSView {
         let block = side + (lines > 0 ? 8 + 18 * lines : 0)
         var y = r.midY - block / 2
         let iconRect = CGRect(x: r.midX - side / 2, y: y, width: side, height: side)
-        if side >= 12, let img = AppColors.shared.image(for: item.app, side: Int(side * (window?.backingScaleFactor ?? 2))) {
+        if side >= 12, let img = AppColors.shared.image(for: item.app, side: Int(saturating: side * (window?.backingScaleFactor ?? 2))) {
             NSImage(cgImage: img, size: iconRect.size).draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 0.9,
                                                             respectFlipped: true, hints: nil)
         }
