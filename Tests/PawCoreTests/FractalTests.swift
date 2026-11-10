@@ -252,7 +252,6 @@ struct FractalTests {
     @Test func resizeStopsAtAPlaceholdersMinimum() {
         let ws = columns([1, 2])
         ws.layout = .bsp
-        ws.windowMins[2] = CGSize(width: 700, height: 300)
         ws.placeholderMin = CGSize(width: 160, height: 120)
         #expect(ws.resize(1, .east, by: 1000, area: area))
         #expect(frames(ws)[2]!.width == 160) // a placeholder, but no smaller

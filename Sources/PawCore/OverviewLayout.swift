@@ -40,8 +40,10 @@ public struct OverviewLayout: Equatable, Sendable {
         // 18 pt above the cards for their labels.
         rail = CGRect(x: bounds.minX + m, y: railTop, width: bounds.width - 2 * m, height: cardH + 18)
         footer = CGRect(x: bounds.minX + m, y: bounds.maxY - m - 18, width: bounds.width - 2 * m, height: 18)
-        let room = CGRect(x: bounds.minX + m * 2, y: rail.maxY + 28, width: bounds.width - m * 4,
-                          height: max(40, footer.minY - 20 - (rail.maxY + 28)))
+        // Room between the cards and the stage for the stage's header.
+        let headroom: CGFloat = 60
+        let room = CGRect(x: bounds.minX + m * 2, y: rail.maxY + headroom, width: bounds.width - m * 4,
+                          height: max(40, footer.minY - 20 - (rail.maxY + headroom)))
         stage = Self.fit(aspect: aspect, in: room)
     }
 

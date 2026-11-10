@@ -671,7 +671,7 @@ final class OverviewView: NSView {
         let n = Set(ws.windows.map(\.id)).count
         let head = NSMutableAttributedString(attributedString: style.text("Workspace \(ws.label)", ws.focused ? c.accent : c.fg, font: style.bold))
         head.append(style.text("   \(ws.layout.rawValue) · \(n) window\(n == 1 ? "" : "s")" + (ws.visible ? " · on screen" : ""), c.muted))
-        drawAttributed(head, in: CGRect(x: stage.minX - 8, y: stage.minY - 30, width: stage.width, height: 18), align: .left, centerY: false)
+        drawAttributed(head, in: CGRect(x: stage.minX - 8, y: stage.minY - 40, width: stage.width, height: 18), align: .left, centerY: false)
         if ws.windows.isEmpty {
             draw("Empty", in: stage, font: Style.font(style.a.font, size: 16, weight: "medium"),
                  color: c.dim, align: .center, centerY: true)

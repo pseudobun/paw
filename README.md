@@ -260,7 +260,7 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Apps with a minimum size**: a window that won't shrink to its tile doesn't stick out over its
   neighbours; it waits out of sight and a placeholder with its icon and title takes the tile (click
   it to focus it, then move it with `ctrl+alt+arrows` or drag it somewhere roomier; double-click
-  zooms in until it fits). Resizing stops before a placeholder gets smaller than
+  zooms in until it fits). Resizing stops before any tile gets smaller than
   `layout.placeholderMinWidth`/`Height`; `layout.placeholders: false` lets such windows stick out
   instead. `retile` forgets the learned sizes
 - **Zoom through the tree** (TrellisWM's camera, one level at a time): `hyper+j` shows the branch

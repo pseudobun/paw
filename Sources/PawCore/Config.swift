@@ -57,8 +57,7 @@ public struct PawConfig: Codable, Equatable, Sendable {
         /// A window whose app won't shrink to its tile waits out of sight and a placeholder takes
         /// the tile. false: the window keeps its size and sticks out over its neighbours.
         public var placeholders = true
-        /// Resizing stops before a placeholder's tile gets smaller than this (or the window's own
-        /// minimum, when that is smaller).
+        /// Resizing stops before a tile (and so a placeholder) gets smaller than this.
         public var placeholderMinWidth = 160.0
         public var placeholderMinHeight = 120.0
         /// Where `initiate` and setup switches put windows of apps no preset or rule places:
