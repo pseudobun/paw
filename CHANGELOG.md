@@ -3,6 +3,20 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.6](https://github.com/pseudobun/paw/compare/v0.1.0-beta.5...v0.1.0-beta.6) (2026-11-10)
+
+
+### Features
+
+* **updates:** update silently in the background ([#32](https://github.com/pseudobun/paw/issues/32)) ([9a4a577](https://github.com/pseudobun/paw/commit/9a4a577fde31e23fec13c5548a889f3804749430))
+
+
+### Bug Fixes
+
+* address the 2026-11-10 security audit ([#27](https://github.com/pseudobun/paw/issues/27)) ([c00f134](https://github.com/pseudobun/paw/commit/c00f134ba1104dd955150940ff2ff2f18fc34d11))
+* focus placeholders when following the mouse ([#30](https://github.com/pseudobun/paw/issues/30)) ([d24c8ce](https://github.com/pseudobun/paw/commit/d24c8ced383c8094184965378db97cd611b9e645))
+* raise restored placeholders after toggling full screen ([#31](https://github.com/pseudobun/paw/issues/31)) ([e043891](https://github.com/pseudobun/paw/commit/e0438911d82b730d3b8f274efbb20ac0af7418bf))
+
 ## [0.1.0-beta.5](https://github.com/pseudobun/paw/compare/v0.1.0-beta.4...v0.1.0-beta.5) (2026-11-10)
 
 
