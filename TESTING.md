@@ -54,6 +54,10 @@
 - [ ] `hyper+o` / `hyper+i` go back and forward through focused windows, switching workspaces; `paw find zed` goes to Zed
 - [ ] `paw quit` → every window back on screen; start again → windows return to their workspaces
 
+## Displays
+
+- [ ] Unplug a display whose workspaces have windows: preset apps land on their preset workspace, the rest on `+N` (first in the bar); `paw workspace +N` goes there; moving the last one out makes `+N` disappear; empty workspaces of that display are gone
+
 ## Overview
 
 - [ ] `border.enabled: true` (Settings → Look → Focus border) → a line around the focused window; follows focus, swaps, stacks, floating windows; around a focused placeholder too; colour/width change live

@@ -429,6 +429,12 @@ matches by pattern.
 
 ### Several displays
 
+When displays are unplugged, the workspaces that lived on them (pinned there by a setup, made there
+with `workspace new`, or shown there) are cleared out: windows a preset in the new arrangement
+places go to their preset workspace, every other window waits on the **side** workspace, which the
+bar shows first as `+N` (N windows still to sort). Move them where you like; the side workspace
+disappears once it's empty. Workspaces that only existed for that display go away.
+
 Each display shows one workspace. Without setups the workspaces are shared: switching shows one on
 the focused display, or focuses the display that already shows it. With a setup, its presets pin
 workspaces to displays (`display: "DELL"`), every bar shows only its display's workspaces, and
