@@ -63,7 +63,8 @@ PLIST
 ts="--timestamp=none"; [ "${PAW_TIMESTAMP:-}" = 1 ] && ts="--timestamp"
 identity="${PAW_SIGN_IDENTITY:-}"
 if [ -z "$identity" ]; then
-  identity="$(security find-identity -v -p codesigning 2>/dev/null | grep -oE '"(Developer ID Application|Apple Development)[^"]*"' | head -1 | tr -d '"' || true)"
+  # By hash: the same certificate in two keychains makes its name ambiguous to codesign.
+  identity="$(security find-identity -v -p codesigning 2>/dev/null | grep -E '"(Developer ID Application|Apple Development)' | head -1 | awk '{print $2}' || true)"
 fi
 if [ -z "$identity" ] && security find-identity -p codesigning 2>/dev/null | grep -q "paw Local Signing"; then
   identity="paw Local Signing"
