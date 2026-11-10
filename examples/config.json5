@@ -195,6 +195,12 @@
 
   openAtLogin: false,
 
+  // New versions from GitHub releases. Homebrew installs can also `brew upgrade --cask pseudobun/tap/paw`.
+  updates: {
+    check: true, // look once a day and offer to install
+    automatic: false, // install without asking; paw relaunches
+  },
+
   // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.
   // Commands (also `paw <command>`; chain with ";"):
   //   focus west|east|north|south|stack.next|stack.prev   swap|warp|stack <dir>   swap stack.next|stack.prev   unstack [all]

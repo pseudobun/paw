@@ -112,7 +112,9 @@ Press `ctrl+←/→` to move focus, `hyper+w` for bsp, `hyper+tab` for the overv
 </table>
 
 **Start at login:** set `openAtLogin: true` in the config.<br>
-**Upgrade:** `brew upgrade --cask pseudobun/tap/paw`.<br>
+**Updates:** paw checks once a day and offers new versions; menu bar → *Check for Updates…* or
+`paw update` looks right away, `updates.automatic: true` installs them without asking, and
+`updates.check: false` turns it off. Or `brew upgrade --cask pseudobun/tap/paw`.<br>
 **Uninstall:** `brew uninstall --cask pseudobun/tap/paw` (add `--zap` to remove the config and state too).
 
 Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
@@ -389,6 +391,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `overview` | `thumbnails` (`auto`: when Screen Recording is allowed; `on` asks for it; `off`) |
 | `hud` | `workspace` (true), `durationMs` (600) |
 | `border` | `enabled` (false), `color` (`0xccead186`), `width` (2), `radius` (12), `offset` (2) |
+| `updates` | `check` (true: look once a day and offer new versions), `automatic` (false: install without asking) |
 | `openAtLogin` | |
 
 App names are what macOS shows in the menu bar (`paw query` lists the open ones); `/regex/`
@@ -504,7 +507,7 @@ Bindings and the CLI take the same commands; chain several with `;`
 | `exec <shell command>` | Run something (`exec open -a Terminal`) |
 
 paw itself: `paw status`, `paw query [--json]`, `paw subscribe [events] [--reconnect] [--exec cmd]`, `paw setups [--json]`, `paw settings`,
-`paw hide|show` (indicators), `paw reload`, `paw config path|check|show|template|format`,
+`paw hide|show` (indicators), `paw update`, `paw reload`, `paw config path|check|show|template|format`,
 `paw icon <app>`, `paw color <app>`, `paw preview out.png`, `paw quit`.
 
 ## Development
@@ -522,12 +525,15 @@ template. Manual checks: [TESTING.md](TESTING.md).
 
 ### Releasing
 
-The version lives in [`VERSION`](VERSION). To ship one: bump `VERSION`, add its section to
-[`CHANGELOG.md`](CHANGELOG.md), commit, then `just release`. That tags `vX.Y.Z` and pushes it;
-the [release workflow](.github/workflows/release.yml) tests, builds a universal `paw.app`,
-signs it with Developer ID, notarizes and staples it, publishes the GitHub release and updates
-the cask in [`pseudobun/homebrew-tap`](https://github.com/pseudobun/homebrew-tap). Versions with
-a suffix (`0.2.0-beta.1`) are published as pre-releases.
+Releases come from [Conventional Commits](https://www.conventionalcommits.org) on `main`.
+[release-please](https://github.com/googleapis/release-please) keeps a release PR open that
+bumps [`VERSION`](VERSION) and writes [`CHANGELOG.md`](CHANGELOG.md): `fix:` bumps the beta
+number, `feat:` too (until 1.0), `feat!:` the minor version. Merging that PR tags the version and
+runs the [release workflow](.github/workflows/release.yml): tests, a universal `paw.app`, Developer
+ID signing, notarization, the GitHub release, the Sparkle appcast (branch `appcast`) and the
+cask in [`pseudobun/homebrew-tap`](https://github.com/pseudobun/homebrew-tap).
+
+`just release [tag]` runs the release workflow by hand, e.g. to rebuild a tag.
 
 ## Contributing
 

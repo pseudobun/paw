@@ -10,6 +10,7 @@ enum CLI {
         "show": { _ in post("show") },
         "quit": { _ in post("quit") },
         "settings": { _ in post("settings") },
+        "update": update,
         "reload": reload,
         "status": status,
         "query": query,
@@ -78,9 +79,17 @@ enum CLI {
           color <app name>    the app's colour (0xAARRGGBB, from its icon or icons.colors)
           preview <out.png> [--fonts=DIR]   render stack indicators with your config
           settings            open the settings window (also in the menu bar icon)
+          update              look for a new version now (Homebrew: brew upgrade --cask pseudobun/tap/paw)
           quit                quit (puts hidden windows back on screen)
           version
         """)
+        return 0
+    }
+
+    static func update(_ args: [String]) -> Int32 {
+        guard let r = request("update", timeout: 10) else { return 1 }
+        if let e = r["error"] as? String, !e.isEmpty { fputs("paw: \(e)\n", stderr); return 1 }
+        print("paw \(AppPaths.version): checking for updates (see the paw window)")
         return 0
     }
 

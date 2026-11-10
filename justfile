@@ -88,16 +88,10 @@ release-zip:
     PAW_ARCHS="arm64 x86_64" scripts/bundle.sh build.noindex/release
     cd build.noindex/release && ditto -c -k --sequesterRsrc --keepParent paw.app "paw-$(tr -d '[:space:]' < ../../VERSION)-macos.zip"
 
-# Tag VERSION and push it: the release workflow builds, notarizes, publishes and updates the tap
-release:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    v="$(tr -d '[:space:]' < VERSION)"
-    [ -z "$(git status --porcelain)" ] || { echo "working tree not clean"; exit 1; }
-    [ "$(git branch --show-current)" = main ] || { echo "not on main"; exit 1; }
-    grep -q "^## \[$v\]" CHANGELOG.md || { echo "CHANGELOG.md has no [$v] section"; exit 1; }
-    git tag -s "v$v" -m "paw $v"
-    git push origin main "v$v"
+# Build and publish a version by hand (normally release-please does this when its PR merges)
+release tag=("v" + `tr -d '[:space:]' < VERSION`):
+    gh workflow run release.yml -f tag={{tag}}
+    @echo "started; gh run watch to follow it"
 
 # Move data from the pre-0.1 bundle id (dev.paw.app) to com.pseudobun.paw
 _migrate-legacy:

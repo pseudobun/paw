@@ -1,12 +1,9 @@
 # Changelog
 
-All notable changes to paw are listed here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and paw uses
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
+come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
-## [Unreleased]
-
-## [0.1.0-beta.1] - 2026-11-10
+## [0.1.0-beta.1](https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.1) (2026-11-10)
 
 First public beta.
 
@@ -25,11 +22,11 @@ First public beta.
 - Key bindings and key modes in a commented JSON5 config, plus a Settings window
 - A CLI for every command over a private Unix socket, and `paw subscribe` for status bars
 - Homebrew cask: `brew install --cask pseudobun/tap/paw`
+- Updates through Sparkle: a daily check that offers new versions (`updates.check`), silent
+  installs if you want them (`updates.automatic`), "Check for Updates…" in the menu bar and
+  `paw update`
 
 ### Changed
 
 - Bundle identifier is now `com.pseudobun.paw` (was `dev.paw.app`). Grant Accessibility again
   after upgrading from a local build; `just install` moves the old state over
-
-[Unreleased]: https://github.com/pseudobun/paw/compare/v0.1.0-beta.1...HEAD
-[0.1.0-beta.1]: https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.1

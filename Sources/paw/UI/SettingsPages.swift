@@ -198,10 +198,14 @@ enum SettingsCatalog {
     static var pages: [SettingsPage] { groups.flatMap(\.pages) }
 
     static var general: SettingsPage {
-        SettingsPage(id: "general", title: "General", subtitle: "Startup and the config file.",
+        SettingsPage(id: "general", title: "General", subtitle: "Startup, updates and the config file.",
                      symbol: "gearshape.fill", color: Theme.neutral, sections: [
             SettingsSection("Startup", [
                 f(\.openAtLogin, "openAtLogin", "Open at login", .toggle, "Only for the installed paw.app."),
+            ]),
+            SettingsSection("Updates", [
+                f(\.updates.check, "updates.check", "Check for updates", .toggle, "Once a day; offers new versions from GitHub."),
+                f(\.updates.automatic, "updates.automatic", "Install automatically", .toggle, "Without asking; paw relaunches."),
             ]),
             SettingsSection("Config file", [
                 .info(SettingsInfo(label: "Open in editor", help: "Everything here is saved to config.json5 at once; edits there apply here too.",

@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         updateLoginItem(settings.config.openAtLogin)
+        MainActor.assumeIsolated { Updater.shared.start(settings.config.updates) }
         setUpStatusItem()
         Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
     }
@@ -82,7 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let e = settings.error { Log.app.error("config: \(e, privacy: .public)") }
         for w in settings.warnings { Log.app.warning("config: \(w, privacy: .public)") }
         updateLoginItem(settings.config.openAtLogin)
-        MainActor.assumeIsolated { SettingsWindowController.shared.configDidChange() }
+        MainActor.assumeIsolated {
+            Updater.shared.apply(settings.config.updates)
+            SettingsWindowController.shared.configDidChange()
+        }
     }
 
     // MARK: - Menu bar
@@ -136,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wm.run([.initiate(name)])
     }
 
+    @objc private func checkForUpdates() { MainActor.assumeIsolated { Updater.shared.checkNow() } }
     @objc private func initiateCurrent() { wm.run([.initiate(nil)]) }
     @objc private func reloadConfig() { settings.load() }
     @objc private func openConfig() { NSWorkspace.shared.open(settings.url) }
@@ -171,6 +176,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { NSApp.terminate(nil) }
         case "settings":
             openSettings()
+        case "update":
+            let available = MainActor.assumeIsolated { Updater.shared.isAvailable }
+            guard available else {
+                return ["error": "this build has no updater (built from source?); use git pull && just install, or brew upgrade --cask pseudobun/tap/paw"]
+            }
+            checkForUpdates()
         case "status":
             let names = wm.displays.map { wm.label($0.workspace) }.joined(separator: ", ")
             return ["version": AppPaths.version, "pid": "\(ProcessInfo.processInfo.processIdentifier)",
@@ -212,7 +223,14 @@ extension AppDelegate: NSMenuDelegate {
             item.target = self
             menu.addItem(item)
         }
+        if MainActor.assumeIsolated({ Updater.shared.isAvailable }) {
+            let item = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+            item.target = self
+            item.isEnabled = MainActor.assumeIsolated { Updater.shared.canCheck }
+            menu.addItem(item)
+        }
         menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "paw \(AppPaths.version)", action: nil, keyEquivalent: ""))
         let quit = NSMenuItem(title: "Quit paw", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)

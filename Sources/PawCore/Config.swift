@@ -33,6 +33,8 @@ public struct PawConfig: Codable, Equatable, Sendable {
     public var initiate = Initiate()
     /// Start paw when you log in (only for the installed paw.app).
     public var openAtLogin = false
+    /// New versions from GitHub releases (Sparkle).
+    public var updates = Updates()
 
     public init() {}
 
@@ -262,6 +264,14 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public init() {}
     }
 
+    public struct Updates: Codable, Equatable, Sendable {
+        /// Look for a new version once a day.
+        public var check = true
+        /// Download and install new versions without asking (paw relaunches by itself).
+        public var automatic = false
+        public init() {}
+    }
+
     public struct HUD: Codable, Equatable, Sendable {
         /// Flash the workspace's number and apps when it changes.
         public var workspace = true
@@ -352,13 +362,14 @@ struct Fields<K: CodingKey> {
 
 extension PawConfig {
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case layout, focus, animation, bindings, modes, workspaces, setups, rules, indicator, appearance, icons, hooks, mouse, overview, hud, border, initiate, openAtLogin
+        case layout, focus, animation, bindings, modes, workspaces, setups, rules, indicator, appearance, icons, hooks, mouse, overview, hud, border, initiate, openAtLogin, updates
     }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.layout, &layout); try f(.focus, &focus); try f(.animation, &animation); try f(.bindings, &bindings); try f(.modes, &modes)
         try f(.workspaces, &workspaces); try f(.setups, &setups); try f(.rules, &rules); try f(.indicator, &indicator); try f(.appearance, &appearance)
         try f(.icons, &icons); try f(.hooks, &hooks); try f(.mouse, &mouse); try f(.overview, &overview); try f(.hud, &hud); try f(.border, &border); try f(.initiate, &initiate); try f(.openAtLogin, &openAtLogin)
+        try f(.updates, &updates)
     }
 }
 
@@ -403,6 +414,14 @@ extension PawConfig.Overview {
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.thumbnails, &thumbnails)
+    }
+}
+
+extension PawConfig.Updates {
+    enum CodingKeys: String, CodingKey, CaseIterable { case check, automatic }
+    public init(from decoder: Decoder) throws {
+        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        try f(.check, &check); try f(.automatic, &automatic)
     }
 }
 
@@ -555,6 +574,7 @@ public enum ConfigLoader {
             "overview": Set(PawConfig.Overview.CodingKeys.allCases.map(\.rawValue)),
             "hud": Set(PawConfig.HUD.CodingKeys.allCases.map(\.rawValue)),
             "border": Set(PawConfig.Border.CodingKeys.allCases.map(\.rawValue)),
+            "updates": Set(PawConfig.Updates.CodingKeys.allCases.map(\.rawValue)),
         ]
         let top = Set(PawConfig.CodingKeys.allCases.map(\.rawValue))
         let colorKeys = Set(PawConfig.Colors.CodingKeys.allCases.map(\.rawValue))

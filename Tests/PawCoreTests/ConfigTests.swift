@@ -26,6 +26,14 @@ struct ConfigTests {
         #expect(c.bindings["ctrl+left"] == "focus west")
     }
 
+    @Test func updatesDefaultToCheckAndAsk() throws {
+        #expect(PawConfig().updates == .init())
+        #expect(PawConfig().updates.check && !PawConfig().updates.automatic)
+        let c = try load("{ updates: { automatic: true } }")
+        #expect(c.updates.check && c.updates.automatic)
+        #expect(ConfigLoader.unknownKeys(Data("{ updates: { auto: true } }".utf8)) == ["updates.auto"])
+    }
+
     @Test func errorsNameThePath() {
         do {
             _ = try load("{ appearance: { colors: { fg: 'purple' } } }")
