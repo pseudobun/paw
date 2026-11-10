@@ -3,6 +3,13 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.7](https://github.com/pseudobun/paw/compare/v0.1.0-beta.6...v0.1.0-beta.7) (2026-11-10)
+
+
+### Bug Fixes
+
+* recover placeholders when window minimums shrink ([#29](https://github.com/pseudobun/paw/issues/29)) ([79f7904](https://github.com/pseudobun/paw/commit/79f79043bd7a5adf535610e8f13587afe3eb9eca))
+
 ## [0.1.0-beta.6](https://github.com/pseudobun/paw/compare/v0.1.0-beta.5...v0.1.0-beta.6) (2026-11-10)
 
 
