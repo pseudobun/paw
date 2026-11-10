@@ -77,3 +77,7 @@ examples: build
 # Follow paw's log
 log:
     log stream --level info --predicate 'subsystem == "dev.paw.app"'
+
+# Re-render Resources/AppIcon.icns from Resources/icon/paw.svg (low-poly paw, hop's tile)
+icon:
+    swift scripts/make-icon.swift
