@@ -56,6 +56,8 @@
 
 ## Displays
 
+- [ ] `hyper+.` / `hyper+,` move the focused workspace with its windows to the next / previous display; the display it left shows its next workspace; the bar follows
+- [ ] Overview: drag a workspace card onto another display → "Move workspace N here", drop → it moves
 - [ ] Unplug a display whose workspaces have windows: preset apps land on their preset workspace, the rest on `+N` (first in the bar); `paw workspace +N` goes there; moving the last one out makes `+N` disappear; empty workspaces of that display are gone
 
 ## Overview

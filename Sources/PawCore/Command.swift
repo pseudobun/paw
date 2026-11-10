@@ -29,6 +29,8 @@ public enum Command: Equatable, Sendable {
     case moveTo(WorkspaceTarget, follow: Bool)
     case focusDisplay(DisplayTarget)
     case moveToDisplay(DisplayTarget, follow: Bool)
+    /// Moves the focused workspace, windows and all, to another display (it shows there).
+    case moveWorkspace(DisplayTarget)
     case arrange(String?)
     /// Open the preset apps and arrange everything; with a name, use that setup whatever
     /// displays are connected.
@@ -144,6 +146,7 @@ public enum Command: Equatable, Sendable {
         case "move-to", "send": return .moveTo(try workspace(0), follow: follow)
         case "display": return .focusDisplay(try display(0))
         case "move-to-display": return .moveToDisplay(try display(0), follow: follow)
+        case "move-workspace": return .moveWorkspace(try display(0))
         case "arrange": return .arrange(args.first)
         case "initiate", "init", "reset": return .initiate(args.first)
         case "mode":

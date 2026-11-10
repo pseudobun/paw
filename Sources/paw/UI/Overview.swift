@@ -40,6 +40,8 @@ final class OverviewController {
     }
 
     private(set) var drag: Drag?
+    /// A workspace card being dragged towards another display.
+    private(set) var cardDrag: (name: String, label: String, point: CGPoint, display: Int?)?
 
     init(wm: WindowManager) { self.wm = wm }
 
@@ -340,6 +342,35 @@ final class OverviewController {
         redraw()
     }
 
+    func beginCardDrag(_ name: String, at p: CGPoint) {
+        guard let ws = model.first(where: { $0.name == name }) else { return }
+        cardDrag = (name, ws.label, p, nil)
+        updateCardDrag(p)
+    }
+
+    /// `p` in AX coordinates.
+    func updateCardDrag(_ p: CGPoint) {
+        guard var d = cardDrag else { return }
+        d.point = p
+        d.display = panels.first { ScreenGeometry.ax(fromCocoa: $0.frame, primaryHeight: primaryHeight).contains(p) }?.display
+        cardDrag = d
+        redraw()
+    }
+
+    /// Dropped on another display: the whole workspace moves there.
+    func endCardDrag() {
+        guard let d = cardDrag else { return }
+        cardDrag = nil
+        if let wm, let di = d.display, model.first(where: { $0.name == d.name })?.display != di {
+            wm.moveWorkspace(d.name, to: di)
+            refresh()
+            stageWorkspace[di] = d.name
+            activeDisplay = di
+            reclaimFocus()
+        }
+        redraw()
+    }
+
     func endDrag() {
         guard let d = drag, let wm else { drag = nil; return }
         drag = nil
@@ -559,6 +590,7 @@ final class OverviewView: NSView {
         if let ws = controller.stage(on: display) { drawStage(ws, l, ctx) }
         drawFooter(l)
         drawDrag(l, ctx)
+        drawCardDrag(l)
         drawBand(ctx)
     }
 
@@ -792,7 +824,7 @@ final class OverviewView: NSView {
 
     private func drawFooter(_ l: OverviewLayout) {
         guard isKey else { return }
-        let hint = "←↑→↓ move   ⇥ workspace   ⏎ go   ⇧⏎ bring here   drag to move (⌥ stacks)   drag empty space or ⇧-drag: work in that area   esc close"
+        let hint = "←↑→↓ move   ⇥ workspace   ⏎ go   ⇧⏎ bring here   drag to move (⌥ stacks)   drag a card to another display   ⇧-drag: work in that area   esc close"
         draw(hint, in: l.footer, font: style.font, color: style.colors.dim, align: .center)
     }
 
@@ -829,6 +861,32 @@ final class OverviewView: NSView {
         p.lineWidth = 1.5
         c.accent.ns.setStroke()
         p.stroke()
+    }
+
+    /// A workspace card on its way to this display: the stage lights up, the card follows.
+    private func drawCardDrag(_ l: OverviewLayout) {
+        guard let d = controller.cardDrag, let win = window else { return }
+        let c = style.colors
+        if d.display == display, controller.workspaces(on: display).contains(where: { $0.name == d.name }) == false {
+            let p = NSBezierPath(roundedRect: l.stage.insetBy(dx: -10, dy: -10), xRadius: 16, yRadius: 16)
+            c.accent.withAlpha(0.12).ns.setFill()
+            p.fill()
+            p.lineWidth = 2
+            c.accent.ns.setStroke()
+            p.stroke()
+            draw("Move workspace \(d.label) here", in: l.stage, font: Style.font(style.a.font, size: 18, weight: "bold"),
+                 color: c.accent, align: .center, centerY: true)
+        }
+        guard d.display == display else { return }
+        let local = convert(win.convertPoint(fromScreen: ScreenGeometry.cocoa(fromAX: d.point, primaryHeight: primaryHeight)), from: nil)
+        let r = CGRect(x: local.x - 70, y: local.y - 22, width: 140, height: 44)
+        let card = NSBezierPath(roundedRect: r, xRadius: 10, yRadius: 10)
+        c.islandHi.ns.setFill()
+        card.fill()
+        c.accent.ns.setStroke()
+        card.lineWidth = 1.5
+        card.stroke()
+        draw("Workspace \(d.label)", in: r, font: style.bold, color: c.fg, align: .center, centerY: true)
     }
 
     private func drawDrag(_ l: OverviewLayout, _ ctx: CGContext) {
@@ -938,9 +996,18 @@ final class OverviewView: NSView {
             controller.updateDrag(ax)
             return
         }
-        guard let pr = pressed, case .window(let id) = pr.hit else { return }
+        if controller.cardDrag != nil {
+            controller.updateCardDrag(ax)
+            return
+        }
+        guard let pr = pressed else { return }
         let p = convert(event.locationInWindow, from: nil)
-        if hypot(p.x - pr.at.x, p.y - pr.at.y) > 5 { controller.beginDrag(id, at: ax) }
+        guard hypot(p.x - pr.at.x, p.y - pr.at.y) > 5 else { return }
+        switch pr.hit {
+        case .window(let id): controller.beginDrag(id, at: ax)
+        case .card(let name): controller.beginCardDrag(name, at: ax)
+        default: break
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -953,6 +1020,11 @@ final class OverviewView: NSView {
         }
         if controller.drag != nil {
             controller.endDrag()
+            pressed = nil
+            return
+        }
+        if controller.cardDrag != nil {
+            controller.endCardDrag()
             pressed = nil
             return
         }
