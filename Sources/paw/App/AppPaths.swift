@@ -4,6 +4,9 @@ enum AppPaths {
     /// paw.app's bundle id; `com.pseudobun.paw` for a bare `swift run`.
     static let bundleID: String = appBundle.bundleIdentifier ?? "com.pseudobun.paw"
 
+    /// A dev build (`just dev`): `com.pseudobun.paw.dev`, own data, no login item, no updates.
+    static var isDev: Bool { bundleID.hasSuffix(".dev") }
+
     static let cacheDir: URL = {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         return base.appending(path: bundleID, directoryHint: .isDirectory)

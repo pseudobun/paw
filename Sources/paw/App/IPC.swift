@@ -9,6 +9,14 @@ enum IPC {
         .appending(path: AppPaths.bundleID, directoryHint: .isDirectory)
     static var socketPath: String { dir.appending(path: "paw.sock").path }
 
+    /// Where the CLI looks: its own paw, then a dev build (`just dev`, `<bundle id>.dev`) while the
+    /// release one is quit, so `paw`, hop and a status bar keep working with either running.
+    static var clientSocketPaths: [String] {
+        guard !AppPaths.isDev else { return [socketPath] }
+        let dev = dir.deletingLastPathComponent().appending(path: AppPaths.bundleID + ".dev", directoryHint: .isDirectory)
+        return [socketPath, dev.appending(path: "paw.sock").path]
+    }
+
     static let maxRequest = 64 * 1024
     static let maxReply = 16 * 1024 * 1024
 
@@ -18,6 +26,15 @@ enum IPC {
 
     /// Sends `command` and returns the app's reply.
     static func send(_ command: String, timeout: TimeInterval) -> Result<[String: Any], ClientError> {
+        for path in clientSocketPaths {
+            let r = send(command, timeout: timeout, socketPath: path)
+            if case .failure(.notRunning) = r { continue }
+            return r
+        }
+        return .failure(.notRunning)
+    }
+
+    private static func send(_ command: String, timeout: TimeInterval, socketPath: String) -> Result<[String: Any], ClientError> {
         guard FileManager.default.fileExists(atPath: socketPath) else { return .failure(.notRunning) }
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return .failure(.failed("socket: \(String(cString: strerror(errno)))")) }
@@ -43,6 +60,17 @@ enum IPC {
     /// Sends `command` and hands every line the app writes back to `onLine` until it closes the
     /// connection. Returns why it ended.
     static func stream(_ command: String, onLine: (String) -> Void) -> ClientError {
+        // The first paw that answers; a dropped connection ends the stream (callers reconnect).
+        for path in clientSocketPaths where FileManager.default.fileExists(atPath: path) {
+            var connected = false
+            let end = stream(command, socketPath: path) { connected = true; onLine($0) }
+            if case .notRunning = end, !connected { continue }
+            return end
+        }
+        return .notRunning
+    }
+
+    private static func stream(_ command: String, socketPath: String, onLine: (String) -> Void) -> ClientError {
         guard FileManager.default.fileExists(atPath: socketPath) else { return .notRunning }
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return .failed("socket: \(String(cString: strerror(errno)))") }

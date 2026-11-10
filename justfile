@@ -1,8 +1,14 @@
-# paw: build, test and install locally. Signing is picked by scripts/bundle.sh
-# (Apple Development identity → "paw Local Signing" → ad-hoc).
+# paw: build, test and run a dev build next to the release one. Signing is picked by
+# scripts/bundle.sh (Apple Development identity → "paw Local Signing" → ad-hoc).
+#
+# The release paw comes from Homebrew (brew install --cask pseudobun/tap/paw): /Applications/paw.app,
+# com.pseudobun.paw, CLI `paw`. `just dev` builds "paw Dev" (com.pseudobun.paw.dev, own data and
+# grants, no updates, no login item) into ~/Applications, quits the release paw and starts the dev
+# one; `just undev` goes back. `paw` finds whichever runs; `paw-dev` is the dev build's own CLI.
 
-app_dir := "/Applications"
-cli_link := "/opt/homebrew/bin/paw"
+dev_app := env("HOME") / "Applications/paw Dev.app"
+dev_cli := "/opt/homebrew/bin/paw-dev"
+release_id := "com.pseudobun.paw"
 local_identity := "paw Local Signing"
 launch_agent := env("HOME") / "Library/LaunchAgents/com.pseudobun.paw.plist"
 
@@ -16,26 +22,41 @@ build:
 test:
     swift test
 
-# Release paw.app into ./build.noindex (.noindex keeps Spotlight from listing a second paw)
+# Release-configuration paw.app into ./build.noindex (.noindex keeps Spotlight from listing a second paw)
 bundle:
     scripts/bundle.sh build.noindex
 
-# Release build → /Applications/paw.app, CLI → /opt/homebrew/bin/paw, relaunch
-install: bundle
-    @# paw.app runs without arguments; `MacOS/paw$` spares CLI processes such as a bar's `paw subscribe`
-    -paw quit 2>/dev/null; pkill -f 'MacOS/paw$'
-    @for i in $(seq 1 30); do pgrep -f 'MacOS/paw$' >/dev/null || break; sleep 0.1; done
-    @just _migrate-legacy
-    rm -rf "{{app_dir}}/paw.app"
-    cp -R build.noindex/paw.app "{{app_dir}}/paw.app"
-    ln -sf "{{app_dir}}/paw.app/Contents/MacOS/paw" "{{cli_link}}"
-    open "{{app_dir}}/paw.app"
-    @echo "installed {{app_dir}}/paw.app, CLI at {{cli_link}}"
+# Build "paw Dev", quit the release paw and run the dev one instead
+dev:
+    PAW_DEV=1 scripts/bundle.sh build.noindex/dev
+    @just _quit
+    rm -rf "{{dev_app}}"
+    mkdir -p "$(dirname "{{dev_app}}")"
+    cp -R build.noindex/dev/paw.app "{{dev_app}}"
+    ln -sf "{{dev_app}}/Contents/MacOS/paw" "{{dev_cli}}"
+    open "{{dev_app}}"
+    @echo "running {{dev_app}} (CLI: paw-dev); just undev goes back to the release paw"
 
+# Quit the dev build and start the release paw again
+undev:
+    @just _quit
+    open -b {{release_id}}
+
+# The old name: builds and runs the dev build, never touches the release paw
+install: dev
+
+# Remove the dev build (the release paw stays; brew uninstall --cask pseudobun/tap/paw removes it)
 uninstall:
-    -paw quit 2>/dev/null; pkill -f 'MacOS/paw$'
-    -launchctl bootout gui/$(id -u) "{{launch_agent}}" 2>/dev/null
-    rm -rf "{{app_dir}}/paw.app" "{{cli_link}}" "{{launch_agent}}"
+    @just _quit
+    rm -rf "{{dev_app}}" "{{dev_cli}}"
+    -open -b {{release_id}}
+
+# Quits every paw.app (release and dev); paw puts hidden windows back first.
+# `MacOS/paw$` spares CLI processes such as a bar's `paw subscribe`.
+_quit:
+    -paw quit 2>/dev/null; paw-dev quit 2>/dev/null; true
+    @for i in $(seq 1 50); do pgrep -f 'MacOS/paw$' >/dev/null || break; sleep 0.1; done
+    -pkill -f 'MacOS/paw$'
 
 # Self-signed code-signing certificate (stable signature across rebuilds)
 local-cert:
@@ -49,16 +70,15 @@ local-cert:
     legacy=$(openssl version | grep -q LibreSSL || echo -legacy)
     openssl pkcs12 -export $legacy -inkey "$d/k.pem" -in "$d/c.pem" -out "$d/c.p12" -passout pass:paw
     security import "$d/c.p12" -k ~/Library/Keychains/login.keychain-db -P paw -T /usr/bin/codesign
-    echo "created {{local_identity}}; run just install, then grant Accessibility once"
+    echo "created {{local_identity}}; run just dev, then grant Accessibility to paw Dev once"
 
-# Start paw at login with launchd instead of the openAtLogin login item
-launchd: install
+# Start the release paw at login with launchd instead of the openAtLogin login item
+launchd:
     mkdir -p "$(dirname "{{launch_agent}}")"
-    sed "s|/Applications|{{app_dir}}|" examples/com.pseudobun.paw.plist > "{{launch_agent}}"
+    cp examples/com.pseudobun.paw.plist "{{launch_agent}}"
     -launchctl bootout gui/$(id -u) "{{launch_agent}}" 2>/dev/null
-    @# install opened paw itself; hand it to launchd so KeepAlive restarts it after a crash
-    -pkill -f 'MacOS/paw$'
-    @for i in $(seq 1 30); do pgrep -f 'MacOS/paw$' >/dev/null || break; sleep 0.1; done
+    @# hand paw to launchd so KeepAlive restarts it after a crash
+    @just _quit
     launchctl bootstrap gui/$(id -u) "{{launch_agent}}"
     @echo "loaded {{launch_agent}}"
 
@@ -78,7 +98,7 @@ examples: build
 
 # Follow paw's log
 log:
-    log stream --level info --predicate 'subsystem == "com.pseudobun.paw"'
+    log stream --level info --predicate 'subsystem BEGINSWITH "com.pseudobun.paw"'
 
 # Re-render Resources/AppIcon.icns from Resources/icon/paw-icon.svg
 icon:
@@ -93,16 +113,3 @@ release-zip:
 release tag=("v" + `tr -d '[:space:]' < VERSION`):
     gh workflow run release.yml -f tag={{tag}}
     @echo "started; gh run watch to follow it"
-
-# Move data from the pre-0.1 bundle id (dev.paw.app) to com.pseudobun.paw
-_migrate-legacy:
-    #!/usr/bin/env bash
-    for d in "Library/Application Support" "Library/Caches"; do
-      old="$HOME/$d/dev.paw.app"; new="$HOME/$d/com.pseudobun.paw"
-      if [ -d "$old" ] && [ ! -e "$new" ]; then mv "$old" "$new" && echo "moved $old"; fi
-    done
-    old="$HOME/Library/LaunchAgents/dev.paw.app.plist"
-    if [ -f "$old" ]; then
-      launchctl bootout gui/$(id -u) "$old" 2>/dev/null || true
-      rm -f "$old"; echo "removed $old (run just launchd to install the new one)"
-    fi

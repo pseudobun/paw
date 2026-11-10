@@ -117,18 +117,23 @@ again (it remembers which workspace each window was on) or run `paw recover`.
 
 Needs Xcode or the Command Line Tools (Swift 6) and [`just`](https://github.com/casey/just).
 
+A build from source is **paw Dev**: its own bundle id (`com.pseudobun.paw.dev`), data and
+Accessibility grant, no updates and no login item. It runs *instead of* the release paw without
+touching it, so you can keep the Homebrew paw installed and switch back and forth.
+
 ```sh
 git clone https://github.com/pseudobun/paw.git && cd paw
 just local-cert   # once: a self-signed certificate, so Accessibility survives rebuilds
-just install      # → /Applications/paw.app, CLI → /opt/homebrew/bin/paw, then starts paw
+just dev          # → ~/Applications/paw Dev.app, quits the release paw, starts paw Dev
+just undev        # quits paw Dev, starts the release paw again
 ```
 
-If you have an Apple Development or Developer ID certificate, `just install` signs with it
-instead of the self-signed one (or set `PAW_SIGN_IDENTITY`). Without either it signs ad hoc,
-and macOS asks for Accessibility again after every rebuild.
+With an Apple Development or Developer ID certificate, `just dev` signs with it instead of the
+self-signed one (or set `PAW_SIGN_IDENTITY`); without either it signs ad hoc, and macOS asks for
+Accessibility after every rebuild. `paw` (and hop, and your bar) talks to whichever paw runs;
+`paw-dev` is the dev build's own CLI. `just uninstall` removes paw Dev.
 
-`just launchd` starts paw at login with a LaunchAgent that restarts it after a crash.
-`just uninstall` removes it all.
+`just launchd` starts the release paw at login with a LaunchAgent that restarts it after a crash.
 
 </details>
 
