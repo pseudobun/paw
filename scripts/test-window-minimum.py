@@ -20,6 +20,14 @@ def query():
     return json.loads(paw("query", "--json"))
 
 
+def fixture_reply(process, command):
+    process.stdin.write(command + "\n")
+    process.stdin.flush()
+    if not select.select([process.stdout], [], [], 8)[0]:
+        raise AssertionError("Fixture did not reply to " + command)
+    return process.stdout.readline().strip()
+
+
 def main():
     workspaces = query()
     original = next(ws["name"] for ws in workspaces if ws["focused"])
@@ -61,27 +69,28 @@ def main():
             time.sleep(0.4)
             window = next(w for ws in query() for w in ws["windows"] if w["title"] == "PAW minimum regression")
             assert not window["onScreen"], "A real minimum must remain a placeholder"
-            process.stdin.write("lower-minimum\n")
-            process.stdin.flush()
-            if not select.select([process.stdout], [], [], 8)[0]:
-                raise AssertionError("Fixture did not lower its minimum in time")
-            assert process.stdout.readline().strip() == "minimum-lowered"
+            reply = fixture_reply(process, "lower-minimum")
+            assert reply == "minimum-lowered"
             # A pending check must not reveal a window after leaving its workspace.
             paw("find", "PAW minimum regression")
             paw("workspace", original)
             time.sleep(0.3)
             window = next(w for ws in query() for w in ws["windows"] if w["title"] == "PAW minimum regression")
             assert not window["onScreen"], "Pending check revealed a hidden workspace"
+            parked = fixture_reply(process, "parked")
+            assert parked == "parked", "Hidden window bounds: " + parked
             paw("workspace", empty)
-            paw("find", "PAW minimum regression")
+            # Switching back must recover native focus without a corrective `find`.
             deadline = time.monotonic() + 3
             while time.monotonic() < deadline:
                 window = next(w for ws in query() for w in ws["windows"] if w["title"] == "PAW minimum regression")
-                if window["onScreen"]:
-                    print("PASS: focused placeholder recovered after its native minimum shrank")
+                if window["onScreen"] and fixture_reply(process, "focused") == "focused":
+                    print("PASS: workspace switch recovered the window and its native keyboard focus")
                     return
                 time.sleep(0.1)
-            raise AssertionError("Focused window stayed hidden after it could fit its tile")
+            if not window["onScreen"]:
+                raise AssertionError("Window stayed hidden after switching back to its workspace")
+            raise AssertionError("Recovered window did not receive native keyboard focus after workspace switch")
         finally:
             if process is not None:
                 process.terminate()

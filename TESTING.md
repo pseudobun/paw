@@ -89,9 +89,7 @@
 - [ ] System Settings, Raycast, CleanShot float; a Brave extension popup floats, the main Brave window tiles
 - [ ] `rules: [{ app: "Slack", workspace: "9" }]` → new Slack window opens on 9 without stealing focus
 
-## Report
-
-### Changing a window's minimum size
+## Changing a window's minimum size
 
 With paw running and at least one empty hidden workspace, run:
 
@@ -101,9 +99,12 @@ python3 scripts/test-window-minimum.py
 
 This opt-in native AX test uses two temporary fixture windows on an empty workspace. A real
 1000-point minimum must stay a placeholder; the driver then tells the app to lower it to 400.
-Focusing it must recover the window without `retile`. A pending check must not reveal it on a hidden workspace.
+Switching away and back must recover the window and native keyboard focus without a corrective
+`find` or `retile`. A pending check must not reveal it on a hidden workspace; the fixture
+checks its WindowServer bounds intersect no display beyond the one-pixel parking corner.
 The script closes its fixture and restores the previous workspace and the empty workspace's
-layout. Use a display narrower than 2000 points so the initial half-screen tile cannot fit.
+layout. Use a display narrower than 2000 points so the initial half-screen tile cannot fit,
+and leave the keyboard and mouse alone during the run.
 
 Also test Arc/Brave: after a temporary size refusal, focus the placeholder again; windows
 that now fit return, while genuinely undersized tiles remain placeholders. Try closing a
@@ -114,6 +115,12 @@ While a recoverable placeholder is selected, activate an app excluded by `manage
 change the hidden window's title: it may recover, but must not take focus. Also activate the
 excluded app immediately after focusing a recoverable placeholder; the delayed check must
 leave focus with that app.
+
+- [ ] With adjacent displays forcing left-corner parking, retry a placeholder that accepts
+      only part of the requested resize. Its hidden window must retain a one-pixel screen
+      intersection. Repeat while switching workspace during the delayed check.
+
+## Report
 
 What felt slow (`just log`), anything that flickered, apps that misbehaved (Electron, Chrome, Finder,
 JetBrains), and which defaults you'd change.

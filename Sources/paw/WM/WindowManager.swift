@@ -526,9 +526,9 @@ final class WindowManager {
 
     /// Focus moved outside paw (click, ⌘Tab): follow it, switching workspace when needed.
     private func syncFocus(_ pid: pid_t, force: Bool = false) {
-        // Even an ignored app taking focus invalidates a pending recovery's focus request.
-        focusRevision += 1
         guard force || Date() > ignoreFocusUntil else { return }
+        // An unmanaged app taking focus also supersedes a recovery's focus request.
+        focusRevision += 1
         let app = AXUIElementCreateApplication(pid)
         guard let el = app.element(kAXFocusedWindowAttribute), let id = el.windowID else { return }
         if windows[id] == nil {
@@ -721,8 +721,8 @@ final class WindowManager {
                   let actual = w.element.frame else { continue }
             let over = CGSize(width: actual.width > r.width + 4 ? actual.width : 0, height: actual.height > r.height + 4 ? actual.height : 0)
             guard over.width > 0 || over.height > 0 else { overflowSuspects[id] = nil; continue }
-            // Require two stable readings: AX clients can apply a requested size asynchronously.
-            if let previous = overflowSuspects[id], abs(previous.width - over.width) < 4 && abs(previous.height - over.height) < 4 {
+            // After an animation the app has had its frames; a second look only when it's still resizing.
+            if overflowSuspects[id] == nil || abs(overflowSuspects[id]!.width - over.width) < 4 && abs(overflowSuspects[id]!.height - over.height) < 4 {
                 let old = windowMins[id] ?? .zero
                 let m = CGSize(width: max(old.width, over.width), height: max(old.height, over.height))
                 windowMins[id] = m
@@ -735,8 +735,7 @@ final class WindowManager {
                 suspect = true
             }
         }
-        if learned { layout(ws, animated: false) }
-        if suspect { scheduleOverflowCheck(name, after: 0.4) }
+        if learned { layout(ws, animated: false) } else if suspect { scheduleOverflowCheck(name, after: 0.4) }
     }
 
     /// A Chromium window can later accept a size it refused during startup or a transition.
@@ -758,13 +757,20 @@ final class WindowManager {
         let token = UUID()
         minimumChecks[w.id] = (token, focus ? focusRevision : nil, frontmost)
         w.element.setSize(target.size)
+        // Left-corner parking depends on the actual width, which the probe may have changed.
+        _ = w.readFrame()
+        hide(w, from: ws)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self, let check = self.minimumChecks[w.id], check.token == token else { return }
             defer { self.minimumChecks[w.id] = nil }
-            guard self.windows[w.id] === w, w.isHidden, self.workspaceOf(w.id) === ws,
+            guard self.windows[w.id] === w, w.isHidden, let parkedWorkspace = self.workspaceOf(w.id) else { return }
+            // An asynchronous resize must be reparked even when recovery is no longer valid.
+            let actual = w.readFrame()?.size
+            self.hide(w, from: parkedWorkspace)
+            guard parkedWorkspace === ws,
                   let di = self.displayShowing(ws.name),
                   let current = TreeLayout.windowFrames(ws, in: self.displays[di].area, gap: self.config.layout.gap)[w.id],
-                  current.size == target.size, let actual = w.element.size,
+                  current.size == target.size, let actual,
                   actual.width > 0, actual.height > 0,
                   actual.width <= target.width + 4, actual.height <= target.height + 4 else { return }
             self.windowMins[w.id] = nil

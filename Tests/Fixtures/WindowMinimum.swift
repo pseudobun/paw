@@ -24,12 +24,35 @@ final class Fixture: NSObject, NSApplicationDelegate {
             _ = self.window("PAW minimum companion", minimum: 200)
         }
         DispatchQueue.global().async {
-            guard readLine() == "lower-minimum" else { return }
-            DispatchQueue.main.async {
-                main.minSize = NSSize(width: 400, height: 250)
-                // No resize/title notification: focusing the placeholder must retry its size.
-                print("minimum-lowered")
-                fflush(stdout)
+            while let command = readLine() {
+                DispatchQueue.main.async {
+                    switch command {
+                    case "lower-minimum":
+                        main.minSize = NSSize(width: 400, height: 250)
+                        // No resize/title notification: focusing the placeholder must retry its size.
+                        print("minimum-lowered")
+                    case "focused":
+                        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid()
+                        print(frontmost && main.isKeyWindow ? "focused" : "not-focused")
+                    case "parked":
+                        let info = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(main.windowNumber)) as? [[String: Any]]
+                        if let bounds = info?.first?[kCGWindowBounds as String] as? [String: Any],
+                           let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary) {
+                            let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+                            let parked = NSScreen.screens.allSatisfy {
+                                let screen = CGRect(x: $0.frame.minX, y: primaryHeight - $0.frame.maxY,
+                                                    width: $0.frame.width, height: $0.frame.height)
+                                let intersection = frame.intersection(screen)
+                                return intersection.isNull || intersection.width <= 1 && intersection.height <= 1
+                            }
+                            print(parked ? "parked" : "not-parked")
+                        } else {
+                            print("bounds-unavailable")
+                        }
+                    default: return
+                    }
+                    fflush(stdout)
+                }
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 60) { NSApp.terminate(nil) }
