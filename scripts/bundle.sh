@@ -4,14 +4,22 @@
 # PAW_ARCHS="arm64 x86_64" builds a universal binary (default: arm64).
 # env: PAW_VERSION (default: from the VERSION file, plus the commit when not on its tag),
 #      PAW_BUILD (CFBundleVersion, which Sparkle compares; default: commit count), PAW_BUNDLE_ID, PAW_SIGN_IDENTITY,
-#      PAW_TIMESTAMP=1 (secure timestamp, needed for notarization)
+#      PAW_TIMESTAMP=1 (secure timestamp, needed for notarization),
+#      PAW_DEV=1 (a dev build: "paw Dev", com.pseudobun.paw.dev, no updates; see just dev)
 # Signing: PAW_SIGN_IDENTITY if set, else a "Developer ID Application" or "Apple Development"
 # identity, else the self-signed "paw Local Signing" certificate (just local-cert), else ad-hoc.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 out="${1:-build.noindex}"
+name=paw
 bundle_id="${PAW_BUNDLE_ID:-com.pseudobun.paw}"
+if [ "${PAW_DEV:-}" = 1 ]; then
+  name="paw Dev"
+  bundle_id="${PAW_BUNDLE_ID:-com.pseudobun.paw.dev}"
+  # Dev builds never update themselves.
+  PAW_SPARKLE_PUBLIC_KEY="" PAW_FEED_URL="-"
+fi
 base="$(tr -d '[:space:]' < VERSION)"
 if [ -z "${PAW_VERSION:-}" ]; then
   commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -40,6 +48,7 @@ sparkle="$(find "$bin_dir" "$bin_dir/PackageFrameworks" -maxdepth 1 -name Sparkl
 # EdDSA key that signs updates (private half: the SPARKLE_PRIVATE_KEY secret and olympus' keychain).
 sparkle_key="${PAW_SPARKLE_PUBLIC_KEY-c9vc9GKhX9zHEAUrLSWfN4soCN0vUAhl68AXWjD06Uc=}"
 feed="${PAW_FEED_URL:-https://raw.githubusercontent.com/pseudobun/paw/appcast/appcast.xml}"
+[ "$feed" = "-" ] && feed=""
 # XML-escaped for the plist below (bundle id, feed and key come from the environment).
 xml() { local s="$1"; s="${s//&/&amp;}"; s="${s//</&lt;}"; s="${s//>/&gt;}"; printf '%s' "$s"; }
 
@@ -59,8 +68,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
   <key>CFBundleIdentifier</key><string>$(xml "$bundle_id")</string>
-  <key>CFBundleName</key><string>paw</string>
-  <key>CFBundleDisplayName</key><string>paw</string>
+  <key>CFBundleName</key><string>$(xml "$name")</string>
+  <key>CFBundleDisplayName</key><string>$(xml "$name")</string>
   <key>CFBundleExecutable</key><string>paw</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>

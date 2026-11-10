@@ -176,7 +176,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() { NSApp.terminate(nil) }
 
     private func updateLoginItem(_ on: Bool) {
-        guard AppPaths.isAppBundle else { return }
+        // A dev build never starts at login; the release paw does.
+        guard AppPaths.isAppBundle, !AppPaths.isDev else { return }
         let service = SMAppService.mainApp
         do {
             if on, service.status != .enabled { try service.register() }
