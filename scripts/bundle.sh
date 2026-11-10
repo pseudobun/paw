@@ -77,7 +77,9 @@ ts="--timestamp=none"; [ "${PAW_TIMESTAMP:-}" = 1 ] && ts="--timestamp"
 identity="${PAW_SIGN_IDENTITY:-}"
 if [ -z "$identity" ]; then
   # By hash: the same certificate in two keychains makes its name ambiguous to codesign.
-  identity="$(security find-identity -v -p codesigning 2>/dev/null | grep -E '"(Developer ID Application|Apple Development)' | head -1 | awk '{print $2}' || true)"
+  # Developer ID first (its team, and so the Accessibility grant, stays the same), then Apple Development.
+  ids="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+  identity="$( { echo "$ids" | grep '"Developer ID Application'; echo "$ids" | grep '"Apple Development'; } | head -1 | awk '{print $2}')"
 fi
 if [ -z "$identity" ] && security find-identity -p codesigning 2>/dev/null | grep -q "paw Local Signing"; then
   identity="paw Local Signing"
