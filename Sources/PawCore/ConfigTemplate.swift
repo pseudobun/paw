@@ -44,6 +44,8 @@ public enum ConfigTemplate {
             focusFollowsMouse: \(f.focusFollowsMouse),
             // stack.next on the last window goes back to the first (false: it stays)
             wrapStacks: \(f.wrapStacks),
+            // workspace next on the last workspace goes back to the first (false: it stays)
+            wrapWorkspaces: \(f.wrapWorkspaces),
           },
 
           animation: {

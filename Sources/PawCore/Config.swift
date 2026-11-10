@@ -73,6 +73,8 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var focusFollowsMouse = false
         /// focus stack.next/prev go round from the last window to the first (false: they stop).
         public var wrapStacks = false
+        /// workspace next/prev go round from the last workspace to the first (false: they stop).
+        public var wrapWorkspaces = false
         public init() {}
     }
 
@@ -393,10 +395,11 @@ extension PawConfig.Layout {
 }
 
 extension PawConfig.Focus {
-    enum CodingKeys: String, CodingKey, CaseIterable { case mouseFollowsFocus, focusFollowsMouse, wrapStacks }
+    enum CodingKeys: String, CodingKey, CaseIterable { case mouseFollowsFocus, focusFollowsMouse, wrapStacks, wrapWorkspaces }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.mouseFollowsFocus, &mouseFollowsFocus); try f(.focusFollowsMouse, &focusFollowsMouse); try f(.wrapStacks, &wrapStacks)
+        try f(.wrapWorkspaces, &wrapWorkspaces)
     }
 }
 

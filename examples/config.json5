@@ -33,6 +33,8 @@
     focusFollowsMouse: false,
     // stack.next on the last window goes back to the first (false: it stays)
     wrapStacks: false,
+    // workspace next on the last workspace goes back to the first (false: it stays)
+    wrapWorkspaces: false,
   },
 
   animation: {

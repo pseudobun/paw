@@ -343,7 +343,8 @@ final class OverviewController {
     }
 
     func beginCardDrag(_ name: String, at p: CGPoint) {
-        guard let ws = model.first(where: { $0.name == name }) else { return }
+        // The side workspace can't be moved.
+        guard name != WindowManager.side, let ws = model.first(where: { $0.name == name }) else { return }
         cardDrag = (name, ws.label, p, nil, nil)
         updateCardDrag(p)
     }
@@ -354,7 +355,7 @@ final class OverviewController {
         d.point = p
         d.display = panels.first { ScreenGeometry.ax(fromCocoa: $0.frame, primaryHeight: primaryHeight).contains(p) }?.display
         d.card = d.display.flatMap { di in panels.first { $0.display == di }?.view.card(at: p) }
-        if d.card == d.name { d.card = nil }
+        if d.card == d.name || d.card == WindowManager.side { d.card = nil }
         cardDrag = d
         redraw()
     }
