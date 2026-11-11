@@ -26,6 +26,7 @@ final class WindowManager {
     private var focusedDisplay = 0
     private var lastWorkspace: String?
     private var ignoreFocusUntil = Date.distantPast
+    private var focusWork: DispatchWorkItem?
     private var suppressMoves: [WindowID: Date] = [:]
     private var dragTimer: Timer?
     private var saveWork: DispatchWorkItem?
@@ -461,7 +462,6 @@ final class WindowManager {
             // Hit-test before retiling, ignoring the closed window's lingering animation.
             let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
             let hovered = closed && wasFocused ? topWindow(at: p, ignoring: [id]) : nil
-            layout(ws, animated: true)
             if wasFocused {
                 let appFocused = AXUIElementCreateApplication(w.pid).element(kAXFocusedWindowAttribute)?.windowID
                 let target = Self.focusAfterRemoval(in: ws, hovered: hovered, appFocused: appFocused) {
@@ -470,6 +470,7 @@ final class WindowManager {
                 ignoreFocus(0.35)
                 focusWindow(target, warp: false)
             }
+            layout(ws, animated: true)
         }
         scheduleSave()
     }
@@ -549,8 +550,21 @@ final class WindowManager {
     /// Focus moved outside paw (click, ⌘Tab): follow it, switching workspace when needed.
     private func syncFocus(_ pid: pid_t, force: Bool = false) {
         guard force || Date() > ignoreFocusUntil else { return }
+        focusWork?.cancel()
         // An unmanaged app taking focus also supersedes a recovery's focus request.
         focusRevision += 1
+        if force { applyFocus(pid, force: true); return }
+        // Let close notifications arrive before accepting macOS's automatic replacement.
+        let work = DispatchWorkItem { [weak self] in
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+            self?.applyFocus(pid)
+        }
+        focusWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+    }
+
+    private func applyFocus(_ pid: pid_t, force: Bool = false) {
+        guard force || Date() > ignoreFocusUntil else { return }
         let app = AXUIElementCreateApplication(pid)
         guard let el = app.element(kAXFocusedWindowAttribute), let id = el.windowID else { return }
         if windows[id] == nil {
@@ -1034,6 +1048,7 @@ final class WindowManager {
 
     func focusWindow(_ id: WindowID?, warp: Bool) {
         guard let id, let w = windows[id] else { return }
+        focusWork?.cancel()
         focusRevision += 1
         if let ws = workspaceOf(id) {
             ws.focused = id

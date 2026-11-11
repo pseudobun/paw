@@ -50,7 +50,9 @@
 - [ ] `ralt+a/d` prev/next; `hyper+n` new; `hyper+d` closes (windows go to the previous workspace)
 - [ ] ⌘Tab to an app whose window is on another workspace → paw switches there
 - [ ] Two displays: each shows its own workspace; `workspace N` for one shown on the other display just focuses it
-- [ ] Close a window → focus stays on the same workspace (doesn't jump to another window of that app elsewhere)
+- [ ] Close the focused window with the mouse over another visible window → that window receives keyboard focus, including another window of the same app or on another display; a placeholder must not flash as selected first
+- [ ] Repeat with an undersized Discord-like placeholder in the top-left tile and the mouse over a Spotify-like real window → the real window wins; with no hovered window, the existing same-app/workspace fallback applies without jumping to a hidden workspace
+- [ ] Close a background window → the focused window stays focused
 - [ ] Minimise / ⌘H an app → its tile closes; restore → it comes back to the same tile and size
 - [ ] Quit an app whose windows were tiled, open it again → same tiles
 - [ ] `just install` (paw restarts) → every workspace keeps its tiles, sizes and stacks
@@ -92,6 +94,19 @@
 - [ ] A tile with `title` gets only matching windows; `launch` runs from `initiate` when none is open
 - [ ] System Settings, Raycast, CleanShot float; a Brave extension popup floats, the main Brave window tiles
 - [ ] `rules: [{ app: "Slack", workspace: "9" }]` → new Slack window opens on 9 without stealing focus
+
+## Closing a focused window
+
+With Paw Dev running with Accessibility access and an empty hidden workspace, run:
+
+```sh
+python3 scripts/test-window-close.py
+```
+
+This live AX regression checks same-app closes, background closes, and cross-app closes with
+an undersized placeholder present. It verifies native keyboard focus and rejects intermediate
+focus events for other windows. Only disposable fixture windows are closed; the previous
+workspace and the empty workspace's layout are restored. Leave the keyboard and mouse alone.
 
 ## Changing a window's minimum size
 
