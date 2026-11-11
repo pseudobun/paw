@@ -17,6 +17,16 @@ enum IPC {
         return [socketPath, dev.appending(path: "paw.sock").path]
     }
 
+    /// A reply carrying this key holds an object the IPC thread encodes as the reply's "json"
+    /// string (pretty, sorted), so the main thread only builds it.
+    static let jsonObjectKey = "_jsonObject"
+
+    static func prettyJSON(_ object: Any) -> String {
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]) else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     static let maxRequest = 64 * 1024
     static let maxReply = 16 * 1024 * 1024
 
@@ -198,7 +208,10 @@ enum IPC {
                 DispatchQueue.main.async { [subscribe] in subscribe(fd, text) }
                 return
             }
-            let reply = DispatchQueue.main.sync { handler(text) }
+            var reply = DispatchQueue.main.sync { handler(text) }
+            if let object = reply.removeValue(forKey: IPC.jsonObjectKey) {
+                reply["json"] = IPC.prettyJSON(object)
+            }
             let out = (try? JSONSerialization.data(withJSONObject: reply, options: [.sortedKeys])) ?? Data("{}".utf8)
             _ = IPC.writeAll(fd, out)
         }

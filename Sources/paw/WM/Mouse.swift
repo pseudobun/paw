@@ -81,43 +81,73 @@ final class DropPreview {
 final class SeamHandles {
     private weak var wm: WindowManager?
     private var panels: [String: SeamPanel] = [:]
+    /// Panels out of use, kept for the next seams: a workspace switch swaps every seam, and a new
+    /// panel is a new window-server window each time.
+    private var spare: [SeamPanel] = []
+    private static let maxSpare = 24
     private(set) var dragging = false
+    /// Panels made so far (tests).
+    private(set) var created = 0
 
-    init(wm: WindowManager) { self.wm = wm }
+    init(wm: WindowManager?) { self.wm = wm }
 
     func update() {
         guard !dragging, let wm else { return }
-        let seams = wm.visibleSeams()
+        apply(wm.visibleSeams(), accent: wm.indicators.style.colors.accent)
+    }
+
+    func apply(_ seams: [WindowManager.SeamInfo], accent: ARGB) {
+        guard !dragging else { return }
         let keys = Set(seams.map(\.key))
+        var free: [SeamPanel] = []
         for (k, p) in panels where !keys.contains(k) {
-            p.orderOut(nil)
             panels[k] = nil
+            free.append(p)
         }
         for s in seams {
-            let p = panels[s.key] ?? SeamPanel()
+            let p = panels[s.key] ?? free.popLast() ?? spare.popLast() ?? make()
             panels[s.key] = p
+            let changed = p.view.seam != s || p.view.accent != accent
             p.view.seam = s
-            p.view.accent = wm.indicators.style.colors.accent
-            p.view.onBegin = { [weak self] s in self?.dragging = true; self?.wm?.seamBegan(s) }
-            p.view.onDrag = { [weak self] s, pt in self?.wm?.seamDragged(s, to: pt) }
-            p.view.onEnd = { [weak self] s in
-                self?.dragging = false
-                self?.wm?.seamEnded(s)
-            }
-            p.view.onDoubleClick = { [weak self] s in self?.wm?.seamEqualize(s) }
+            p.view.accent = accent
             // At least 8 pt to grab, even with small gaps.
             var f = s.frame
             if s.axis == .horizontal, f.width < 8 { f = f.insetBy(dx: -(8 - f.width) / 2, dy: 0) }
             if s.axis == .vertical, f.height < 8 { f = f.insetBy(dx: 0, dy: -(8 - f.height) / 2) }
             let cocoa = ScreenGeometry.cocoa(fromAX: f, primaryHeight: primaryHeight)
-            if p.frame != cocoa { p.setFrame(cocoa, display: true) }
-            p.view.needsDisplay = true
+            if p.frame != cocoa { p.setFrame(cocoa, display: false) }
+            if changed { p.view.needsDisplay = true }
             if !p.isVisible { p.orderFrontRegardless() }
+        }
+        for p in free {
+            p.orderOut(nil)
+            p.view.seam = nil
+            if spare.count < Self.maxSpare { spare.append(p) }
         }
     }
 
+    private func make() -> SeamPanel {
+        created += 1
+        let p = SeamPanel()
+        p.view.onBegin = { [weak self] s in self?.dragging = true; self?.wm?.seamBegan(s) }
+        p.view.onDrag = { [weak self] s, pt in self?.wm?.seamDragged(s, to: pt) }
+        p.view.onEnd = { [weak self] s in
+            self?.dragging = false
+            self?.wm?.seamEnded(s)
+        }
+        p.view.onDoubleClick = { [weak self] s in self?.wm?.seamEqualize(s) }
+        return p
+    }
+
+    /// Shown seam panels (tests).
+    var shownCount: Int { panels.count }
+
     func hideAll() {
-        for p in panels.values { p.orderOut(nil) }
+        for p in panels.values {
+            p.orderOut(nil)
+            p.view.seam = nil
+            if spare.count < Self.maxSpare { spare.append(p) }
+        }
         panels = [:]
     }
 }
@@ -215,13 +245,24 @@ final class SeamView: NSView {
 
 /// Hold a mouse button (middle, back, forward), drag in a direction, release: runs a command.
 /// Buttons with gestures are taken over; a press that doesn't move is sent on as a normal click.
+///
+/// The tap runs on `EventTapThread`, and only listens for what the config uses: no scroll or
+/// trackpad events without a zoom modifier, no button events without gestures, no tap at all
+/// with neither. The config it reads is swapped under `lock`.
 final class MouseGestures {
     private weak var wm: WindowManager?
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
+    private var tapMask: CGEventMask = 0
+    private var started = false
+    private let lock = NSLock()
     private var byButton: [Int: [String: [Command]]] = [:]
     private var ignore: [String] = []
     private var zoomFlags: CGEventFlags?
+    /// The frontmost app's name, kept by the main thread (NSWorkspace belongs to it).
+    private var frontApp: String?
+    private var activation: NSObjectProtocol?
+    // Tap thread only.
     private var scrollAccum: Double = 0
     private var pinchAccum: Double = 0
     private var lastZoom = Date.distantPast
@@ -231,10 +272,20 @@ final class MouseGestures {
 
     init(wm: WindowManager) { self.wm = wm }
 
+    /// The events a tap needs for this config; 0 for none.
+    static func mask(zoom: Bool, buttons: Bool) -> CGEventMask {
+        var types: [CGEventType] = []
+        if buttons { types += [.otherMouseDown, .otherMouseUp, .otherMouseDragged] }
+        if zoom { types.append(.scrollWheel) }
+        var m = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
+        // 29: gesture events (pinch arrives as one), not in CGEventType.
+        if zoom { m |= 1 << 29 }
+        return m
+    }
+
     func configChanged() {
-        byButton = [:]
-        ignore = wm?.config.mouse.gestureIgnoreApps ?? []
-        zoomFlags = switch wm?.config.mouse.zoomModifier ?? "alt" {
+        var buttons: [Int: [String: [Command]]] = [:]
+        let flags: CGEventFlags? = switch wm?.config.mouse.zoomModifier ?? "alt" {
         case "cmd": .maskCommand
         case "ctrl": .maskControl
         case "shift": .maskShift
@@ -243,15 +294,37 @@ final class MouseGestures {
         }
         for g in wm?.config.mouse.gestures ?? [] {
             guard let b = g.buttonNumber, let cmds = try? Command.parseAll(g.command) else { continue }
-            byButton[b, default: [:]][g.direction.lowercased()] = cmds
+            buttons[b, default: [:]][g.direction.lowercased()] = cmds
+        }
+        let ignore = wm?.config.mouse.gestureIgnoreApps ?? []
+        lock.withLock {
+            byButton = buttons
+            zoomFlags = flags
+            self.ignore = ignore
+        }
+        // Listen for what this config needs, nothing more.
+        if started, Self.mask(zoom: flags != nil, buttons: !buttons.isEmpty) != tapMask {
+            stopTap()
+            startTap()
         }
     }
 
     func start() {
-        guard tap == nil else { return }
-        let types: [CGEventType] = [.otherMouseDown, .otherMouseUp, .otherMouseDragged, .scrollWheel]
-        // 29: gesture events (pinch arrives as one), not in CGEventType.
-        let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) } | (1 << 29)
+        guard !started else { return }
+        started = true
+        frontApp = NSWorkspace.shared.frontmostApplication?.localizedName
+        activation = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] n in
+            let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            self?.lock.withLock { self?.frontApp = app?.localizedName }
+        }
+        startTap()
+    }
+
+    private func startTap() {
+        let mask = lock.withLock { Self.mask(zoom: zoomFlags != nil, buttons: !byButton.isEmpty) }
+        tapMask = mask
+        guard tap == nil, mask != 0 else { return }
         let callback: CGEventTapCallBack = { _, type, event, info in
             guard let info else { return Unmanaged.passUnretained(event) }
             let me = Unmanaged<MouseGestures>.fromOpaque(info).takeUnretainedValue()
@@ -263,14 +336,30 @@ final class MouseGestures {
         }
         guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
                                            eventsOfInterest: mask, callback: callback,
-                                           userInfo: Unmanaged.passUnretained(self).toOpaque()) else {
+                                           userInfo: Unmanaged.passUnretained(self).toOpaque()),
+              let src = CFMachPortCreateRunLoopSource(nil, port, 0) else {
             Log.app.error("mouse gestures: event tap not allowed (Accessibility)")
             return
         }
         tap = port
-        source = CFMachPortCreateRunLoopSource(nil, port, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        source = src
+        EventTapThread.shared.add(src)
         CGEvent.tapEnable(tap: port, enable: true)
+    }
+
+    private func stopTap() {
+        if let tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
+        if let source { EventTapThread.shared.remove(source) }
+        tap = nil
+        source = nil
+        tapMask = 0
+    }
+
+    /// Is the tap listening? (status, tests)
+    var listening: CGEventMask { tap == nil ? 0 : tapMask }
+
+    private func ignored() -> Bool {
+        lock.withLock { frontApp.map { app in ignore.contains { AppMatcher.matches($0, app) } } ?? false }
     }
 
     /// True: swallow the event.
@@ -278,11 +367,11 @@ final class MouseGestures {
         if event.getIntegerValueField(.eventSourceUserData) == Self.marker { return false }
         if type == .scrollWheel || type.rawValue == 29 { return zoom(type, event) }
         let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
-        guard let gestures = byButton[button], !gestures.isEmpty else { return false }
+        guard let gestures = lock.withLock({ byButton[button] }), !gestures.isEmpty else { return false }
         let p = event.location
         switch type {
         case .otherMouseDown:
-            if let app = NSWorkspace.shared.frontmostApplication?.localizedName, ignore.contains(where: { AppMatcher.matches($0, app) }) {
+            if ignored() {
                 down = nil
                 return false
             }
@@ -313,12 +402,10 @@ final class MouseGestures {
     /// ⌥-scroll and ⌥-pinch: one step through the tree per notch (or a good pinch), at most
     /// four a second. Only the exact modifier counts, so ⌥⇧-scroll and the like stay the app's.
     private func zoom(_ type: CGEventType, _ event: CGEvent) -> Bool {
-        guard let want = zoomFlags else { return false }
+        guard let want = lock.withLock({ zoomFlags }) else { return false }
         let mods: CGEventFlags = [.maskAlternate, .maskCommand, .maskControl, .maskShift]
         guard event.flags.intersection(mods) == want else { scrollAccum = 0; pinchAccum = 0; return false }
-        if let app = NSWorkspace.shared.frontmostApplication?.localizedName, ignore.contains(where: { AppMatcher.matches($0, app) }) {
-            return false
-        }
+        if ignored() { return false }
         var step = 0
         if type == .scrollWheel {
             let precise = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0

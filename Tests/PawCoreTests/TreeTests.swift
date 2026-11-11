@@ -126,6 +126,72 @@ struct TreeTests {
         #expect(!ws.moveInStack(3, by: 1))
     }
 
+    /// `| | |` → `| =`: three columns, the middle one joins the right one as a row under it.
+    @Test func joinSplitsTheNeighbourAcross() {
+        let ws = Workspace(name: "c", layout: .columns)
+        for id: WindowID in [1, 2, 3] { ws.insert(id, area: area) }
+        let before = frames(ws)
+        #expect(before[1]!.minX < before[2]!.minX && before[2]!.minX < before[3]!.minX)
+        #expect(ws.join(2, .east, area: area))
+        let f = frames(ws)
+        #expect(ws.tiles.count == 3)
+        // Two columns: 1 on the left, 3 over 2 on the right.
+        #expect(f[1]!.minX == area.minX && f[1]!.height == area.height)
+        #expect(f[2]!.minX == f[3]!.minX && f[2]!.width == f[3]!.width)
+        #expect(f[3]!.minY < f[2]!.minY, "under the window it joined")
+        #expect(f[1]!.width == f[3]!.width, "the two columns share the width")
+    }
+
+    @Test func joinFirstGoesOnTopAndNorthSouthMakesColumns() {
+        let ws = Workspace(name: "c", layout: .columns)
+        for id: WindowID in [1, 2, 3] { ws.insert(id, area: area) }
+        #expect(ws.join(2, .east, area: area, first: true))
+        var f = frames(ws)
+        #expect(f[2]!.minY < f[3]!.minY, "first: above it")
+        // 2 over 3 on the right; 3 joins north into 2's row: they sit side by side again.
+        #expect(ws.join(3, .north, area: area))
+        f = frames(ws)
+        #expect(f[2]!.minY == f[3]!.minY && f[2]!.minX < f[3]!.minX)
+        #expect(f[2]!.height == area.height)
+    }
+
+    @Test func joinThenWarpBackIsThreeEqualColumns() {
+        let ws = Workspace(name: "c", layout: .columns)
+        for id: WindowID in [1, 2, 3] { ws.insert(id, area: area) }
+        #expect(ws.join(2, .east, area: area))
+        #expect(ws.warp(2, .west, area: area))
+        let f = frames(ws)
+        let widths = [f[1]!.width, f[2]!.width, f[3]!.width]
+        #expect(widths.max()! - widths.min()! <= 1, "\(widths)")
+        #expect(f.values.allSatisfy { $0.height == area.height })
+    }
+
+    @Test func joinWithNothingThatWayDoesNothing() {
+        let ws = Workspace(name: "c", layout: .columns)
+        for id: WindowID in [1, 2] { ws.insert(id, area: area) }
+        #expect(!ws.join(2, .east, area: area))
+        #expect(!ws.join(1, .north, area: area))
+        #expect(ws.tiles.count == 2)
+    }
+
+    @Test func joinOutOfAStackLeavesTheRestStacked() {
+        let ws = Workspace(name: "s", layout: .columns)
+        for id: WindowID in [1, 2, 3] { ws.insert(id, area: area) }
+        #expect(ws.stack(2, .west, area: area)) // [1, 2] | 3
+        #expect(ws.join(2, .east, area: area))
+        let f = frames(ws)
+        #expect(ws.tiles.map(\.windows.count).sorted() == [1, 1, 1])
+        #expect(f[1]!.height == area.height, "1 keeps its column")
+        #expect(f[2]!.minX == f[3]!.minX && f[3]!.minY < f[2]!.minY)
+    }
+
+    @Test func joinParses() throws {
+        #expect(try Command.parseAll("join east") == [.join(.east, first: false)])
+        #expect(try Command.parseAll("join south first") == [.join(.south, first: true)])
+        #expect(throws: (any Error).self) { try Command.parseAll("join east last") }
+        #expect(throws: (any Error).self) { try Command.parseAll("join") }
+    }
+
     @Test func warpMovesToThatSide() {
         let ws = bsp([1, 2, 3]) // 1 | (2 / 3)
         #expect(ws.warp(1, .east, area: area))

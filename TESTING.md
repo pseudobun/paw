@@ -31,6 +31,8 @@
 - [ ] bsp (`hyper+w`): open windows until they'd get smaller than 640×400 → the screen shows only the branch around the focused one; `ctrl+arrows` past the edge pans to the next ones; the overview shows the whole canvas with the on-screen part outlined
 - [ ] Squeeze a window whose app has a minimum size (System Settings-like apps, Codex, T3) → after a moment it leaves, a placeholder (icon, title, "needs more room") takes its tile; click it → gold outline, `ctrl+alt+arrows` swaps it; in a bigger tile the window shows again; drag it like a window; double-click → zooms in until it fits; `paw retile` forgets the learned sizes
 - [ ] Enable `focus.focusFollowsMouse`: hover a placeholder → its outline and keyboard focus move there, with the app still parked; move to a normal window → focus follows back. Disable it in Settings → hovering stops focusing, clicking still works. Drag across another placeholder or cover it with a floating window → it must not steal focus
+- [ ] With focus-follows-mouse enabled, open a native file picker in Teams (or another app) and let it overlap a neighbouring app's tile. Hover the overlapping part → the picker stays in front; hover an uncovered part of the neighbouring window → focus follows normally. Repeat with `border.enabled: true`
+- [ ] With focus-follows-mouse enabled, start a region capture in a screenshot tool and move the pointer across windows (and displays): selection stays active. Cancel with `esc` → normal hover focus resumes
 - [ ] Focus a placeholder while another app is frontmost, then `ctrl+alt+return` → its window fills the workspace, comes in front of the other apps, and accepts typing without a click; toggle back → its placeholder stays selected. Repeat with `ctrl+alt+space` → the floating window comes forward and accepts typing
 - [ ] `hyper+j` on `A | (B / C)` with B focused → B and C fill the workspace, A hides; again → B alone; `hyper+k` twice → all back; HUD shows the level; switching workspace drops the zoom
 - [ ] ⌥-scroll up / ⌥-pinch out over a window zooms in towards it, animated; down / pinch in zooms out
@@ -40,6 +42,13 @@
 - [ ] `hyper+z` undoes the last swap/warp/resize/drop on the workspace, `hyper+y` redoes
 - [ ] `hyper+w/s/f` again; `paw layout columns` → equal columns, new windows add a column; `paw layout master` → 62% left, the rest in rows
 - [ ] Animations: smooth? Try `animation.curve: "spring"`, `durationMs: 250`, `resize: "animate"`, `enabled: false`
+
+## A hung app
+
+- [ ] Put TextEdit windows on workspaces 1 and 2, then `kill -STOP $(pgrep -x TextEdit)`: `hyper+w/s`, swaps, resizes, focus and workspace switches still answer at once (`just bench hung TextEdit`: every command well under 100 ms); `kill -CONT` → TextEdit's windows land where the layout says
+- [ ] Hold a resize key for a few seconds, let go → resizing stops at once (no backlog keeps running)
+- [ ] Scroll and type in other apps while paw lays out many windows → no stutter
+- [ ] Lock the screen, `paw quit; open -a paw` (or restart over SSH), unlock → within a couple of seconds paw manages every window (`paw status` → `windows:`)
 
 ## Workspaces
 

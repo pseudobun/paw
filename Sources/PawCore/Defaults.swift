@@ -45,6 +45,7 @@ public enum Defaults {
             b["ctrl+alt+\(key)"] = "swap \(dir)"
             b["ctrl+shift+\(key)"] = "stack \(dir)"
             b["cmd+shift+ctrl+\(key)"] = "warp \(dir)"
+            b["cmd+alt+ctrl+\(key)"] = "join \(dir)"
         }
         for n in 1...10 {
             // 0 is the side workspace: a place to throw a window you'll sort out later.

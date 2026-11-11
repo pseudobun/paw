@@ -613,6 +613,31 @@ public final class Workspace {
         let new = Node(windows: [w])
         new.slot = slot
         split(n, with: new, axis: dir.axis, newFirst: dir.isFirst)
+        // Columns stay equal in the columns layout: a window warped out of a column is one more.
+        if layout == .columns, let p = new.parent, p.axis == .horizontal {
+            p.weights = p.weights.map { _ in 1 }
+        }
+        return true
+    }
+
+    /// Moves the window into the tile in `dir`, splitting that tile across: going east or west it
+    /// ends up under the neighbour (two rows), going north or south beside it (two columns).
+    /// `| | |` with the middle one joined east is `| =`. `first`: above (or left of) it instead.
+    @discardableResult
+    public func join(_ w: WindowID, _ dir: Direction, area: CGRect, first: Bool = false) -> Bool {
+        guard let t = tile(of: w), let n = neighbor(of: t, dir, area: area), n !== t else { return false }
+        let slot = t.slot
+        let level = t.parent
+        t.windows.removeAll { $0 == w }
+        t.clampActive()
+        if t.windows.isEmpty { removeTile(t) }
+        let new = Node(windows: [w])
+        new.slot = slot
+        split(n, with: new, axis: dir.axis.flipped, newFirst: first)
+        // The row or column it left shares its space evenly again (`| =`, not `| ==`).
+        if let level, !level.isTile, level === root || level.parent != nil {
+            level.weights = level.weights.map { _ in 1 }
+        }
         return true
     }
 

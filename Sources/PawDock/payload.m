@@ -11,6 +11,8 @@
 //   0x03 order u32 count, count x u32 window                   (bring to front, no reply)
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <errno.h>
+#include <stdatomic.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <Foundation/Foundation.h>
 #include <pthread.h>
@@ -23,6 +25,8 @@
 
 #define PAW_DOCK_VERSION "1"
 #define PAW_DOCK_MAX_MESSAGE (1 << 20)
+// paw keeps one connection open; a few more for `paw dock status` and restarts.
+#define PAW_DOCK_MAX_CONNECTIONS 8
 
 extern int SLSMainConnectionID(void);
 extern CGError SLSMoveWindowWithGroup(int cid, uint32_t wid, CGPoint *point);
@@ -32,6 +36,7 @@ extern CGError SLSReenableUpdate(int cid);
 extern CGError SLSOrderWindow(int cid, uint32_t wid, int order, uint32_t relative);
 
 static int listen_fd = -1;
+static _Atomic int live = 0;
 
 static bool read_all(int fd, void *buf, size_t len)
 {
@@ -94,7 +99,7 @@ static void *serve(void *arg)
 {
     int fd = (int)(intptr_t)arg;
     uint8_t *buf = malloc(PAW_DOCK_MAX_MESSAGE);
-    for (;;) {
+    for (; buf;) {
         uint32_t len;
         if (!read_all(fd, &len, 4) || len == 0 || len > PAW_DOCK_MAX_MESSAGE) break;
         if (!read_all(fd, buf, len)) break;
@@ -112,6 +117,7 @@ static void *serve(void *arg)
     }
     free(buf);
     close(fd);
+    atomic_fetch_sub(&live, 1);
     return NULL;
 }
 
@@ -119,13 +125,27 @@ static void *accept_loop(void *unused)
 {
     for (;;) {
         int fd = accept(listen_fd, NULL, NULL);
-        if (fd < 0) continue;
+        if (fd < 0) {
+            // Out of descriptors: wait for one instead of spinning inside Dock.
+            if (errno == EMFILE || errno == ENFILE || errno == ENOMEM) usleep(50000);
+            continue;
+        }
         // Only the user Dock runs as.
         uid_t uid; gid_t gid;
         if (getpeereid(fd, &uid, &gid) != 0 || uid != getuid()) { close(fd); continue; }
+        if (atomic_fetch_add(&live, 1) >= PAW_DOCK_MAX_CONNECTIONS) { atomic_fetch_sub(&live, 1); close(fd); continue; }
+        // A client that resets the connection must not take Dock down with SIGPIPE. An idle
+        // connection is dropped after 5 minutes (paw reconnects by itself).
+        // (A connection already reset can refuse the option: drop it before writing to it.)
+        int one = 1;
+        if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one) != 0) {
+            close(fd); atomic_fetch_sub(&live, 1); continue;
+        }
+        struct timeval idle = { .tv_sec = 300 };
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &idle, sizeof idle);
         pthread_t t;
         if (pthread_create(&t, NULL, serve, (void *)(intptr_t)fd) == 0) pthread_detach(t);
-        else close(fd);
+        else { close(fd); atomic_fetch_sub(&live, 1); }
     }
     return NULL;
 }
@@ -133,9 +153,21 @@ static void *accept_loop(void *unused)
 __attribute__((constructor))
 static void paw_dock_load(void)
 {
-    char path[104];
-    snprintf(path, sizeof(path), "/tmp/paw-dock-%u.sock", getuid());
-    unlink(path);
+    // In the user's own temporary directory (0700, per user), not /tmp: there another user
+    // could take the name first and keep the helper from listening, or pose as it.
+    char dir[PATH_MAX], path[104];
+    size_t n = confstr(_CS_DARWIN_USER_TEMP_DIR, dir, sizeof(dir));
+    if (n == 0 || n > sizeof(dir)) { NSLog(@"[paw-dock] no user temporary directory"); return; }
+    struct stat st;
+    if (lstat(dir, &st) != 0 || !S_ISDIR(st.st_mode) || st.st_uid != getuid() || (st.st_mode & 077)) {
+        NSLog(@"[paw-dock] %s is not a private directory", dir);
+        return;
+    }
+    if (snprintf(path, sizeof(path), "%s%spaw-dock.sock", dir, dir[strlen(dir) - 1] == '/' ? "" : "/") >= (int)sizeof(path)) {
+        NSLog(@"[paw-dock] socket path too long");
+        return;
+    }
+    if (unlink(path) != 0 && errno != ENOENT) { NSLog(@"[paw-dock] could not remove %s", path); return; }
     listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (listen_fd < 0) return;
     struct sockaddr_un addr = { .sun_family = AF_UNIX };

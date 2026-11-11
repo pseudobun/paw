@@ -112,8 +112,12 @@ Updates are signed (EdDSA) and keep the Accessibility grant.
 ### Uninstall
 
 ```sh
+sudo paw dock uninstall                          # only if you installed the Dock helper
 brew uninstall --cask pseudobun/tap/paw          # add --zap to remove the config and state too
 ```
+
+The Dock helper is a root launch daemon, so remove it first; Homebrew tries to as well, but
+needs your password for it.
 
 Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
 again (it remembers which workspace each window was on) or run `paw recover`.
@@ -167,7 +171,7 @@ Everything else works the same with SIP on; without the helper paw simply uses A
 
 > [!warning]
 > Turning off SIP's debugging, filesystem and NVRAM protections lets any process running as
-> **root** read and change other processes (Dock among them), system files and NVRAM. Ordinary
+> **root** read and change other processes (Dock among them) and NVRAM. Ordinary
 > apps without root gain nothing, but anything you ever run with `sudo` can do more harm than
 > with SIP fully on. Some software (anti-cheat, MDM, iOS apps on the Mac) may refuse to run with
 > SIP partly off. You can turn it back on any time (step 5).
@@ -179,8 +183,10 @@ Everything else works the same with SIP on; without the helper paw simply uses A
       choose **Options → Continue** and sign in.
    2. In the menu bar: **Utilities → Terminal**, then:
       ```sh
-      csrutil enable --without fs --without debug --without nvram
+      csrutil enable --without debug --without nvram
       ```
+      paw needs only `--without debug` (`task_for_pid` on Dock); `--without nvram` lets step 2
+      set the boot argument. Leave the file-system protection on.
    3. `reboot`.
 2. **Allow arm64e code from outside Apple in Dock** (Dock is an arm64e process), in macOS:
    ```sh
@@ -308,7 +314,7 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Stacks**: any tile can hold several windows. `stack <dir>` puts the focused window on the
   stack that way (merging stacks), `unstack` takes it out into its own tile, `unstack all` splits
   the whole stack; `focus stack.next|prev` goes through it, `swap stack.next|prev` reorders it
-- **Moving**: `focus`, `swap`, `warp` in four directions (at the screen edge they go to the next
+- **Moving**: `focus`, `swap`, `warp`, `join` in four directions (at the screen edge they go to the next
   display), `resize` (neighbours further along give way once one is at its minimum), `balance`,
   `rotate`, `toggle float|zoom|split`, `grid`
 - **Drop zones**: drag a tiled window and a preview shows where it lands. On a tile's edge it
@@ -359,8 +365,13 @@ config. The Settings window writes the same file, so people and agents can both 
   connected displays by itself, pins each workspace to its display and numbers them display by
   display like yabai (`workspace new` on a display numbers it after that display's others).
   `paw initiate <setup>` (or the menu bar icon, or hop's "Set Workspace") forces one
-- **Settings window** (menu bar icon → Settings…, or `paw settings`) for every key; it writes the
-  same commented JSON5 file, so people and agents can keep editing the file too
+- **Settings window** (menu bar icon → Settings…, or `paw settings`) for every key, laid out like
+  System Settings; it writes the same commented JSON5 file, so people and agents can keep editing
+  the file too. On the pages about the indicators' look, every indicator shows around the window
+  and changes as you edit
+- **Themes** for every indicator: OG, OG Light, Modern, Minimal, Solarpunk and Cyberpunk set
+  colours, fonts and shape at once (Settings → Appearance: hover one to see it, click to use it;
+  or `paw theme <name>`). Any appearance key overrides the theme
 - **Animations** for window moves: duration, curve (`easeOutCubic`, `spring`, `easeOutBack`…),
   and how sizes change
 - **Stack indicators**: a vertical island next to each stack with one app icon per window, each
@@ -455,7 +466,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
 | `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
 | `indicator` | `enabled` (true), `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
-| `appearance` | `font`, `fontSize`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `borderWidth`, `shadow`, `colors {island islandHi border fg muted dim accent wave good bad}` |
+| `appearance` | `theme` (og, og-light, modern, minimal, solarpunk, cyberpunk; the other keys override it), `font` (a family, or system / system-mono / system-rounded), `fontSize`, `fontWeight`, `boldWeight`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `pills`, `islandHeight`, `borderWidth`, `shadow`, `shadowOpacity`, `shadowRadius`, `hudOpacity`, `edgeOpacity`, `colors {island islandHi border fg muted dim accent wave good bad}` |
 | `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`), `brandColors` (true), `colors` (`"App": "#RRGGBB"`) |
 | `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged`, `displaysChanged` (shell commands with `PAW_*` variables) |
 | `mouse` | `dropZones` (true), `stackModifier` (`alt`), `seamHandles` (true), `gestures` (`[{ button: "middle", direction: "left", command: "workspace prev" }, …]`; buttons `middle back forward`, directions `left right up down click`) |
@@ -476,6 +487,7 @@ matches by pattern.
 | `ctrl+alt+←↑→↓` | swap |
 | `ctrl+shift+←↑→↓` | stack onto the neighbour |
 | `cmd+shift+ctrl+←↑→↓` | warp; a stacked window with nothing that way leaves its stack to that side |
+| `cmd+alt+ctrl+←↑→↓` | join: into the tile that way, splitting it across (`\| \| \|` → `\| =`) |
 | `hyper+←/→` | previous / next window in the stack |
 | `ctrl+1…9`, `ralt+1…9` | workspace 1–9 |
 | `ctrl+0`, `ralt+0` | the side workspace (`+N` in the bar) |
@@ -597,6 +609,7 @@ Bindings and the CLI take the same commands; chain several with `;`
 | `swap <dir>` | Swap places with the window that way (to the next display at the edge) |
 | `swap stack.next\|stack.prev` | Move the window down / up its stack |
 | `warp <dir>` | Move into that tile's place, splitting it |
+| `join <dir> [first]` | Move into the tile that way, splitting it across: `\| \| \|` with the middle one joined east is `\| =` (`first`: on top) |
 | `stack <dir>` | Put the window on the stack that way |
 | `unstack [all]` | Take the window (every window) out of its stack |
 | `layout bsp\|columns\|master\|stack\|float` | Layout of the focused workspace (again: re-tile) |
@@ -621,7 +634,7 @@ Bindings and the CLI take the same commands; chain several with `;`
 
 paw itself: `paw status`, `paw query [--json]`, `paw subscribe [events] [--reconnect] [--exec cmd]`, `paw setups [--json]`, `paw settings`,
 `paw hide|show` (indicators), `paw update`, `paw reload`, `paw config path|check|show|template|format`,
-`paw icon <app>`, `paw color <app>`, `paw preview out.png`, `paw quit`.
+`paw icon <app>`, `paw color <app>`, `paw theme [list|<name>]`, `paw preview out.png`, `paw quit`.
 
 ## Development
 
@@ -635,6 +648,17 @@ overview's geometry, neighbours, commands, key specs, easing, config.
 `Sources/paw`: `WM/` (accessibility, tracking, animator, bindings, workspaces, mouse: drop preview,
 seams, gestures), `Stacks/` and `UI/` (indicators, overview, HUD), `App/` (socket, events), `CLI/`. `just examples` regenerates `examples/config.json5` from the built-in
 template. Manual checks: [TESTING.md](TESTING.md).
+
+See [PERFORMANCE.md](PERFORMANCE.md) for what was measured. The main thread never waits on an app: every window move goes to that app's own queue
+(`AXQueue`), an app whose accessibility calls time out is skipped for a while (`AXHealth`), and
+the event taps run on a thread of their own. `just bench` measures it against the running dev
+build, with a few windows on workspaces 1 and 2:
+
+```sh
+just bench switch 200     # workspace switches: round trip, and until every window is on screen
+just bench ops 200        # focus, swap, resize, layout changes, query
+just bench hung TextEdit  # the same with TextEdit stopped, as a hung app would be
+```
 
 ### Releasing
 

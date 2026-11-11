@@ -322,9 +322,14 @@ public struct PawConfig: Codable, Equatable, Sendable {
     }
 
     public struct Appearance: Codable, Equatable, Sendable {
-        /// Titles; falls back to SF Mono.
+        /// The theme the other keys start from (`Themes`); a key set here overrides it.
+        public var theme = "og"
+        /// Titles; falls back to SF Mono. "system", "system-mono" and "system-rounded" are SF.
         public var font = "GeistMono Nerd Font"
         public var fontSize = 12.0
+        /// Weights of plain and bold text: regular, medium, semibold or bold.
+        public var fontWeight = "medium"
+        public var boldWeight = "semibold"
         /// App icons: sketchybar-app-font ligatures, like the bar.
         public var appFont = "sketchybar-app-font"
         public var appIconSize = 14.0
@@ -333,6 +338,15 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var cellRadius = 7.0
         public var borderWidth = 1.0
         public var shadow = true
+        public var shadowOpacity = 0.35
+        public var shadowRadius = 4.0
+        /// Height of title islands; the workspace HUD is 2 pt taller.
+        public var islandHeight = 28.0
+        /// The HUD, the move strip and the edge markers as pills (round ends); false: `radius`.
+        public var pills = true
+        /// How opaque the workspace HUD and the idle edge markers are.
+        public var hudOpacity = 0.85
+        public var edgeOpacity = 0.8
         public var colors = Colors()
         public init() {}
     }
@@ -502,22 +516,74 @@ extension PawConfig.Indicator {
 
 extension PawConfig.Appearance {
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case font, fontSize, appFont, appIconSize, radius, cellRadius, borderWidth, shadow, colors
+        case theme, font, fontSize, fontWeight, boldWeight, appFont, appIconSize, radius, cellRadius, borderWidth, shadow,
+             shadowOpacity, shadowRadius, islandHeight, pills, hudOpacity, edgeOpacity, colors
     }
+    /// Starts from the theme, then applies the keys that are set.
     public init(from decoder: Decoder) throws {
-        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.font, &font); try f(.fontSize, &fontSize); try f(.appFont, &appFont); try f(.appIconSize, &appIconSize)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let name = try c.decodeIfPresent(String.self, forKey: .theme) ?? "og"
+        self = Themes.appearance(name)
+        let f = Fields(c: c)
+        try f(.font, &font); try f(.fontSize, &fontSize); try f(.fontWeight, &fontWeight); try f(.boldWeight, &boldWeight)
+        try f(.appFont, &appFont); try f(.appIconSize, &appIconSize)
         try f(.radius, &radius); try f(.cellRadius, &cellRadius); try f(.borderWidth, &borderWidth); try f(.shadow, &shadow)
-        try f(.colors, &colors)
+        try f(.shadowOpacity, &shadowOpacity); try f(.shadowRadius, &shadowRadius); try f(.islandHeight, &islandHeight)
+        try f(.pills, &pills); try f(.hudOpacity, &hudOpacity); try f(.edgeOpacity, &edgeOpacity)
+        if c.contains(.colors) {
+            try colors.decodeOver(c.nestedContainer(keyedBy: PawConfig.Colors.CodingKeys.self, forKey: .colors))
+        }
+    }
+
+    /// The keys that differ from the theme's values, as config keys.
+    public var overrides: Set<String> {
+        let base = Themes.appearance(theme)
+        var out = Set<String>()
+        func check<T: Equatable>(_ key: String, _ path: KeyPath<Self, T>) { if self[keyPath: path] != base[keyPath: path] { out.insert(key) } }
+        check("font", \.font); check("fontSize", \.fontSize); check("fontWeight", \.fontWeight); check("boldWeight", \.boldWeight)
+        check("appFont", \.appFont); check("appIconSize", \.appIconSize); check("radius", \.radius); check("cellRadius", \.cellRadius)
+        check("borderWidth", \.borderWidth); check("shadow", \.shadow); check("shadowOpacity", \.shadowOpacity)
+        check("shadowRadius", \.shadowRadius); check("islandHeight", \.islandHeight); check("pills", \.pills)
+        check("hudOpacity", \.hudOpacity); check("edgeOpacity", \.edgeOpacity)
+        for key in PawConfig.Colors.CodingKeys.allCases where colors[key] != base.colors[key] { out.insert("colors.\(key.rawValue)") }
+        return out
+    }
+
+    /// Back to the theme's values, keeping the app icon font (it is not part of a theme's look).
+    public func resetToTheme(_ name: String? = nil) -> Self {
+        var a = Themes.appearance(name ?? theme)
+        a.appFont = appFont
+        a.appIconSize = appIconSize
+        return a
     }
 }
 
 extension PawConfig.Colors {
     enum CodingKeys: String, CodingKey, CaseIterable { case island, islandHi, border, fg, muted, dim, accent, wave, good, bad }
     public init(from decoder: Decoder) throws {
-        let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
+        self.init()
+        try decodeOver(decoder.container(keyedBy: CodingKeys.self))
+    }
+
+    mutating func decodeOver(_ c: KeyedDecodingContainer<CodingKeys>) throws {
+        let f = Fields(c: c)
         try f(.island, &island); try f(.islandHi, &islandHi); try f(.border, &border); try f(.fg, &fg); try f(.muted, &muted)
         try f(.dim, &dim); try f(.accent, &accent); try f(.wave, &wave); try f(.good, &good); try f(.bad, &bad)
+    }
+
+    subscript(key: CodingKeys) -> ARGB {
+        switch key {
+        case .island: island
+        case .islandHi: islandHi
+        case .border: border
+        case .fg: fg
+        case .muted: muted
+        case .dim: dim
+        case .accent: accent
+        case .wave: wave
+        case .good: good
+        case .bad: bad
+        }
     }
 }
 
@@ -624,6 +690,13 @@ public enum ConfigLoader {
         }
         for (name, p) in c.workspaces.sorted(by: { $0.key < $1.key }) where p.tiles.isEmpty && p.layout != .float {
             w.append("workspaces.\(name): no tiles")
+        }
+        if Themes.named(c.appearance.theme) == nil {
+            w.append("appearance.theme: “\(c.appearance.theme)” is not \(Themes.all.map(\.id).joined(separator: ", "))")
+        }
+        for (key, v) in [("fontWeight", c.appearance.fontWeight), ("boldWeight", c.appearance.boldWeight)]
+            where !Themes.weights.contains(v.lowercased()) {
+            w.append("appearance.\(key): regular, medium, semibold or bold")
         }
         if !["hover", "never"].contains(c.indicator.titles) { w.append("indicator.titles: “\(c.indicator.titles)” is not hover or never") }
         if !["start", "animate", "end"].contains(c.animation.resize) { w.append("animation.resize: start, animate or end") }

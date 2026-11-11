@@ -43,6 +43,18 @@ struct PlaceholderTests {
         #expect((placeholder.contentView as? PlaceholderView)?.focusBorderVisible == true)
         #expect(border.panel.parent === placeholder)
 
+        let view = try #require(placeholder.contentView as? PlaceholderView)
+        let item = Placeholders.Item(id: id, app: "Test", title: "Test", frame: frame, focused: true)
+        let style = Style(PawConfig.Appearance())
+        placeholders.apply([item], style: style, focusFollowsMouse: false, focusBorder: border, actions: actions)
+        #expect(view.focusBorderVisible)
+        border.hide()
+        placeholders.apply([item], style: style, focusFollowsMouse: false, focusBorder: border, actions: actions)
+        #expect(!view.focusBorderVisible, "restore the fallback when the external border hides")
+        border.show(frame, window: id, above: false, screen: screen, config: config)
+        placeholders.apply([item], style: style, focusFollowsMouse: false, focusBorder: border, actions: actions)
+        #expect(view.focusBorderVisible, "remove the fallback when the external border returns")
+
         let moved = frame.offsetBy(dx: 40, dy: 20)
         border.show(moved, window: id, above: false, screen: screen, config: config)
         #expect(border.panel.parent == nil)

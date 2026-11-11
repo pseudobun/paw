@@ -35,14 +35,18 @@ final class Placeholders {
         for item in items {
             let p = panels[item.id] ?? make()
             panels[item.id] = p
+            // Redrawn only when what it shows changed: this runs on every indicator update.
+            let focusBorderVisible = focusBorder.windowID == item.id
+            let changed = p.view.item != item || p.view.style.a != style.a
+                || p.view.focusBorderVisible != focusBorderVisible
             p.view.item = item
             p.view.style = style
             p.view.actions = actions
             p.view.focusFollowsMouse = focusFollowsMouse
-            p.view.focusBorderVisible = focusBorder.windowID == item.id
+            p.view.focusBorderVisible = focusBorderVisible
             let f = ScreenGeometry.cocoa(fromAX: item.frame, primaryHeight: primaryHeight)
             if p.panel.frame != f { p.panel.setFrame(f, display: false) }
-            p.view.needsDisplay = true
+            if changed { p.view.needsDisplay = true }
             if !p.panel.isVisible { p.panel.orderFrontRegardless() }
             if p.view.focusBorderVisible, focusBorder.panel.parent !== p.panel {
                 focusBorder.panel.parent?.removeChildWindow(focusBorder.panel)
@@ -99,10 +103,11 @@ final class PlaceholderView: NSView {
         guard let item else { return }
         let c = style.colors
         let r = bounds.insetBy(dx: 1, dy: 1)
-        let path = NSBezierPath(roundedRect: r, xRadius: 12, yRadius: 12)
+        let radius = style.a.radius + 3
+        let path = NSBezierPath(roundedRect: r, xRadius: radius, yRadius: radius)
         c.island.withAlpha(1).ns.setFill()
         path.fill()
-        let dash = NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), xRadius: 12, yRadius: 12)
+        let dash = NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
         dash.setLineDash([6, 5], count: 2, phase: 0)
         dash.lineWidth = 1
         if item.focused {

@@ -80,12 +80,24 @@ static int fail(const char *what, kern_return_t kr)
     return 1;
 }
 
-static bool payload_ok(const char *payload)
+/// Owned by root and writable by no one else, and not a symlink (lstat): a link would be
+/// checked here but resolved again by Dock's dlopen.
+static bool root_only(const char *path, bool dir)
 {
     struct stat st;
-    if (stat(payload, &st) != 0) { fail("payload not found", 0); return false; }
-    if (st.st_uid != 0 || (st.st_mode & (S_IWGRP | S_IWOTH))) {
-        fail("payload must be owned by root and not writable by others", 0);
+    if (lstat(path, &st) != 0) return false;
+    if (dir ? !S_ISDIR(st.st_mode) : !S_ISREG(st.st_mode)) return false;
+    return st.st_uid == 0 && !(st.st_mode & (S_IWGRP | S_IWOTH));
+}
+
+static bool payload_ok(const char *payload)
+{
+    char dir[PATH_MAX];
+    strlcpy(dir, payload, sizeof(dir));
+    char *slash = strrchr(dir, '/');
+    if (slash) *(slash == dir ? slash + 1 : slash) = 0;
+    if (!root_only(payload, false) || !slash || !root_only(dir, true)) {
+        fail("payload and its directory must be owned by root, writable by no one else, and not symlinks", 0);
         return false;
     }
     return true;

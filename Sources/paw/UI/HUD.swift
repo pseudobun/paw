@@ -8,28 +8,33 @@ final class WorkspaceHUD {
     private let panel = TitlePanel()
     private var hideWork: DispatchWorkItem?
 
-    /// `area` in AX coordinates (the display's tiling area).
-    func show(label: String, apps: [String], in area: CGRect, icons: AppIconMap, config: PawConfig, duration: Double) {
-        let scale = NSScreen.main?.backingScaleFactor ?? 2
+    /// The HUD's island: the workspace's label, then its apps' icons.
+    static func layer(label: String, apps: [String], icons: AppIconMap, config: PawConfig, style: Style, scale: CGFloat) -> CALayer {
         let c = style.colors
         var segs: [Island.Segment] = [.init(text: style.text(label, c.accent, font: style.bold), gapAfter: apps.isEmpty ? 0 : 10)]
         for (i, app) in apps.prefix(12).enumerated() {
             let color = AppColors.shared.color(for: app, icons: config.icons) ?? c.fg
             segs.append(.init(text: style.appGlyph(icons.glyph(for: app), app: app, color: color), gapAfter: i == apps.count - 1 ? 0 : 8))
         }
-        let l = Island.make(segs, style: style, scale: scale)
-        let h: CGFloat = 30
-        let w = l.bounds.width
-        let inner = l
+        let inner = Island.make(segs, style: style, scale: scale)
+        let h = style.islandHeight + 2
         let root = CALayer()
         root.contentsScale = scale
-        root.bounds = CGRect(x: 0, y: 0, width: w, height: h)
-        style.decorate(root, radius: h / 2)
+        root.bounds = CGRect(x: 0, y: 0, width: inner.bounds.width, height: h)
+        style.decorate(root, radius: style.pillRadius(h))
         inner.backgroundColor = nil
         inner.borderWidth = 0
         inner.shadowOpacity = 0
         inner.frame = CGRect(x: 0, y: (h - inner.bounds.height) / 2, width: inner.bounds.width, height: inner.bounds.height)
         root.addSublayer(inner)
+        return root
+    }
+
+    /// `area` in AX coordinates (the display's tiling area).
+    func show(label: String, apps: [String], in area: CGRect, icons: AppIconMap, config: PawConfig, duration: Double) {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        let root = Self.layer(label: label, apps: apps, icons: icons, config: config, style: style, scale: scale)
+        let w = root.bounds.width, h = root.bounds.height
         // Just under the top of the tiling area, over the windows' title bars.
         let ax = CGRect(x: (area.midX - w / 2).rounded(), y: area.minY + 10, width: w, height: h)
         let frame = ScreenGeometry.cocoa(fromAX: ax, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
@@ -40,10 +45,10 @@ final class WorkspaceHUD {
             panel.alphaValue = 0
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.1
-                panel.animator().alphaValue = 0.85
+                panel.animator().alphaValue = style.a.hudOpacity
             }
         } else {
-            panel.alphaValue = 0.85
+            panel.alphaValue = style.a.hudOpacity
         }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
@@ -78,12 +83,12 @@ final class MoveHUD {
     private var timer: Timer?
     private var shownAt = Date.distantPast
 
-    /// `area` in AX coordinates.
+    /// The strip: the neighbours, arrows and the moving workspace.
     /// `side`: the side workspace, shown dimmed before the start (it stays first).
-    func show(prev: Cell?, current: Cell, next: Cell?, side: Cell? = nil, in area: CGRect, icons: AppIconMap, config: PawConfig) {
-        let scale = NSScreen.main?.backingScaleFactor ?? 2
+    static func layer(prev: Cell?, current: Cell, next: Cell?, side: Cell? = nil, icons: AppIconMap, config: PawConfig,
+                      style: Style, scale: CGFloat) -> CALayer {
         let c = style.colors
-        let h: CGFloat = 46, pad: CGFloat = 8, gap: CGFloat = 6
+        let h = style.islandHeight + 18, pad: CGFloat = 8, gap: CGFloat = 6
         var parts: [CALayer] = []
 
         func cellLayer(_ cell: Cell, active: Bool) -> CALayer {
@@ -100,7 +105,7 @@ final class MoveHUD {
             l.borderColor = (active ? c.accent : c.border).cg
             l.borderWidth = active ? 1.5 : 0
             l.shadowOpacity = 0
-            l.cornerRadius = l.bounds.height / 2
+            l.cornerRadius = style.pillRadius(l.bounds.height)
             return l
         }
         func text(_ s: String, _ color: ARGB) -> CALayer {
@@ -118,8 +123,9 @@ final class MoveHUD {
             let w = (t.size().width + 20).rounded()
             let slot = CAShapeLayer()
             slot.contentsScale = scale
-            slot.bounds = CGRect(x: 0, y: 0, width: w, height: 28)
-            slot.path = CGPath(roundedRect: slot.bounds.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 14, cornerHeight: 14, transform: nil)
+            slot.bounds = CGRect(x: 0, y: 0, width: w, height: style.islandHeight)
+            let r = style.pillRadius(style.islandHeight)
+            slot.path = CGPath(roundedRect: slot.bounds.insetBy(dx: 0.5, dy: 0.5), cornerWidth: r, cornerHeight: r, transform: nil)
             slot.fillColor = nil
             slot.strokeColor = c.dim.withAlpha(0.7).cg
             slot.lineWidth = 1
@@ -148,13 +154,21 @@ final class MoveHUD {
         let root = CALayer()
         root.contentsScale = scale
         root.bounds = CGRect(x: 0, y: 0, width: width, height: h)
-        style.decorate(root, radius: h / 2)
+        style.decorate(root, radius: style.pillRadius(h))
         var x = pad
         for p in parts {
             p.frame = CGRect(x: x, y: ((h - p.bounds.height) / 2).rounded(), width: p.bounds.width, height: p.bounds.height)
             root.addSublayer(p)
             x += p.bounds.width + gap
         }
+        return root
+    }
+
+    /// `area` in AX coordinates.
+    func show(prev: Cell?, current: Cell, next: Cell?, side: Cell? = nil, in area: CGRect, icons: AppIconMap, config: PawConfig) {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        let root = Self.layer(prev: prev, current: current, next: next, side: side, icons: icons, config: config, style: style, scale: scale)
+        let width = root.bounds.width, h = root.bounds.height
         let ax = CGRect(x: (area.midX - width / 2).rounded(), y: area.minY + 10, width: width, height: h)
         panel.show(root, at: ScreenGeometry.cocoa(fromAX: ax, primaryHeight: NSScreen.screens.first?.frame.height ?? 0))
         panel.alphaValue = 0.95

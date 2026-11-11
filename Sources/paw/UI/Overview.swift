@@ -136,6 +136,8 @@ final class OverviewController {
         guard isOpen else { return }
         isOpen = false
         drag = nil
+        captureTask?.cancel()
+        captureTask = nil
         let closing = panels
         panels = []
         NSAnimationContext.runAnimationGroup({ ctx in
@@ -452,23 +454,37 @@ final class OverviewController {
         }
     }
 
+    /// The capture under way: a new one (opened again, a drop) or closing cancels it.
+    private var captureTask: Task<Void, Never>?
+    /// Pictures are drawn at most this wide (points; twice that in pixels): enough for the stage.
+    static let thumbnailWidth: CGFloat = 480
+
     private func captureThumbnails() {
+        captureTask?.cancel()
         guard thumbnailsEnabled else { return }
         let ids = Set(model.flatMap { $0.windows.map(\.id) })
-        Task { @MainActor [weak self] in
+        // Pictures of windows that are gone go with them.
+        thumbnails = thumbnails.filter { ids.contains($0.key) }
+        captureTask = Task { @MainActor [weak self] in
             guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else { return }
+            var pending = 0
             for w in content.windows where ids.contains(w.windowID) {
+                if Task.isCancelled { return }
                 let cfg = SCStreamConfiguration()
-                let scale = min(1, 720 / max(1, w.frame.width))
+                let scale = min(1, Self.thumbnailWidth / max(1, w.frame.width))
                 cfg.width = min(8192, max(32, Int(saturating: w.frame.width * scale * 2)))
                 cfg.height = min(8192, max(32, Int(saturating: w.frame.height * scale * 2)))
                 cfg.showsCursor = false
                 cfg.ignoreShadowsSingleWindow = true
                 let filter = SCContentFilter(desktopIndependentWindow: w)
-                guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg) else { continue }
+                guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg),
+                      !Task.isCancelled else { continue }
                 self?.thumbnails[w.windowID] = image
-                self?.redraw()
+                // A redraw every few pictures, not after each one.
+                pending += 1
+                if pending >= 4 { pending = 0; self?.redraw() }
             }
+            if pending > 0 { self?.redraw() }
         }
     }
 }

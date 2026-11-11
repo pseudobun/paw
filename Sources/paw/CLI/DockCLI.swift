@@ -46,6 +46,13 @@ enum DockCLI {
         do {
             // Root's, writable by no one else: the loader refuses anything else (it ends up in Dock).
             try fm.createDirectory(atPath: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755, .ownerAccountID: 0, .groupOwnerAccountID: 0])
+            // An existing one keeps its owner and mode: make them root's, and refuse a symlink.
+            var st = stat()
+            guard lstat(dir, &st) == 0, st.st_mode & S_IFMT == S_IFDIR else {
+                fputs("paw: \(dir) is not a directory\n", stderr)
+                return 1
+            }
+            try fm.setAttributes([.posixPermissions: 0o755, .ownerAccountID: 0, .groupOwnerAccountID: 0], ofItemAtPath: dir)
             for (name, mode) in [("PawDock.dylib", 0o644), ("paw-dock-loader", 0o755)] {
                 let to = dir + "/" + name
                 try? fm.removeItem(atPath: to)
