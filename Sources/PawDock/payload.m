@@ -23,7 +23,10 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#define PAW_DOCK_VERSION "1"
+// scripts/bundle.sh sets it to a hash of this file and loader.m.
+#ifndef PAW_DOCK_VERSION
+#define PAW_DOCK_VERSION "dev"
+#endif
 #define PAW_DOCK_MAX_MESSAGE (1 << 20)
 // paw keeps one connection open; a few more for `paw dock status` and restarts.
 #define PAW_DOCK_MAX_CONNECTIONS 8

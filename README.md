@@ -204,8 +204,12 @@ Everything else works the same with SIP on; without the helper paw simply uses A
    It copies the helper (from paw.app) to `/Library/Application Support/paw`, owned by root, and
    adds a launch daemon (`com.pseudobun.paw.dock`) that loads it into Dock now, after every
    restart and whenever Dock restarts. paw picks it up within a couple of seconds; `paw status`
-   shows `windowMoves: through the Dock helper`. Updating paw? Run `sudo paw dock install` again
-   so the helper matches.
+   shows `windowMoves: through the Dock helper`. When the helper is new or changed, install
+   restarts Dock so it runs the new one.
+
+   Updating paw needs nothing more unless the helper changed with it: then `paw status` says
+   `through the Dock helper (outdated: sudo paw dock install)`, and `paw dock status` shows the
+   versions in this paw, installed and in Dock.
 5. **Undo:** `sudo paw dock uninstall` (then `killall Dock`), and to turn SIP fully back on, in
    Recovery: `csrutil enable`; `sudo nvram -d boot-args` removes the boot argument.
 

@@ -6,6 +6,7 @@ enum DockCLI {
     static let dir = "/Library/Application Support/paw"
     static var payload: String { dir + "/PawDock.dylib" }
     static var loader: String { dir + "/paw-dock-loader" }
+    static var versionFile: String { dir + "/VERSION" }
     static let label = "com.pseudobun.paw.dock"
     static var plist: String { "/Library/LaunchDaemons/\(label).plist" }
 
@@ -27,6 +28,13 @@ enum DockCLI {
         print("sip: \(sip ? "debugging restrictions off (helper allowed)" : "on (helper not allowed; see README)")")
         print("installed: \(installed ? "yes" : "no (sudo paw dock install)")")
         print("loaded: \(loaded ? "yes" : "no")")
+        let bundled = DockBridge.bundledVersion, installedVersion = DockBridge.installedVersion
+        let running = loaded ? DockBridge.shared.loadedVersion : nil
+        print("version: this paw \(bundled ?? "-"), installed \(installed ? installedVersion ?? "older" : "-"), in Dock \(running ?? "-")")
+        if installed, let advice = DockBridge.advice(bundled: bundled, installed: installedVersion, loaded: running) {
+            print("helper \(advice)")
+            return 1
+        }
         return loaded ? 0 : 1
     }
 
@@ -39,6 +47,8 @@ enum DockCLI {
         let src = AppPaths.appBundle.bundleURL.appending(path: "Contents/Resources/dock")
         let fm = FileManager.default
         var restarted = false
+        let previous = DockBridge.installedVersion
+        let version = DockBridge.readVersion(src.appending(path: "VERSION").path)
         guard fm.fileExists(atPath: src.appending(path: "PawDock.dylib").path) else {
             fputs("paw: this build has no Dock helper (\(src.path))\n", stderr)
             return 1
@@ -53,10 +63,14 @@ enum DockCLI {
                 return 1
             }
             try fm.setAttributes([.posixPermissions: 0o755, .ownerAccountID: 0, .groupOwnerAccountID: 0], ofItemAtPath: dir)
-            for (name, mode) in [("PawDock.dylib", 0o644), ("paw-dock-loader", 0o755)] {
+            try? fm.removeItem(atPath: versionFile)
+            for (name, mode) in [("PawDock.dylib", 0o644), ("paw-dock-loader", 0o755), ("VERSION", 0o644)] {
                 let to = dir + "/" + name
+                let from = src.appending(path: name).path
                 try? fm.removeItem(atPath: to)
-                try fm.copyItem(atPath: src.appending(path: name).path, toPath: to)
+                // A build without scripts/bundle.sh has no VERSION.
+                if name == "VERSION", !fm.fileExists(atPath: from) { continue }
+                try fm.copyItem(atPath: from, toPath: to)
                 try fm.setAttributes([.posixPermissions: mode, .ownerAccountID: 0, .groupOwnerAccountID: 0], ofItemAtPath: to)
             }
             let daemon: [String: Any] = [
@@ -86,16 +100,38 @@ enum DockCLI {
             fputs("paw: launchctl bootstrap failed\n", stderr)
             return 1
         }
-        // The daemon waits a round before loading into a Dock it sees for the first time.
-        for _ in 0..<20 where !fm.fileExists(atPath: DockBridge.socketPath) { usleep(250_000) }
-        print("installed; the helper loads into Dock now and whenever Dock starts (log: /var/log/paw-dock.log)")
+        // Loading a new helper into a Dock that already runs one changes nothing (Dock has a
+        // library by that path already): a restarted Dock gets the new one.
+        if needsDockRestart(previous: previous, new: version) {
+            restartDock()
+            print("installed; restarted Dock so it loads the new helper, and it loads whenever Dock starts (log: /var/log/paw-dock.log)")
+        } else {
+            print("installed; the helper loads into Dock now and whenever Dock starts (log: /var/log/paw-dock.log)")
+        }
         return 0
+    }
+
+    /// Dock may run another helper than the one just installed: none was installed, an older
+    /// one, or one without a version (before versions, or a build without scripts/bundle.sh).
+    static func needsDockRestart(previous: String?, new: String?) -> Bool {
+        guard let previous, let new else { return true }
+        return previous != new
+    }
+
+    /// launchd starts Dock again at once, and the daemon loads the helper into it.
+    private static func restartDock() {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        p.arguments = ["Dock"]
+        p.standardError = FileHandle.nullDevice
+        try? p.run()
+        p.waitUntilExit()
     }
 
     static func uninstall() -> Int32 {
         guard geteuid() == 0 else { fputs("paw: run it with sudo: sudo paw dock uninstall\n", stderr); return 77 }
         _ = launchctl(["bootout", "system/\(label)"])
-        for p in [plist, payload, loader] { try? FileManager.default.removeItem(atPath: p) }
+        for p in [plist, payload, loader, versionFile] { try? FileManager.default.removeItem(atPath: p) }
         try? FileManager.default.removeItem(atPath: dir)
         // What's already in Dock stays until Dock restarts.
         print("uninstalled; restart Dock (killall Dock) to unload what's still running")
