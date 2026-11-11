@@ -4,6 +4,18 @@ import Testing
 @testable import paw
 
 struct WindowHitTests {
+    @Test func screenshotOverlayBlocksFocusUntilCaptureCloses() {
+        let left = info(1, frame: CGRect(x: -1440, y: 0, width: 1440, height: 900))
+        let right = info(2, frame: CGRect(x: 0, y: 0, width: 1920, height: 1080))
+        let capture = info(3, frame: CGRect(x: -1440, y: 0, width: 3360, height: 1080), layer: 25)
+        for (point, id) in [(CGPoint(x: -500, y: 300), WindowID(1)), (CGPoint(x: 500, y: 300), WindowID(2))] {
+            #expect(WindowManager.topWindow(at: point, in: [capture, left, right],
+                                            isManaged: { $0 == 1 || $0 == 2 }) == nil)
+            #expect(WindowManager.topWindow(at: point, in: [left, right],
+                                            isManaged: { $0 == 1 || $0 == 2 }) == id)
+        }
+    }
+
     @Test func filePickerBlocksHoverFocusThroughItsOverlap() {
         let background = CGRect(x: 0, y: 0, width: 800, height: 600)
         let picker = CGRect(x: 400, y: 200, width: 600, height: 300)
