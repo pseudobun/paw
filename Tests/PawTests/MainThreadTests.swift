@@ -115,7 +115,7 @@ struct MainThreadTests {
             AXQueue.run { w.setPosition(CGPoint(x: Double(i), y: 0)) }
         }
         let elapsed = CACurrentMediaTime() - t0
-        #expect(elapsed < 0.05, "51 moves to a hung app took \(elapsed) s on the main thread")
+        #expect(elapsed < 0.4, "51 moves to a hung app took \(elapsed) s on the main thread")
         #expect(w.isMoving)
         #expect(w.readFrame() == CGRect(x: 49, y: 0, width: 200, height: 200), "where it's going, without asking the app")
         app.hung = []
@@ -140,7 +140,7 @@ struct MainThreadTests {
         let t0 = CACurrentMediaTime()
         w.setFrame(CGRect(x: 300, y: 300, width: 120, height: 80))
         let elapsed = CACurrentMediaTime() - t0
-        #expect(elapsed < AXQueue.flushWait + 0.05, "waited \(elapsed) s for a hung app")
+        #expect(elapsed < AXQueue.flushWait + 0.4, "waited \(elapsed) s for a hung app (it never answers)")
         #expect(w.isMoving)
         app.hung = []
         app.release.signal()

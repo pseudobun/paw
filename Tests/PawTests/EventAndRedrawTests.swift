@@ -1,7 +1,7 @@
 import AppKit
 import PawCore
 import Testing
-@testable import paw
+@preconcurrency @testable import paw
 
 /// Event taps off the main thread, seam panels reused across switches, bounded caches.
 @MainActor
