@@ -4,6 +4,33 @@ import Testing
 @testable import paw
 
 struct WindowHitTests {
+    @Test func closingWindowDoesNotOccludeHoveredSurvivor() {
+        let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        let list = [info(1, frame: frame), info(2, frame: frame)]
+        let hovered = WindowManager.topWindow(at: CGPoint(x: 400, y: 300), in: list,
+                                              ignoring: [1], isManaged: { $0 == 2 })
+        #expect(hovered == 2)
+    }
+
+    @Test func closeFocusPrefersHoverThenExistingFallbacks() {
+        let ws = Workspace(name: "1")
+        let area = CGRect(x: 0, y: 0, width: 800, height: 600)
+        for id: WindowID in [1, 2, 3, 4] { ws.insert(id, area: area) }
+        ws.focused = 1
+        ws.remove(1)
+
+        // Hover can belong to another visible workspace, even when this one becomes empty.
+        #expect(WindowManager.focusAfterRemoval(in: ws, hovered: 9, appFocused: 4, sameApp: { $0 == 3 }) == 9)
+        #expect(WindowManager.focusAfterRemoval(in: ws, hovered: nil, appFocused: 4, sameApp: { $0 == 3 }) == 4)
+        // The app's focused window on a hidden workspace must not pull focus there.
+        #expect(WindowManager.focusAfterRemoval(in: ws, hovered: nil, appFocused: 9, sameApp: { $0 == 3 }) == 3)
+        #expect(WindowManager.focusAfterRemoval(in: ws, hovered: nil, appFocused: nil, sameApp: { _ in false }) == 2)
+
+        for id in ws.allWindows { ws.remove(id) }
+        #expect(WindowManager.focusAfterRemoval(in: ws, hovered: 9, appFocused: nil, sameApp: { _ in false }) == 9)
+        #expect(WindowManager.focusAfterRemoval(in: ws, hovered: nil, appFocused: nil, sameApp: { _ in false }) == nil)
+    }
+
     @Test func screenshotOverlayBlocksFocusUntilCaptureCloses() {
         let left = info(1, frame: CGRect(x: -1440, y: 0, width: 1440, height: 900))
         let right = info(2, frame: CGRect(x: 0, y: 0, width: 1920, height: 1080))

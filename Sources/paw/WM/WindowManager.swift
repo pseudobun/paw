@@ -447,7 +447,7 @@ final class WindowManager {
         return w
     }
 
-    private func remove(_ id: WindowID, relayout: Bool = true) {
+    private func remove(_ id: WindowID, relayout: Bool = true, closed: Bool = false) {
         guard let w = windows.removeValue(forKey: id) else { return }
         windowMins[id] = nil
         overflowSuspects[id] = nil
@@ -455,21 +455,20 @@ final class WindowManager {
         for ws in workspaces.values { ws.windowMins[id] = nil }
         animator.cancel(id)
         let ws = workspaceOf(id)
-        let wasFocused = ws?.focused == id
+        let wasFocused = ws?.focused == id && (!closed || ws === focusedWorkspace)
         ws?.remove(id)
-        _ = w
         if let ws, relayout, displayShowing(ws.name) != nil {
+            // Hit-test before retiling, ignoring the closed window's lingering animation.
+            let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
+            let hovered = closed && wasFocused ? topWindow(at: p, ignoring: [id]) : nil
             layout(ws, animated: true)
             if wasFocused {
-                // macOS would focus another window of the same app, maybe on a hidden workspace.
-                // One of the same app here keeps it, though (a popup closing, say): the one the
-                // app itself has focused, else any; the keys stay with the app being typed in.
                 let appFocused = AXUIElementCreateApplication(w.pid).element(kAXFocusedWindowAttribute)?.windowID
-                if let same = appFocused.flatMap({ ws.contains($0) ? $0 : nil }) ?? ws.allWindows.first(where: { windows[$0]?.pid == w.pid }) {
-                    ws.focused = same
+                let target = Self.focusAfterRemoval(in: ws, hovered: hovered, appFocused: appFocused) {
+                    windows[$0]?.pid == w.pid
                 }
                 ignoreFocus(0.35)
-                focusWindow(ws.focused, warp: false)
+                focusWindow(target, warp: false)
             }
         }
         scheduleSave()
@@ -477,7 +476,7 @@ final class WindowManager {
 
     private func appTerminated(_ pid: pid_t) {
         tracker.forget(pid)
-        for w in windows.values where w.pid == pid { remember(w.id, for: 300); remove(w.id) }
+        for w in windows.values where w.pid == pid { remember(w.id, for: 300); remove(w.id, closed: true) }
     }
 
     /// Drops windows macOS no longer has. Some apps (Find My) quit as their last window closes
@@ -497,7 +496,7 @@ final class WindowManager {
         let dead = windows.keys.filter { !alive.contains($0) }
         guard !dead.isEmpty else { return }
         Log.app.info("pruning \(dead.count) closed windows")
-        for id in dead { remove(id) }
+        for id in dead { remove(id, closed: true) }
     }
 
     private func window(for el: AXUIElement) -> Window? {
@@ -515,7 +514,7 @@ final class WindowManager {
         case .created(let el, let pid):
             windowCreated(el, pid: pid, retries: 3)
         case .destroyed(let el):
-            if let w = window(for: el) { remove(w.id) } else { pruneDead() }
+            if let w = window(for: el) { remove(w.id, closed: true) } else { pruneDead() }
         case .minimized(let el):
             if let w = window(for: el) { remember(w.id); remove(w.id) }
         case .deminimized(let el):
@@ -1027,6 +1026,12 @@ final class WindowManager {
 
     // MARK: - Focus
 
+    static func focusAfterRemoval(in ws: Workspace, hovered: WindowID?, appFocused: WindowID?,
+                                  sameApp: (WindowID) -> Bool) -> WindowID? {
+        hovered ?? appFocused.flatMap { ws.contains($0) ? $0 : nil }
+            ?? ws.allWindows.first(where: sameApp) ?? ws.focused
+    }
+
     func focusWindow(_ id: WindowID?, warp: Bool) {
         guard let id, let w = windows[id] else { return }
         focusRevision += 1
@@ -1082,11 +1087,11 @@ final class WindowManager {
     }
 
     /// The front-most window under a point, only if paw manages it.
-    func topWindow(at p: CGPoint) -> WindowID? {
+    func topWindow(at p: CGPoint, ignoring ignored: Set<WindowID> = []) -> WindowID? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
-        let ignored = Set(NSApp.windows.filter(\.ignoresMouseEvents).compactMap { WindowID(exactly: $0.windowNumber) })
+        let ignored = ignored.union(NSApp.windows.filter(\.ignoresMouseEvents).compactMap { WindowID(exactly: $0.windowNumber) })
         return Self.topWindow(at: p, in: list, ignoring: ignored) {
             windows[$0]?.isHidden == false
         }
