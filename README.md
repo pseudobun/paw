@@ -207,8 +207,11 @@ Everything else works the same with SIP on; without the helper paw simply uses A
    shows `windowMoves: through the Dock helper`. When the helper is new or changed, install
    restarts Dock so it runs the new one.
 
-   Updating paw needs nothing more unless the helper changed with it: then `paw status` says
-   `through the Dock helper (outdated: sudo paw dock install)`, and `paw dock status` shows the
+   Updating paw keeps the helper current: when the helper changed with it, `brew upgrade`
+   installs the new one (it asks for your password), and after a self-update paw asks once with
+   macOS's administrator prompt. Declined? Menu bar → *Update Dock Helper…*, or
+   `sudo paw dock install`; until then `paw status` says
+   `through the Dock helper (outdated: sudo paw dock install)`. `paw dock status` shows the
    versions in this paw, installed and in Dock.
 5. **Undo:** `sudo paw dock uninstall` (then `killall Dock`), and to turn SIP fully back on, in
    Recovery: `csrutil enable`; `sudo nvram -d boot-args` removes the boot argument.

@@ -46,6 +46,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Updater.shared.onResult = { [weak self] state in self?.showUpdateResult(state) }
         }
         setUpStatusItem()
+        // After an update that changed the Dock helper: offer to install the new one (a dev
+        // build leaves the installed helper to `sudo paw-dev dock install`).
+        if !AppPaths.isDev {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { DockCLI.offerUpdateOnce() }
+        }
         Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
     }
 
@@ -182,6 +187,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     config: settings.config, duration: 2.5)
     }
 
+    @objc private func updateDockHelper() { DockCLI.installAsAdmin() }
+
     @objc private func checkForUpdates() { MainActor.assumeIsolated { Updater.shared.installNow() } }
     @objc private func initiateCurrent() { wm.run([.initiate(nil)]) }
     @objc private func reloadConfig() { settings.load() }
@@ -282,6 +289,11 @@ extension AppDelegate: NSMenuDelegate {
                                   action: #selector(checkForUpdates), keyEquivalent: "")
             item.target = self
             item.isEnabled = MainActor.assumeIsolated { Updater.shared.state != .checking }
+            menu.addItem(item)
+        }
+        if DockCLI.isOutdated {
+            let item = NSMenuItem(title: "Update Dock Helper…", action: #selector(updateDockHelper), keyEquivalent: "")
+            item.target = self
             menu.addItem(item)
         }
         menu.addItem(.separator())

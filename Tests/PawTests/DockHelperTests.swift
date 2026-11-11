@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import paw
 
@@ -26,5 +27,24 @@ struct DockHelperTests {
         #expect(DockCLI.needsDockRestart(previous: "a", new: "b"))
         #expect(DockCLI.needsDockRestart(previous: nil, new: "b"), "first install, or one from before versions")
         #expect(DockCLI.needsDockRestart(previous: "a", new: nil))
+    }
+
+    @Test func afterAnUpdateTheNewHelperIsOfferedOncePerVersion() throws {
+        let defaults = try #require(UserDefaults(suiteName: "paw.tests.\(UUID())"))
+        var offered = 0
+        DockCLI.offerUpdateOnce(defaults: defaults, bundled: "a", isOutdated: { false }, install: { offered += 1 })
+        #expect(offered == 0, "up to date (or not installed): never")
+        DockCLI.offerUpdateOnce(defaults: defaults, bundled: "a", isOutdated: { true }, install: { offered += 1 })
+        DockCLI.offerUpdateOnce(defaults: defaults, bundled: "a", isOutdated: { true }, install: { offered += 1 })
+        #expect(offered == 1, "declined: not asked again for this helper")
+        DockCLI.offerUpdateOnce(defaults: defaults, bundled: "b", isOutdated: { true }, install: { offered += 1 })
+        #expect(offered == 2, "the next changed helper is offered")
+        DockCLI.offerUpdateOnce(defaults: defaults, bundled: nil, isOutdated: { true }, install: { offered += 1 })
+        #expect(offered == 2, "a build without a version")
+    }
+
+    @Test func thePathReachesTheAdminPromptQuoted() {
+        #expect(DockCLI.appleScriptString("/Applications/paw.app") == "\"/Applications/paw.app\"")
+        #expect(DockCLI.appleScriptString("/a \"b\"\\c") == "\"/a \\\"b\\\"\\\\c\"")
     }
 }

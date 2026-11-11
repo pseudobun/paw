@@ -150,3 +150,50 @@ enum DockCLI {
         return p.terminationStatus
     }
 }
+
+// MARK: Updating the helper after paw updates
+
+extension DockCLI {
+    /// The helper is installed, may load, and isn't this paw's: paw was updated (Sparkle or
+    /// Homebrew) and the helper changed with it.
+    static var isOutdated: Bool {
+        guard DockBridge.sipAllowsLoading, FileManager.default.fileExists(atPath: plist),
+              let bundled = DockBridge.bundledVersion else { return false }
+        return DockBridge.installedVersion != bundled
+    }
+
+    /// Offers to install the new helper at most once per helper version: macOS's administrator
+    /// prompt, then `paw dock install` (which restarts Dock). Declined, `paw status` and the menu
+    /// bar still offer it.
+    static func offerUpdateOnce(defaults: UserDefaults = .standard, bundled: String? = DockBridge.bundledVersion,
+                                isOutdated: () -> Bool = { DockCLI.isOutdated }, install: () -> Void = { DockCLI.installAsAdmin() }) {
+        let key = "dockHelperOfferedVersion"
+        guard let bundled, defaults.string(forKey: key) != bundled, isOutdated() else { return }
+        defaults.set(bundled, forKey: key)
+        install()
+    }
+
+    /// `paw dock install` as root, after macOS's administrator prompt. Off the main thread: the
+    /// prompt waits for the user.
+    static func installAsAdmin(done: (@Sendable (Bool) -> Void)? = nil) {
+        let paw = AppPaths.appBundle.bundleURL.appending(path: "Contents/MacOS/paw").path
+        let script = "do shell script quoted form of \(appleScriptString(paw)) & \" dock install\" with prompt "
+            + "\"paw was updated and its Dock helper changed with it. Install the new helper?\" with administrator privileges"
+        DispatchQueue.global(qos: .userInitiated).async {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            p.arguments = ["-e", script]
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            var ok = false
+            if (try? p.run()) != nil { p.waitUntilExit(); ok = p.terminationStatus == 0 }
+            Log.app.notice("dock: helper update \(ok ? "installed" : "not installed", privacy: .public)")
+            done?(ok)
+        }
+    }
+
+    /// A string literal for AppleScript.
+    static func appleScriptString(_ s: String) -> String {
+        "\"" + s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+}

@@ -14,6 +14,18 @@ cask "paw" do
   app "paw.app"
   binary "#{appdir}/paw.app/Contents/MacOS/paw"
 
+  # The Dock helper (`sudo paw dock install`), when installed and changed in this version:
+  # install the new one (asks for the password; it restarts Dock).
+  postflight do
+    helper = "/Library/Application Support/paw/VERSION"
+    bundled = "#{appdir}/paw.app/Contents/Resources/dock/VERSION"
+    if File.exist?("/Library/LaunchDaemons/com.pseudobun.paw.dock.plist") && File.exist?(bundled) &&
+       (!File.exist?(helper) || File.read(helper).strip != File.read(bundled).strip)
+      ohai "paw's Dock helper changed: installing the new one"
+      system_command "#{appdir}/paw.app/Contents/MacOS/paw", args: ["dock", "install"], sudo: true
+    end
+  end
+
   uninstall quit:      "com.pseudobun.paw",
             launchctl: ["com.pseudobun.paw", "com.pseudobun.paw.dock"],
             delete:    [
