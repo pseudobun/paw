@@ -26,6 +26,7 @@ final class WindowManager {
     private var focusedDisplay = 0
     private var lastWorkspace: String?
     private var ignoreFocusUntil = Date.distantPast
+    private var focusWork: DispatchWorkItem?
     private var suppressMoves: [WindowID: Date] = [:]
     private var dragTimer: Timer?
     private var saveWork: DispatchWorkItem?
@@ -52,7 +53,7 @@ final class WindowManager {
     private(set) var mode: String?
     private let modePanel = TitlePanel()
     private var lastWindowsSignature = ""
-    private var mouseMonitor: Any?
+    private var mouseMonitors: [Any] = []
     private var lastHover = Date.distantPast
     private var observers: [NSObjectProtocol] = []
     private var pruneTimer: Timer?
@@ -495,7 +496,7 @@ final class WindowManager {
         return w
     }
 
-    private func remove(_ id: WindowID, relayout: Bool = true) {
+    private func remove(_ id: WindowID, relayout: Bool = true, closed: Bool = false) {
         guard let w = windows.removeValue(forKey: id) else { return }
         suppressMoves[id] = nil
         minimumBackoff[id] = nil
@@ -506,22 +507,21 @@ final class WindowManager {
         for ws in workspaces.values { ws.windowMins[id] = nil }
         animator.cancel(id)
         let ws = workspaceOf(id)
-        let wasFocused = ws?.focused == id
+        let wasFocused = ws?.focused == id && (!closed || ws === focusedWorkspace)
         ws?.remove(id)
-        _ = w
         if let ws, relayout, displayShowing(ws.name) != nil {
-            layout(ws, animated: true)
+            // Hit-test before retiling, ignoring the closed window's lingering animation.
+            let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
+            let hovered = closed && wasFocused ? topWindow(at: p, ignoring: [id]) : nil
             if wasFocused {
-                // macOS would focus another window of the same app, maybe on a hidden workspace.
-                // One of the same app here keeps it, though (a popup closing, say): the one the
-                // app itself has focused, else any; the keys stay with the app being typed in.
                 let appFocused = AXUIElementCreateApplication(w.pid).element(kAXFocusedWindowAttribute)?.windowID
-                if let same = appFocused.flatMap({ ws.contains($0) ? $0 : nil }) ?? ws.allWindows.first(where: { windows[$0]?.pid == w.pid }) {
-                    ws.focused = same
+                let target = Self.focusAfterRemoval(in: ws, hovered: hovered, appFocused: appFocused) {
+                    windows[$0]?.pid == w.pid
                 }
                 ignoreFocus(0.35)
-                focusWindow(ws.focused, warp: false)
+                focusWindow(target, warp: false)
             }
+            layout(ws, animated: true)
         }
         scheduleSave()
     }
@@ -569,11 +569,19 @@ final class WindowManager {
     /// the last of its windows goes, instead of once per window.
     private func removeAll(_ ids: [WindowID]) {
         var last: [String: WindowID] = [:]
-        for id in ids { if let ws = workspaceOf(id) { last[ws.name] = id } }
+        let removing = Set(ids)
+        for id in ids {
+            if let ws = workspaceOf(id) {
+                last[ws.name] = ws.focused.flatMap { removing.contains($0) ? $0 : nil } ?? id
+            }
+        }
         let final = Set(last.values)
         AXQueue.run {
-            for id in ids where !final.contains(id) { remove(id, relayout: false) }
-            for id in ids where final.contains(id) { remove(id) }
+            for id in ids where !final.contains(id) {
+                assert(workspaceOf(id)?.focused != id, "The focused window must be removed last for close recovery")
+                remove(id, relayout: false, closed: true)
+            }
+            for id in ids where final.contains(id) { remove(id, closed: true) }
         }
     }
 
@@ -596,7 +604,7 @@ final class WindowManager {
         case .created(let el, let pid):
             windowCreated(el, pid: pid, retries: 3)
         case .destroyed(let el):
-            if let w = window(for: el) { remove(w.id) } else { pruneDead() }
+            if let w = window(for: el) { remove(w.id, closed: true) } else { pruneDead() }
         case .minimized(let el):
             if let w = window(for: el) { remember(w.id); remove(w.id) }
         case .deminimized(let el):
@@ -641,8 +649,27 @@ final class WindowManager {
     /// Focus moved outside paw (click, ⌘Tab): follow it, switching workspace when needed.
     private func syncFocus(_ pid: pid_t, force: Bool = false) {
         guard force || Date() > ignoreFocusUntil else { return }
-        // An unmanaged app taking focus also supersedes a recovery's focus request.
-        focusRevision += 1
+        focusWork?.cancel()
+        // Taking the keyboard for a placeholder has no native window and preserves its size retry.
+        if pid != getpid() || NSApp.keyWindow != nil { focusRevision += 1 }
+        if force { applyFocus(pid, force: true); return }
+        // Let close notifications arrive before accepting macOS's automatic replacement.
+        let work = DispatchWorkItem { [weak self] in
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+            self?.applyFocus(pid)
+        }
+        focusWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+    }
+
+    private func applyFocus(_ pid: pid_t, force: Bool = false) {
+        guard force || Date() > ignoreFocusUntil else { return }
+        // A process exit can activate its replacement before destruction/termination is reported.
+        if !force, !screensAsleep, let previous = focusedWorkspace.focused, windows[previous] != nil,
+           !Self.liveWindows([previous]).contains(previous) {
+            AXQueue.run { remove(previous, closed: true) }
+            return
+        }
         let app = AXUIElementCreateApplication(pid)
         guard let el = app.element(kAXFocusedWindowAttribute), let id = el.windowID else { return }
         if windows[id] == nil {
@@ -1161,9 +1188,17 @@ final class WindowManager {
 
     // MARK: - Focus
 
+    static func focusAfterRemoval(in ws: Workspace, hovered: WindowID?, appFocused: WindowID?,
+                                  sameApp: (WindowID) -> Bool) -> WindowID? {
+        hovered ?? appFocused.flatMap { ws.contains($0) ? $0 : nil }
+            ?? ws.allWindows.first(where: sameApp) ?? ws.focused
+    }
+
     func focusWindow(_ id: WindowID?, warp: Bool) {
         guard let id, let w = windows[id] else { return }
+        focusWork?.cancel()
         focusRevision += 1
+        let ticket = FocusTicket.shared.issue()
         if let ws = workspaceOf(id) {
             ws.focused = id
             ws.activate(id)
@@ -1175,7 +1210,9 @@ final class WindowManager {
         }
         // A placeholder: focus is paw's (moves, swaps); the window itself waits out of sight.
         if isCramped(id) {
+            NSApp.activate(ignoringOtherApps: true)
             retryMinimum(w, focus: true)
+            minimumChecks[id]?.frontmost = getpid()
             if warp && config.focus.mouseFollowsFocus, let ws = workspaceOf(id), let di = displayShowing(ws.name),
                let r = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] {
                 let primary = NSScreen.screens.first?.frame.height ?? 0
@@ -1190,7 +1227,6 @@ final class WindowManager {
         }
         let (pid, element) = (w.pid, w.element)
         // Requests pile up behind a slow app: only the newest one still goes.
-        let ticket = FocusTicket.shared.issue()
         focusQueue.async {
             guard FocusTicket.shared.isLatest(ticket) else { return }
             SkyLight.focus(pid: pid, windowID: id, element: element)
@@ -1209,11 +1245,17 @@ final class WindowManager {
     }
 
     private func updateFocusFollowsMouse() {
-        if let m = mouseMonitor { NSEvent.removeMonitor(m); mouseMonitor = nil }
+        mouseMonitors.forEach(NSEvent.removeMonitor)
+        mouseMonitors = []
         guard config.focus.focusFollowsMouse else { return }
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
-            self?.hovered()
-        }
+        // Global monitoring excludes events sent to paw while a placeholder owns focus.
+        mouseMonitors = [
+            NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in self?.hovered() },
+            NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+                self?.hovered()
+                return event
+            },
+        ].compactMap { $0 }
     }
 
     /// At most one look every 80 ms while the pointer moves, and one more once it stops: the
@@ -1237,23 +1279,30 @@ final class WindowManager {
     }
 
     /// The front-most window under a point, only if paw manages it.
-    func topWindow(at p: CGPoint) -> WindowID? {
+    func topWindow(at p: CGPoint, ignoring ignored: Set<WindowID> = []) -> WindowID? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
-        let ignored = Set(NSApp.windows.filter(\.ignoresMouseEvents).compactMap { WindowID(exactly: $0.windowNumber) })
-        return Self.topWindow(at: p, in: list, ignoring: ignored) {
+        let ignored = ignored.union(NSApp.windows.filter(\.ignoresMouseEvents).compactMap { WindowID(exactly: $0.windowNumber) })
+        return Self.topWindow(at: p, in: list, ignoring: ignored,
+                              standIns: placeholders.standIns.filter { windows[$0.value] != nil }) {
             windows[$0]?.isHidden == false
         }
     }
 
     static func topWindow(at p: CGPoint, in list: [[String: Any]], ignoring ignored: Set<WindowID> = [],
+                          standIns: [WindowID: WindowID] = [:],
                           isManaged: (WindowID) -> Bool) -> WindowID? {
         for info in list {
-            guard let layer = info[kCGWindowLayer as String] as? Int, layer >= 0,
+            guard let layer = info[kCGWindowLayer as String] as? Int,
                   let id = info[kCGWindowNumber as String] as? UInt32, !ignored.contains(id),
                   let bounds = info[kCGWindowBounds as String] as? [String: Any],
                   let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary), frame.contains(p) else { continue }
+            if let standIn = standIns[id] {
+                if ignored.contains(standIn) { continue }
+                return standIn
+            }
+            guard layer >= 0 else { continue }
             // Unmanaged dialogs still occlude windows behind them.
             return isManaged(id) ? id : nil
         }

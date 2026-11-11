@@ -127,14 +127,15 @@ enum AXHealth {
     }
 
     static func record(_ pid: pid_t, _ err: AXError, elapsed: Double) {
-        let timedOut = err == .cannotComplete || elapsed >= slowCall
+        // Startup can refuse AX immediately; only a slow call justifies backing off.
+        let timedOut = elapsed >= slowCall
         let t = clock()
         lock.withLock {
             if timedOut {
                 let strikes = (slow[pid]?.strikes ?? 0) + 1
                 let backoff = min(maxBackoff, firstBackoff * pow(2, Double(strikes - 1)))
                 slow[pid] = State(until: t + backoff, strikes: strikes)
-            } else if slow[pid] != nil {
+            } else if err != .cannotComplete, slow[pid] != nil {
                 slow[pid] = nil
             }
         }

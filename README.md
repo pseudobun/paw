@@ -353,6 +353,8 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Mouse gestures**: hold the middle (or back/forward) button and drag: left/right for the
   previous/next workspace, up for the overview
 - **Mouse follows focus** (and optional focus follows mouse)
+- **Focus after closing the focused window**: the window under the mouse takes focus; otherwise paw
+  prefers another window from the same app on that workspace, then the workspace's next window
 - **Virtual workspaces** (like AeroSpace): `layout.workspaces` exist from the start,
   `workspace new|close|next|prev|last`, `move-to <n> [--follow]`. A hidden workspace's windows
   wait in a screen corner, so switching is instant and needs no Mission Control or SIP. ⌘Tab to a
