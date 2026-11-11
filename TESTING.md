@@ -108,6 +108,12 @@
 
 ## Closing a focused window
 
+Before testing, check `paw status` → `nativeSpaces`: use one native macOS desktop per display.
+With a second normal desktop, status and Settings → General must warn; a full-screen app's
+separate Space should not count as a second desktop. Close extra desktop thumbnails in Mission
+Control and run `paw recover` before judging close focus or missing tiles. The focus border
+must remain visible after changing native desktops or moving focus between displays.
+
 With Paw Dev running with Accessibility access and an empty hidden workspace, run:
 
 ```sh

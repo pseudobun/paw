@@ -75,6 +75,9 @@ In **System Settings → Desktop & Dock**:
   windows to tile*
 
 Keep one native Space per display; paw's workspaces replace Spaces.
+Extra macOS desktops can make tiles appear empty or switch desktops when an app takes focus.
+Check `paw status` → `nativeSpaces` or Settings → General → macOS desktops. In Mission Control,
+close extra desktop thumbnails to merge their windows into the remaining desktop, then run `paw recover`.
 
 ### 5. Check it works
 

@@ -124,6 +124,9 @@ final class WindowManager {
     // MARK: - Lifecycle
 
     func start() {
+        if let counts = SkyLight.nativeDesktopCounts(), counts.contains(where: { $0 > 1 }) {
+            Log.app.warning("\(SkyLight.nativeSpacesStatus(counts: counts), privacy: .public)")
+        }
         AXUIElementSetMessagingTimeout(AXUIElement.systemWide, 0.5)
         animator.settings = { [unowned self] in config.animation }
         animator.onFinish = { [weak self] in

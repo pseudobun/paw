@@ -26,7 +26,7 @@ final class FocusBorder {
         panel.hasShadow = false
         panel.level = .normal
         panel.ignoresMouseEvents = true
-        panel.collectionBehavior = [.ignoresCycle, .fullScreenAuxiliary, .stationary]
+        panel.collectionBehavior = [.ignoresCycle, .fullScreenAuxiliary, .stationary, .canJoinAllSpaces]
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
         let v = NSView()

@@ -42,8 +42,11 @@ def wait_for(predicate):
 
 
 def main():
-    if "trusted: yes" not in paw("status"):
+    status = paw("status")
+    if "trusted: yes" not in status:
         raise SystemExit("Paw Dev must be running with Accessibility access.")
+    if "nativeSpaces: warning:" in status:
+        raise SystemExit("Keep one native macOS desktop per display, then run paw-dev recover before testing.")
     workspaces = query()
     original = next(ws["name"] for ws in workspaces if ws["focused"])
     empty = next((ws for ws in workspaces if not ws["visible"] and not ws["windows"]), None)

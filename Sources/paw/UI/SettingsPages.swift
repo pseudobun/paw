@@ -247,6 +247,8 @@ enum SettingsCatalog {
                      symbol: "gearshape.fill", color: Theme.neutral, sections: [
             SettingsSection("Startup", [
                 f(\.openAtLogin, "openAtLogin", "Open at login", .toggle, "Only for the installed paw.app."),
+                .info(SettingsInfo(label: "macOS desktops", help: SkyLight.nativeSpacesStatus,
+                                   button: "Mission Control", action: .open("file:///System/Applications/Mission%20Control.app"))),
             ]),
             SettingsSection("Permissions", [
                 .info(SettingsInfo(label: "Accessibility",

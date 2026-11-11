@@ -21,8 +21,10 @@ enum SkyLight {
 
     private typealias MainConnection = @convention(c) () -> Int32
     private typealias CopyManagedDisplays = @convention(c) (Int32) -> Unmanaged<CFArray>?
+    private typealias CopyManagedSpaces = @convention(c) (Int32) -> Unmanaged<CFArray>?
     private static let mainConnection: MainConnection? = sym("SLSMainConnectionID", in: handle)
     private static let copyManagedDisplays: CopyManagedDisplays? = sym("SLSCopyManagedDisplays", in: handle)
+    private static let copyManagedSpaces: CopyManagedSpaces? = sym("SLSCopyManagedDisplaySpaces", in: handle)
 
     private typealias QueryWindows = @convention(c) (Int32, CFArray, UInt32) -> Unmanaged<CFTypeRef>?
     private typealias CopyWindows = @convention(c) (CFTypeRef) -> Unmanaged<CFTypeRef>?
@@ -62,6 +64,37 @@ enum SkyLight {
         guard let mainConnection, let copyManagedDisplays, let list = copyManagedDisplays(mainConnection())?.takeRetainedValue() else { return [] }
         return (list as? [String]) ?? []
     }
+
+    /// Live topology: com.apple.spaces preferences can retain a disconnected display's old layout.
+    static func nativeDesktopCounts() -> [Int]? {
+        guard let mainConnection, let copyManagedSpaces,
+              let list = copyManagedSpaces(mainConnection())?.takeRetainedValue() as? [[String: Any]] else { return nil }
+        return nativeDesktopCounts(in: list)
+    }
+
+    static func nativeDesktopCounts(in displays: [[String: Any]]) -> [Int]? {
+        guard !displays.isEmpty else { return nil }
+        var counts: [Int] = []
+        for display in displays {
+            guard let spaces = display["Spaces"] as? [[String: Any]], !spaces.isEmpty else { return nil }
+            let types = spaces.compactMap { $0["type"] as? Int }
+            guard types.count == spaces.count else { return nil }
+            // Full-screen apps have their own Spaces; count only normal desktops.
+            let desktops = types.filter { $0 == 0 }.count
+            guard desktops > 0 else { return nil }
+            counts.append(desktops)
+        }
+        return counts
+    }
+
+    static func nativeSpacesStatus(counts: [Int]?) -> String {
+        guard let counts, !counts.isEmpty else { return "unavailable: check Mission Control; keep one desktop per display" }
+        guard counts.contains(where: { $0 > 1 }) else { return "ok: one macOS desktop per display" }
+        let totals = counts.map(String.init).joined(separator: ", ")
+        return "warning: macOS desktops per display: \(totals). Keep one per display in Mission Control; extra desktops can hide windows and switch focus."
+    }
+
+    static var nativeSpacesStatus: String { nativeSpacesStatus(counts: nativeDesktopCounts()) }
 
     static var available: Bool { setFront != nil && post != nil && getPSN != nil }
 
