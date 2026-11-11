@@ -37,6 +37,9 @@ public enum ConfigTemplate {
             // resizing stops before a tile, and so a placeholder, gets smaller than this
             placeholderMinWidth: \(num(l.placeholderMinWidth)),
             placeholderMinHeight: \(num(l.placeholderMinHeight)),
+            // Move windows through paw's Dock helper when it's loaded (sudo paw dock install; needs
+            // SIP's debugging restrictions off): much faster workspace switching. false: accessibility only
+            windowServer: \(l.windowServer),
           },
 
           focus: {
@@ -212,6 +215,8 @@ public enum ConfigTemplate {
           hud: {
             workspace: \(c.hud.workspace),
             durationMs: \(num(c.hud.durationMs)),
+            // Islands on the display's left/right edges: the prev/next workspace there
+            edges: \(c.hud.edges),
           },
 
           // A line around the focused window (or a placeholder that has focus)

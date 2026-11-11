@@ -283,6 +283,10 @@ enum SettingsCatalog {
                   "Resizing stops before a tile, and so a placeholder, gets smaller."),
                 f(\.layout.placeholderMinHeight, "layout.placeholderMinHeight", "Smallest height", .number(min: 0, max: 2_000, step: 10, unit: "pt")),
             ]),
+            SettingsSection("Moving windows", [
+                f(\.layout.windowServer, "layout.windowServer", "Through the window server", .toggle,
+                  DockBridge.shared.statusLine),
+            ]),
             SettingsSection("Padding", [
                 f(\.layout.padding.top, "layout.padding.top", "Top", .number(min: 0, max: 1_000, unit: "pt")),
                 f(\.layout.padding.bottom, "layout.padding.bottom", "Bottom", .number(min: 0, max: 1_000, unit: "pt")),
@@ -503,6 +507,7 @@ enum SettingsCatalog {
             SettingsSection("Workspace HUD", [
                 f(\.hud.workspace, "hud.workspace", "Flash the workspace", .toggle, "Its number and apps, when it changes."),
                 f(\.hud.durationMs, "hud.durationMs", "Show for", .number(min: 0, max: 10_000, step: 50, unit: "ms")),
+                f(\.hud.edges, "hud.edges", "Neighbours at the edges", .toggle, "Islands on each display's sides: the previous and next workspace there."),
             ]),
         ])
     }

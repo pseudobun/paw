@@ -26,6 +26,9 @@
     // resizing stops before a tile, and so a placeholder, gets smaller than this
     placeholderMinWidth: 160,
     placeholderMinHeight: 120,
+    // Move windows through paw's Dock helper when it's loaded (sudo paw dock install; needs
+    // SIP's debugging restrictions off): much faster workspace switching. false: accessibility only
+    windowServer: true,
   },
 
   focus: {
@@ -184,6 +187,8 @@
   hud: {
     workspace: true,
     durationMs: 600,
+    // Islands on the display's left/right edges: the prev/next workspace there
+    edges: true,
   },
 
   // A line around the focused window (or a placeholder that has focus)

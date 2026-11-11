@@ -62,6 +62,14 @@ rm -rf "$app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" "$app
 strip -x "$app/Contents/MacOS/paw"
 cp Resources/AppIcon.icns Resources/menubar.svg "$app/Contents/Resources/"
 cp -R Resources/Fonts "$app/Contents/Resources/"
+# The Dock helper (optional, Apple silicon, needs SIP's debugging restrictions off; README
+# "Faster workspace switching"): `sudo paw dock install` copies these out of the app.
+dock="$app/Contents/Resources/dock"
+mkdir -p "$dock"
+xcrun clang Sources/PawDock/payload.m -shared -fPIC -O2 -fobjc-arc -arch arm64e -mmacosx-version-min=14.0 \
+  -framework Foundation -framework CoreGraphics -Wl,-undefined,dynamic_lookup -o "$dock/PawDock.dylib"
+xcrun clang Sources/PawDock/loader.m -O2 -fobjc-arc -arch arm64e -mmacosx-version-min=14.0 -framework Foundation \
+  -o "$dock/paw-dock-loader"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -106,7 +114,9 @@ fi
 sign() {
   local id="$1" fw="$app/Contents/Frameworks/Sparkle.framework" rt=""
   case "$id" in "Developer ID"*) rt="--options runtime" ;; esac
-  codesign --force $rt $2 -s "$id" "$fw/Versions/B/Autoupdate" &&
+  codesign --force $rt $2 -s "$id" "$app/Contents/Resources/dock/PawDock.dylib" &&
+    codesign --force $rt $2 -s "$id" "$app/Contents/Resources/dock/paw-dock-loader" &&
+    codesign --force $rt $2 -s "$id" "$fw/Versions/B/Autoupdate" &&
     codesign --force $rt $2 -s "$id" "$fw/Versions/B/Updater.app" &&
     codesign --force $rt $2 -s "$id" "$fw" &&
     codesign --force $rt $2 -s "$id" "$app"

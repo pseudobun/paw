@@ -61,11 +61,18 @@ final class EventBus {
         send(s, "snapshot", body)
     }
 
-    /// Sends an event to everyone who wants it. Main thread.
+    /// Encodes events off the main thread, in order.
+    private let encoder = DispatchQueue(label: "paw.events", qos: .userInitiated)
+
+    /// Sends an event to everyone who wants it. Main thread; the JSON is made in the background
+    /// (a workspace switch shouldn't wait for it) and sent in the order events came.
     func publish(_ event: String, _ data: [String: Any]) {
         let list = lock.withLock { subscribers }.filter { s in s.events.map { $0.contains(event) || event == "snapshot" } ?? true }
-        guard !list.isEmpty, let body = Self.encode(data) else { return }
-        for s in list { send(s, event, body) }
+        guard !list.isEmpty else { return }
+        encoder.async { [weak self] in
+            guard let body = Self.encode(data) else { return }
+            DispatchQueue.main.async { for s in list { self?.send(s, event, body) } }
+        }
     }
 
     /// `data` as JSON, once per event however many subscribers there are.
