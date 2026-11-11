@@ -1081,14 +1081,26 @@ final class WindowManager {
         }
     }
 
-    /// The front-most managed window under a point, by window-server order.
+    /// The front-most window under a point, only if paw manages it.
     func topWindow(at p: CGPoint) -> WindowID? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
-        for info in list where (info[kCGWindowLayer as String] as? Int) == 0 {
-            guard let n = info[kCGWindowNumber as String] as? UInt32, let w = windows[n], !w.isHidden else { continue }
-            if w.frame.contains(p) { return n }
+        let ignored = Set(NSApp.windows.filter(\.ignoresMouseEvents).compactMap { WindowID(exactly: $0.windowNumber) })
+        return Self.topWindow(at: p, in: list, ignoring: ignored) {
+            windows[$0]?.isHidden == false
+        }
+    }
+
+    static func topWindow(at p: CGPoint, in list: [[String: Any]], ignoring ignored: Set<WindowID> = [],
+                          isManaged: (WindowID) -> Bool) -> WindowID? {
+        for info in list {
+            guard let layer = info[kCGWindowLayer as String] as? Int, layer >= 0,
+                  let id = info[kCGWindowNumber as String] as? UInt32, !ignored.contains(id),
+                  let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                  let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary), frame.contains(p) else { continue }
+            // Unmanaged dialogs still occlude windows behind them.
+            return isManaged(id) ? id : nil
         }
         return nil
     }
