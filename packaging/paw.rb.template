@@ -14,13 +14,13 @@ cask "paw" do
   app "paw.app"
   binary "#{appdir}/paw.app/Contents/MacOS/paw"
 
-  # Homebrew runs these on every upgrade too: the Dock helper (`sudo paw dock install`) stays
-  # out of them, or each upgrade would remove it and ask for a password. paw says when an update
-  # changed it; `sudo paw dock uninstall` removes it, and so does --zap.
-  uninstall quit:      "com.pseudobun.paw",
-            launchctl: "com.pseudobun.paw"
+  # Homebrew runs these on every upgrade too, and checks every launchctl service with sudo: only
+  # quitting paw here, or each upgrade would ask for a password (and remove the Dock helper,
+  # `sudo paw dock install`). paw says when an update changed the helper;
+  # `sudo paw dock uninstall` removes it, and so does --zap.
+  uninstall quit: "com.pseudobun.paw"
 
-  zap launchctl: "com.pseudobun.paw.dock",
+  zap launchctl: ["com.pseudobun.paw", "com.pseudobun.paw.dock"],
       delete:    [
         "/Library/LaunchDaemons/com.pseudobun.paw.dock.plist",
         "/Library/Application Support/paw",
