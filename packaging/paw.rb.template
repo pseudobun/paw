@@ -14,29 +14,21 @@ cask "paw" do
   app "paw.app"
   binary "#{appdir}/paw.app/Contents/MacOS/paw"
 
-  # The Dock helper (`sudo paw dock install`), when installed and changed in this version:
-  # install the new one (asks for the password; it restarts Dock).
-  postflight do
-    helper = "/Library/Application Support/paw/VERSION"
-    bundled = "#{appdir}/paw.app/Contents/Resources/dock/VERSION"
-    if File.exist?("/Library/LaunchDaemons/com.pseudobun.paw.dock.plist") && File.exist?(bundled) &&
-       (!File.exist?(helper) || File.read(helper).strip != File.read(bundled).strip)
-      ohai "paw's Dock helper changed: installing the new one"
-      system_command "#{appdir}/paw.app/Contents/MacOS/paw", args: ["dock", "install"], sudo: true
-    end
-  end
-
+  # Homebrew runs these on every upgrade too: the Dock helper (`sudo paw dock install`) stays
+  # out of them, or each upgrade would remove it and ask for a password. paw installs a changed
+  # helper itself after an update; `sudo paw dock uninstall` removes it, and so does --zap.
   uninstall quit:      "com.pseudobun.paw",
-            launchctl: ["com.pseudobun.paw", "com.pseudobun.paw.dock"],
-            delete:    [
-              "/Library/LaunchDaemons/com.pseudobun.paw.dock.plist",
-              "/Library/Application Support/paw",
-            ]
+            launchctl: "com.pseudobun.paw"
 
-  zap trash: [
-    "~/.config/paw",
-    "~/Library/Application Support/com.pseudobun.paw",
-    "~/Library/Caches/com.pseudobun.paw",
-    "~/Library/LaunchAgents/com.pseudobun.paw.plist",
-  ]
+  zap launchctl: "com.pseudobun.paw.dock",
+      delete:    [
+        "/Library/LaunchDaemons/com.pseudobun.paw.dock.plist",
+        "/Library/Application Support/paw",
+      ],
+      trash:     [
+        "~/.config/paw",
+        "~/Library/Application Support/com.pseudobun.paw",
+        "~/Library/Caches/com.pseudobun.paw",
+        "~/Library/LaunchAgents/com.pseudobun.paw.plist",
+      ]
 end

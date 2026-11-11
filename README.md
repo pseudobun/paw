@@ -116,8 +116,8 @@ sudo paw dock uninstall                          # only if you installed the Doc
 brew uninstall --cask pseudobun/tap/paw          # add --zap to remove the config and state too
 ```
 
-The Dock helper is a root launch daemon, so remove it first; Homebrew tries to as well, but
-needs your password for it.
+The Dock helper is a root launch daemon, so remove it first; Homebrew does only with `--zap`,
+and asks for your password for it.
 
 Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
 again (it remembers which workspace each window was on) or run `paw recover`.
@@ -207,9 +207,8 @@ Everything else works the same with SIP on; without the helper paw simply uses A
    shows `windowMoves: through the Dock helper`. When the helper is new or changed, install
    restarts Dock so it runs the new one.
 
-   Updating paw keeps the helper current: when the helper changed with it, `brew upgrade`
-   installs the new one (it asks for your password), and after a self-update paw asks once with
-   macOS's administrator prompt. Declined? Menu bar → *Update Dock Helper…*, or
+   Updating paw keeps the helper current: when the helper changed with it, paw asks once after
+   the update (a self-update or `brew upgrade`) with macOS's administrator prompt. Declined? Menu bar → *Update Dock Helper…*, or
    `sudo paw dock install`; until then `paw status` says
    `through the Dock helper (outdated: sudo paw dock install)`. `paw dock status` shows the
    versions in this paw, installed and in Dock.
