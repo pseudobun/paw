@@ -1592,10 +1592,12 @@ final class WindowManager {
         let ws = focusedWorkspace
         let area = self.area(of: ws)
         if let id = focusedID, let t = ws.tile(of: id), let n = ws.neighbor(of: t, d, area: area) {
-            // Zoomed in by hand: tiles outside the zoom stay out of reach; zoom out to get there.
-            if ws.isZoomedByHand, !ws.isShown(n) { return }
-            focusWindow(n.activeWindow, warp: true)
-            return
+            // Zoomed in by hand: tiles outside the zoom stay out of reach, so the edge of the
+            // zoom acts like the edge of the workspace and focus moves on to the next display.
+            if !(ws.isZoomedByHand && !ws.isShown(n)) {
+                focusWindow(n.activeWindow, warp: true)
+                return
+            }
         }
         if let id = focusedID, ws.isFloating(id), let w = windows[id] {
             let cands = ws.allWindows.filter { $0 != id }.compactMap { c in windows[c].map { (c, $0.frame) } }
