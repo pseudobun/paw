@@ -55,6 +55,17 @@ struct ConfigTests {
         #expect(ConfigLoader.unknownKeys(Data(ConfigTemplate.text.utf8)).isEmpty)
     }
 
+    @Test func automaticBorderRadiusKeepsManualFallbackAndRoundTrips() throws {
+        let legacy = try load("{ border: { enabled: true, radius: 20 } }")
+        #expect(legacy.border.autoRadius)
+        #expect(legacy.border.radius == 20)
+        let manual = try load("{ border: { autoRadius: false, radius: 0 } }")
+        #expect(!manual.border.autoRadius && manual.border.radius == 0)
+        let text = ConfigTemplate.render(manual)
+        #expect(try load(text) == manual)
+        #expect(ConfigLoader.unknownKeys(Data(text.utf8)).isEmpty)
+    }
+
     @Test func warnings() {
         var c = PawConfig()
         #expect(ConfigLoader.warnings(c).isEmpty, "\(ConfigLoader.warnings(c))")

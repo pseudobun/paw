@@ -346,7 +346,9 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Windows come back**: a window you minimise, or whose app you hide or quit, returns to its
   tile; tiles, sizes and stacks survive restarting paw
 - **Focus border** (`border`, off by default): a line around the focused window or placeholder,
-  with its colour, width and radius in the config or Settings
+  with its colour, width and radius in the config or Settings. On macOS 26+, `autoRadius`
+  matches each window's corners; `radius` is the fallback and the placeholder radius.
+  Turn `autoRadius` off to use a fixed radius for every window
 - **Workspace HUD**: the number and apps of the workspace flash when you switch
 - **Mouse gestures**: hold the middle (or back/forward) button and drag: left/right for the
   previous/next workspace, up for the overview
@@ -470,7 +472,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `mouse` | `dropZones` (true), `stackModifier` (`alt`), `seamHandles` (true), `gestures` (`[{ button: "middle", direction: "left", command: "workspace prev" }, …]`; buttons `middle back forward`, directions `left right up down click`) |
 | `overview` | `thumbnails` (`auto`: when Screen Recording is allowed; `on` asks for it; `off`) |
 | `hud` | `workspace` (true), `durationMs` (600), `edges` (true) |
-| `border` | `enabled` (false), `color` (`0xccead186`), `width` (2), `radius` (12), `offset` (2) |
+| `border` | `enabled` (false), `color` (`0xccead186`), `width` (2), `autoRadius` (true), `radius` (12), `offset` (2) |
 | `updates` | `check` (true: look once a day and offer new versions), `automatic` (false: install without asking) |
 | `openAtLogin` | |
 
