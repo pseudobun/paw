@@ -53,7 +53,7 @@ final class WindowManager {
     private(set) var mode: String?
     private let modePanel = TitlePanel()
     private var lastWindowsSignature = ""
-    private var mouseMonitor: Any?
+    private var mouseMonitors: [Any] = []
     private var lastHover = Date.distantPast
     private var observers: [NSObjectProtocol] = []
     private var pruneTimer: Timer?
@@ -1245,11 +1245,17 @@ final class WindowManager {
     }
 
     private func updateFocusFollowsMouse() {
-        if let m = mouseMonitor { NSEvent.removeMonitor(m); mouseMonitor = nil }
+        mouseMonitors.forEach(NSEvent.removeMonitor)
+        mouseMonitors = []
         guard config.focus.focusFollowsMouse else { return }
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
-            self?.hovered()
-        }
+        // Global monitoring excludes events sent to paw while a placeholder owns focus.
+        mouseMonitors = [
+            NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in self?.hovered() },
+            NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+                self?.hovered()
+                return event
+            },
+        ].compactMap { $0 }
     }
 
     /// At most one look every 80 ms while the pointer moves, and one more once it stops: the

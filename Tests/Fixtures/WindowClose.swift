@@ -1,5 +1,15 @@
 import AppKit
 
+// Run unbundled through paw's exec command so the test uses paw's Accessibility grant.
+if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--move-pointer",
+   let x = Double(CommandLine.arguments[2]), let y = Double(CommandLine.arguments[3]) {
+    guard AXIsProcessTrusted() else { exit(1) }
+    let point = CGPoint(x: x, y: y)
+    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point,
+            mouseButton: .left)?.post(tap: .cghidEventTap)
+    exit(0)
+}
+
 final class Fixture: NSObject, NSApplicationDelegate {
     var windows: [String: NSWindow] = [:]
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

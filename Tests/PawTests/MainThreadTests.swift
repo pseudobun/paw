@@ -49,6 +49,19 @@ struct MainThreadTests {
 
     // MARK: AXHealth
 
+    @Test func startupNotReadyDoesNotMarkAnAppSlow() {
+        defer { restore() }
+        let pid: pid_t = 4245
+        AXHealth.record(pid, .cannotComplete, elapsed: 0.0001)
+        #expect(!AXHealth.isSlow(pid), "an immediate startup refusal is not a slow call")
+        AXHealth.record(pid, .cannotComplete, elapsed: 0.5)
+        #expect(AXHealth.isSlow(pid), "a real timeout still starts backoff")
+        AXHealth.record(pid, .cannotComplete, elapsed: 0.0001)
+        #expect(AXHealth.isSlow(pid), "another refusal does not prove a slow app recovered")
+        AXHealth.record(pid, .success, elapsed: 0.001)
+        #expect(!AXHealth.isSlow(pid))
+    }
+
     @Test func aTimedOutAppFailsAtOnceOnTheMainThreadOnly() {
         defer { restore() }
         let t = 100.0

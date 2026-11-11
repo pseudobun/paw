@@ -5,6 +5,7 @@ import json
 import pathlib
 import plistlib
 import select
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -94,6 +95,27 @@ def main():
             reader = threading.Thread(target=collect, daemon=True)
             reader.start()
             assert ready.wait(5), "Focus event subscription did not start"
+
+            def hover(id, owner, native_name):
+                window = next(w for w in windows() if w["id"] == id)
+                assert window["onScreen"], "Hover target must be a real window"
+                f = window["frame"]
+                paw("exec", f"{shlex.quote(str(binary))} --move-pointer {f['x'] + f['w'] / 2} {f['y'] + f['h'] / 2}")
+                def has_focus():
+                    selected = next((w["id"] for ws in query() if ws["focused"] for w in ws["windows"] if w["focused"]), None)
+                    return selected == id and fixture_reply(owner, "focused") == native_name
+                wait_for(has_focus)
+
+            hover(target, b, "target")
+            print("PASS: real-window hover before selecting a placeholder")
+            for attempt in range(3):
+                paw("find", "PAW-close-placeholder")
+                time.sleep(0.5)
+                assert fixture_reply(a, "front") == "com.pseudobun.paw.dev"
+                hover(target, b, "target")
+                hover(ids["other"], a, "other")
+                hover(ids["survivor"], a, "survivor")
+                print("PASS: placeholder to real windows", attempt + 1)
 
             def check(name, closing, expected, native_process, native_name, owner=a, quit_app=False):
                 focused_name = "other" if name == "background close" else "closing"

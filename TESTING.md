@@ -31,6 +31,7 @@
 - [ ] bsp (`hyper+w`): open windows until they'd get smaller than 640×400 → the screen shows only the branch around the focused one; `ctrl+arrows` past the edge pans to the next ones; the overview shows the whole canvas with the on-screen part outlined
 - [ ] Squeeze a window whose app has a minimum size (System Settings-like apps, Codex, T3) → after a moment it leaves, a placeholder (icon, title, "needs more room") takes its tile; click it → gold outline, `ctrl+alt+arrows` swaps it; in a bigger tile the window shows again; drag it like a window; double-click → zooms in until it fits; `paw retile` forgets the learned sizes
 - [ ] Enable `focus.focusFollowsMouse`: hover a placeholder → its outline and keyboard focus move there, with the app still parked; move to a normal window → focus follows back. Disable it in Settings → hovering stops focusing, clicking still works. Drag across another placeholder or cover it with a floating window → it must not steal focus
+- [ ] With a placeholder selected and paw holding keyboard focus, move across an empty gap and into another window → hover focus resumes without clicking; disable/re-enable focus-follows-mouse and repeat
 - [ ] With focus-follows-mouse enabled, open a native file picker in Teams (or another app) and let it overlap a neighbouring app's tile. Hover the overlapping part → the picker stays in front; hover an uncovered part of the neighbouring window → focus follows normally. Repeat with `border.enabled: true`
 - [ ] With focus-follows-mouse enabled, start a region capture in a screenshot tool and move the pointer across windows (and displays): selection stays active. Cancel with `esc` → normal hover focus resumes
 - [ ] Focus a placeholder while another app is frontmost, then `ctrl+alt+return` → its window fills the workspace, comes in front of the other apps, and accepts typing without a click; toggle back → its placeholder stays selected. Repeat with `ctrl+alt+space` → the floating window comes forward and accepts typing
@@ -63,6 +64,7 @@
 - [ ] Close the last window of an Alacritty process (⌘W) and quit an app (⌘Q) with the pointer over a real window, then a placeholder → the hovered target wins; a selected placeholder keeps keyboard commands in paw rather than an unrelated parked window
 - [ ] Minimise / ⌘H an app → its tile closes; restore → it comes back to the same tile and size
 - [ ] Quit an app whose windows were tiled, open it again → same tiles
+- [ ] With Alacritty already on the workspace, `open -n /Applications/Alacritty.app` → the new window tiles promptly after it appears, without sitting in the center until the four-second adoption retry
 - [ ] `just install` (paw restarts) → every workspace keeps its tiles, sizes and stacks
 - [ ] Switching workspaces flashes the HUD (number + app icons); `hud.workspace: false` turns it off
 - [ ] `hyper+o` / `hyper+i` go back and forward through focused windows, switching workspaces; `paw find zed` goes to Zed
@@ -112,8 +114,9 @@ With Paw Dev running with Accessibility access and an empty hidden workspace, ru
 python3 scripts/test-window-close.py
 ```
 
-This live AX regression checks same-app closes, background closes, cross-app closes, and a
-hovered placeholder. It also repeats five single-window process exits, alternating explicit
+This live AX regression first checks hover focus from a selected placeholder back to real
+windows, including windows in the same app. It checks same-app closes, background closes,
+cross-app closes, and a hovered placeholder. It also repeats five single-window process exits, alternating explicit
 quit and last-window close. It verifies native keyboard focus (paw owns it for placeholders)
 and rejects intermediate focus events for other windows. Only disposable fixture windows are closed; the previous
 workspace and the empty workspace's layout are restored. Leave the keyboard and mouse alone.
