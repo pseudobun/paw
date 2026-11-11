@@ -3,6 +3,20 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.14](https://github.com/pseudobun/paw/compare/v0.1.0-beta.13...v0.1.0-beta.14) (2026-11-11)
+
+
+### Features
+
+* **dock:** install the changed Dock helper after an update ([0ac7aa1](https://github.com/pseudobun/paw/commit/0ac7aa1270d00f9b5fdd7085451c6c46b7d2b37c))
+* **dock:** version the Dock helper and restart Dock when it changes ([884f4a1](https://github.com/pseudobun/paw/commit/884f4a1bc6f2281a78eafe0abbcfa1aaa3c01a54))
+
+
+### Bug Fixes
+
+* **focus:** prefer hovered window after closing focused window ([#51](https://github.com/pseudobun/paw/issues/51)) ([b67b6c5](https://github.com/pseudobun/paw/commit/b67b6c5f4dd4905278eacdfad6251ffcd23b0eca))
+* match focus borders to window corners and cache updates ([#49](https://github.com/pseudobun/paw/issues/49)) ([5738b73](https://github.com/pseudobun/paw/commit/5738b736f235b1bd52991d383a03e559c0890e54))
+
 ## [0.1.0-beta.13](https://github.com/pseudobun/paw/compare/v0.1.0-beta.12...v0.1.0-beta.13) (2026-11-11)
 
 
