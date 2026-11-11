@@ -12,6 +12,21 @@ final class Window {
     /// Where a floating window was before its workspace was hidden.
     var floatFrame: CGRect?
     var isHidden = false
+    /// Observed border bounds stay separate from the queued layout target in `frame`.
+    var borderFrame: CGRect?
+    var borderNeedsRefresh = true
+    private var cornerRadius: CGFloat?
+    private var cornerRadiusRead = false
+
+    func invalidateCornerRadius() { cornerRadiusRead = false }
+
+    func radiusForBorder(query: (UInt32) -> CGFloat? = SkyLight.cornerRadius) -> CGFloat? {
+        if !cornerRadiusRead {
+            cornerRadius = query(id)
+            cornerRadiusRead = true
+        }
+        return cornerRadius
+    }
 
     init(id: WindowID, element: AXUIElement, pid: pid_t, app: String, frame: CGRect) {
         self.id = id
@@ -36,7 +51,12 @@ final class Window {
 
     func readFrame() -> CGRect? {
         let f = element.frame
-        if let f { frame = f }
+        if let f {
+            if f.size != frame.size { invalidateCornerRadius() }
+            frame = f
+            borderFrame = f
+            borderNeedsRefresh = false
+        }
         return f
     }
 
@@ -44,6 +64,9 @@ final class Window {
     /// Same size as before: just the position (one call instead of three).
     func setFrame(_ r: CGRect) {
         let size = r.size == frame.size ? nil : r.size
+        if size != nil { invalidateCornerRadius() }
+        borderFrame = nil
+        borderNeedsRefresh = true
         frame = r
         if AXQueue.deferring {
             if size == nil, AXQueue.viaDock(self, r.origin) { return }
@@ -57,6 +80,8 @@ final class Window {
     }
 
     func setPosition(_ p: CGPoint) {
+        borderFrame = nil
+        borderNeedsRefresh = true
         frame.origin = p
         if AXQueue.deferring {
             if AXQueue.viaDock(self, p) { return }

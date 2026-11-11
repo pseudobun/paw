@@ -267,7 +267,8 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var enabled = false
         public var color = ARGB(0xccea_d186)
         public var width = 2.0
-        /// Corner radius; macOS 26 windows are about 16.
+        public var autoRadius = true
+        /// Manual radius, also used when automatic detection is unavailable.
         public var radius = 12.0
         /// How far outside the window the line sits.
         public var offset = 2.0
@@ -444,10 +445,11 @@ extension PawConfig.Updates {
 }
 
 extension PawConfig.Border {
-    enum CodingKeys: String, CodingKey, CaseIterable { case enabled, color, width, radius, offset }
+    enum CodingKeys: String, CodingKey, CaseIterable { case enabled, color, width, autoRadius, radius, offset }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.enabled, &enabled); try f(.color, &color); try f(.width, &width); try f(.radius, &radius); try f(.offset, &offset)
+        try f(.enabled, &enabled); try f(.color, &color); try f(.width, &width); try f(.autoRadius, &autoRadius)
+        try f(.radius, &radius); try f(.offset, &offset)
     }
 }
 

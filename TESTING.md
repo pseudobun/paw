@@ -66,6 +66,7 @@
 ## Overview
 
 - [ ] `border.enabled: true` (Settings → Look → Focus border) → a line around the focused window; follows focus, swaps, stacks, floating windows; around a focused placeholder too; colour/width change live
+- [ ] With `border.autoRadius: true`, focus Finder, an Electron app, and a square window: each outline matches its corners. Turn matching off: all use `border.radius`. Drag/resize a floating window, switch displays, and focus a placeholder; the line follows without reshaping at screen edges. Try a terminal that changes its title rapidly: an unchanged border must not redraw
 
 - [ ] `hyper+tab` → every display dims; rail of workspace cards, the current one large; `hyper+tab`/`esc` closes
 - [ ] Arrows move the gold outline; past the left/right edge → previous/next workspace; `tab`, `1`–`9`

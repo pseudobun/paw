@@ -82,6 +82,7 @@ final class WindowManager {
     let moveHUD = MoveHUD()
     let placeholders = Placeholders()
     let border = FocusBorder()
+    private var borderRefreshWork: DispatchWorkItem?
     let edges = EdgeMarkers()
     /// Inside a workspace switch: indicators, border and edges wait until switching settles.
     private var settling = false
@@ -118,7 +119,10 @@ final class WindowManager {
     func start() {
         AXUIElementSetMessagingTimeout(AXUIElement.systemWide, 0.5)
         animator.settings = { [unowned self] in config.animation }
-        animator.onFinish = { [weak self] in self?.updateIndicators() }
+        animator.onFinish = { [weak self] in
+            self?.updateIndicators()
+            self?.scheduleBorderRefresh()
+        }
         tracker.onEvent = { [weak self] in self?.handle($0) }
         hotkeys.run = { [weak self] in self?.run($0) }
         indicators.onFocus = { [weak self] id in self?.focusWindow(id, warp: false) }
@@ -181,6 +185,7 @@ final class WindowManager {
     }
 
     func configChanged() {
+        for w in windows.values { w.invalidateCornerRadius(); w.borderNeedsRefresh = true }
         DockBridge.shared.enabled = config.layout.windowServer
         hotkeys.set(config.bindings, modes: config.modes)
         gestures.configChanged()
@@ -526,8 +531,14 @@ final class WindowManager {
             if let app = NSRunningApplication(processIdentifier: pid) { adopt(app, state: nil) }
         case .focused(let pid):
             syncFocus(pid)
-        case .moved(let el), .resized(let el):
-            if let w = window(for: el) { userMoved(w) }
+        case .moved(let el):
+            if let w = window(for: el) { w.borderNeedsRefresh = true; userMoved(w) }
+        case .resized(let el):
+            if let w = window(for: el) {
+                w.invalidateCornerRadius()
+                w.borderNeedsRefresh = true
+                userMoved(w)
+            }
         case .titleChanged(let el):
             if let w = window(for: el), w.refreshTitle() {
                 retryMinimum(w)
@@ -583,12 +594,16 @@ final class WindowManager {
     /// Moving shows where it would land (drop zones) and puts it there; resizing an edge
     /// changes the tile sizes; anything else snaps back.
     private func userMoved(_ w: Window) {
-        if let until = suppressMoves[w.id], until > Date() { return }
+        if let until = suppressMoves[w.id], until > Date() {
+            if w.id == focusedID { scheduleBorderRefresh() }
+            return
+        }
         if w.isHidden || animator.isRunning { return }
         guard let ws = workspaceOf(w.id), displayShowing(ws.name) != nil else { return }
         if ws.isFloating(w.id) {
             _ = w.readFrame()
             w.floatFrame = w.frame
+            if w.id == focusedID { updateBorder(cramped: []) }
             return
         }
         guard dragTimer == nil else { return }
@@ -809,8 +824,20 @@ final class WindowManager {
         }
     }
 
-    /// The focus border: around the focused window's tile (or its placeholder, or a floating
-    /// window), while its app is in front.
+    /// Reconcile queued moves once they settle; coalesced, with no idle polling.
+    private func scheduleBorderRefresh() {
+        guard config.border.enabled else { return }
+        borderRefreshWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.animator.isRunning, !AXQueue.deferring,
+                  let id = self.focusedID, let w = self.windows[id], !w.isMoving else { return }
+            self.updateBorder(cramped: self.isCramped(id) ? [id] : [])
+        }
+        borderRefreshWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+    }
+
+    /// The focus border follows the window's observed bounds, or the placeholder's tile.
     private func updateBorder(cramped: Set<WindowID>) {
         guard config.border.enabled, !overview.isOpen, let id = focusedID, let w = windows[id],
               let ws = workspaceOf(id), let di = displayShowing(ws.name) else { border.hide(); return }
@@ -818,8 +845,19 @@ final class WindowManager {
         let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let justFocused = pawFocus.map { $0.id == id && Date().timeIntervalSince($0.at) < 1 } ?? false
         guard placeholder || justFocused || frontPid == w.pid else { border.hide(); return }
-        let frame = ws.isFloating(id) ? w.frame : TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id]
-        border.show(frame, window: id, above: !placeholder, screen: displays[di].frame, config: config.border)
+        if border.windowID != id {
+            w.invalidateCornerRadius()
+            w.borderNeedsRefresh = true
+        }
+        if !placeholder, w.borderNeedsRefresh {
+            if !animator.isRunning, !AXQueue.deferring, !w.isMoving {
+                w.borderFrame = SkyLight.frame(id)
+                w.borderNeedsRefresh = false
+            } else { scheduleBorderRefresh() }
+        }
+        let frame = placeholder ? TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] : (w.borderFrame ?? w.frame)
+        let radius = !placeholder && config.border.autoRadius ? w.radiusForBorder() : nil
+        border.show(frame, window: id, above: !placeholder, screen: displays[di].frame, config: config.border, radius: radius)
     }
 
     private var placeholderMin: CGSize {

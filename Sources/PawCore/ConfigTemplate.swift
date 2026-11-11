@@ -224,6 +224,7 @@ public enum ConfigTemplate {
             enabled: \(c.border.enabled),
             color: \(str(c.border.color.description)), // 0xAARRGGBB or "#RRGGBB"
             width: \(num(c.border.width)),
+            autoRadius: \(c.border.autoRadius), // Match the window's corners when available (macOS 26+)
             radius: \(num(c.border.radius)),
             offset: \(num(c.border.offset)),
           },
