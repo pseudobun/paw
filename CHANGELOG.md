@@ -3,6 +3,13 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.11](https://github.com/pseudobun/paw/compare/v0.1.0-beta.10...v0.1.0-beta.11) (2026-11-11)
+
+
+### Bug Fixes
+
+* **zoom:** stop windows gliding across neighbouring displays ([#42](https://github.com/pseudobun/paw/issues/42)) ([5b1b548](https://github.com/pseudobun/paw/commit/5b1b548cc08414f0ac536aba2f209c1fabf6c1ad))
+
 ## [0.1.0-beta.10](https://github.com/pseudobun/paw/compare/v0.1.0-beta.9...v0.1.0-beta.10) (2026-11-11)
 
 
