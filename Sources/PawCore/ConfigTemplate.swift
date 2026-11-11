@@ -225,7 +225,7 @@ public enum ConfigTemplate {
 
           // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.
           // Commands (also `paw <command>`; chain with ";"):
-          //   focus west|east|north|south|stack.next|stack.prev   swap|warp|stack <dir>   swap stack.next|stack.prev   unstack [all]
+          //   focus west|east|north|south|stack.next|stack.prev   swap|warp|join|stack <dir>   swap stack.next|stack.prev   unstack [all]
           //   layout bsp|columns|master|stack|float   toggle float|zoom|split   balance   rotate 90|180|270
           //   undo   redo   focus back|forward   find <app or title>   overview   zoom in|out
           //   resize <dir> <points>   grid rows:cols:x:y:w:h   workspace <n>|next|prev|last|new|close
@@ -351,7 +351,7 @@ public enum ConfigTemplate {
     static func order(_ key: String, _ bindings: [String: String]) -> String {
         let cmd = bindings[key] ?? ""
         let verb = cmd.split(separator: " ").first.map(String.init) ?? ""
-        let rank = ["focus", "swap", "stack", "warp", "unstack", "layout", "toggle", "grid", "balance", "rotate", "resize",
+        let rank = ["focus", "swap", "stack", "warp", "join", "unstack", "layout", "toggle", "grid", "balance", "rotate", "resize",
                     "workspace", "move-to", "mode", "undo", "redo", "overview", "find", "recover", "exec"].firstIndex(of: verb) ?? 99
         let num = Int(cmd.split(separator: " ").dropFirst().first ?? "") ?? 0
         return String(format: "%02d %03d %@ %@", rank, num, cmd, key)

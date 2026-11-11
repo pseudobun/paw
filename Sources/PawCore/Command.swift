@@ -15,6 +15,8 @@ public enum Command: Equatable, Sendable {
     /// Moves the focused window one place through its stack (negative: towards the top).
     case swapStack(Int)
     case warp(Direction)
+    /// Into the tile that way, splitting it across (`| | |` → `| =`); `first`: above / left of it.
+    case join(Direction, first: Bool)
     case stack(Direction)
     case unstack(all: Bool)
     case layout(LayoutKind)
@@ -116,6 +118,10 @@ public enum Command: Equatable, Sendable {
             default: return .swap(try dir(0))
             }
         case "warp": return .warp(try dir(0))
+        case "join":
+            let d = try dir(0)
+            guard args.count <= 2, args.count < 2 || args[1] == "first" else { throw ConfigProblem("“\(raw)”: join <direction> [first]") }
+            return .join(d, first: args.count == 2)
         case "stack": return .stack(try dir(0))
         case "unstack": return .unstack(all: args.first == "all")
         case "layout":

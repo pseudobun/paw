@@ -1646,6 +1646,9 @@ final class WindowManager {
         case .warp(let d):
             guard let id = fid else { return }
             if ws.warp(id, d, area: area) { relayout(); focusWindow(id, warp: true) }
+        case .join(let d, let first):
+            guard let id = fid else { return }
+            if ws.join(id, d, area: area, first: first) { relayout(); focusWindow(id, warp: true) }
         case .stack(let d):
             guard let id = fid, ws.stack(id, d, area: area) else { return }
             relayout()
@@ -1837,7 +1840,7 @@ final class WindowManager {
 
     static func changesLayout(_ c: Command) -> Bool {
         switch c {
-        case .swap, .swapStack, .warp, .stack, .unstack, .layout, .toggle, .balance, .rotate, .resize, .grid: return true
+        case .swap, .swapStack, .warp, .join, .stack, .unstack, .layout, .toggle, .balance, .rotate, .resize, .grid: return true
         default: return false
         }
     }

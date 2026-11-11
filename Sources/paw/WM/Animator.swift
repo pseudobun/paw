@@ -40,8 +40,10 @@ final class Animator {
             if let m = moves[w.id] { from = Easing.lerp(m.from, m.to, progress) }
             if s.resize == "start", from.size != r.size {
                 // Its final size now (through its app's queue), the position animates from here.
+                // `frame` keeps the old size, so the last frame sends size, position, size again:
+                // an app clamps a size that doesn't fit at its old position to the screen.
                 from.size = r.size
-                AXQueue.run { w.setFrame(CGRect(origin: w.frame.origin, size: r.size), settle: false) }
+                AXQueue.run { AXQueue.enqueue(w, size: r.size, origin: w.frame.origin, settle: false) }
             }
             moves[w.id] = Move(window: w, from: from, to: r)
         }
