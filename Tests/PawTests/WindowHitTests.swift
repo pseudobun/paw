@@ -104,6 +104,17 @@ struct WindowHitTests {
         #expect(WindowManager.topWindow(at: point, in: list, isManaged: { _ in true }) == 2)
     }
 
+    /// The window server sometimes lists the pointer itself as a small window at cursor level;
+    /// it sits under every pointer position and must not count as a dialog.
+    @Test func cursorWindowDoesNotBlockFocus() {
+        let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        let point = CGPoint(x: 400, y: 300)
+        let cursor = info(3, frame: CGRect(x: 395, y: 295, width: 28, height: 40),
+                          layer: Int(CGWindowLevelForKey(.cursorWindow)))
+        #expect(WindowManager.topWindow(at: point, in: [cursor, info(1, frame: frame)], isManaged: { $0 == 1 }) == 1)
+        #expect(WindowManager.topWindow(at: point, in: [cursor], fallback: 2, isManaged: { _ in false }) == 2)
+    }
+
     @Test func clickThroughPawOverlaysDoNotBlockFocus() {
         let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
         let list = [info(3, frame: frame, layer: 3), info(2, frame: frame), info(1, frame: frame)]

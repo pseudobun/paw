@@ -104,6 +104,9 @@ final class WindowManager {
     private var droppingSide = false
     /// The window paw just focused, until macOS catches up (the border goes there at once).
     private var pawFocus: (id: WindowID, at: Date)?
+    /// Focus moved off a closed window whose process outlives it (Alacritty's ⌘W: the window goes,
+    /// its process exits a moment later). macOS can activate its own choice as the process exits.
+    private var exitFocus: (pid: pid_t, target: WindowID, at: Date)?
     /// The window server and AX calls that focus a window take 20–40 ms; they run here, in
     /// order, while the border, indicators and pointer move at once.
     private let focusQueue = DispatchQueue(label: "paw.focus", qos: .userInteractive)
@@ -559,6 +562,10 @@ final class WindowManager {
                 }
                 ignoreFocus(0.35)
                 focusWindow(target, warp: false)
+                if closed, let target, !windows.values.contains(where: { $0.pid == w.pid }),
+                   NSRunningApplication(processIdentifier: w.pid)?.isTerminated == false {
+                    exitFocus = (w.pid, target, Date())
+                }
             }
             layout(ws, animated: true)
         }
@@ -572,6 +579,15 @@ final class WindowManager {
         removeAll(gone)
         AXQueue.forget(pid)
         AXHealth.forget(pid)
+        // Its last window closed earlier and focus moved on: claim it again over macOS's choice.
+        // ponytail: 2 s covers a shell's exit; an app lingering longer keeps macOS's choice.
+        if let e = exitFocus, e.pid == pid {
+            exitFocus = nil
+            if Date().timeIntervalSince(e.at) < 2, focusedWorkspace.focused == e.target {
+                ignoreFocus(0.35)
+                focusWindow(e.target, warp: false)
+            }
+        }
     }
 
     /// Drops windows macOS no longer has. Some apps (Find My) quit as their last window closes
@@ -989,8 +1005,12 @@ final class WindowManager {
         guard config.border.enabled else { return }
         borderRefreshWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.animator.isRunning, !AXQueue.deferring,
-                  let id = self.focusedID, let w = self.windows[id], !w.isMoving else { return }
+            guard let self, let id = self.focusedID, let w = self.windows[id] else { return }
+            // Still moving (a slow app takes a while to resize): look again once it lands.
+            if self.animator.isRunning || AXQueue.deferring || w.isMoving { self.scheduleBorderRefresh(); return }
+            // Read again: just after an app takes a new size the window server can still report
+            // the old one, and a border drawn from that would stay there.
+            w.borderNeedsRefresh = true
             self.updateBorder(cramped: self.isCramped(id) ? [id] : [])
         }
         borderRefreshWork = work
@@ -1336,6 +1356,8 @@ final class WindowManager {
         }
     }
 
+    private static let cursorLevel = Int(CGWindowLevelForKey(.cursorWindow))
+
     static func topWindow(at p: CGPoint, in list: [[String: Any]], ignoring ignored: Set<WindowID> = [],
                           standIns: [WindowID: WindowID] = [:], fallback: WindowID? = nil,
                           isManaged: (WindowID) -> Bool) -> WindowID? {
@@ -1348,7 +1370,8 @@ final class WindowManager {
                 if ignored.contains(standIn) { continue }
                 return standIn
             }
-            guard layer >= 0 else { continue }
+            // The window server sometimes lists the pointer itself: it is under every point.
+            guard layer >= 0, layer != Self.cursorLevel else { continue }
             // Unmanaged dialogs still occlude windows behind them.
             return isManaged(id) ? id : nil
         }

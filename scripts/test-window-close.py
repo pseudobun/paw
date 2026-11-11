@@ -216,6 +216,32 @@ def main():
             for attempt in range(4):
                 close_under_pointer(f"process exit under pointer {attempt + 1}", quit_app=attempt % 2 == 0)
 
+            def close_then_exit(name, delay):
+                # Alacritty's ⌘W: its last window goes, the process exits a moment later. Paw's choice
+                # under the pointer must keep the keys once the process is gone. (macOS handing
+                # activation to the front-most other window as Alacritty exits is not reproduced here.)
+                c = launch("C", "--exit-after-close", str(delay))
+                ids["closing"] = int(fixture_reply(c, "new closing"))
+                wait_for(lambda: any(w["id"] == ids["closing"] for w in windows()))
+                paw("find", "PAW-close-other")
+                wait_for(lambda: fixture_reply(a, "focused") == "other")
+                paw("find", "PAW-close-closing")
+                wait_for(lambda: fixture_reply(c, "focused") == "closing")
+                time.sleep(0.5)
+                f = settled_frame(target, b, "target")
+                events.clear()
+                fixture_reply(c, f"close closing {f['x'] + f['w'] / 2} {f['y'] + f['h'] / 2}")
+                c.wait(timeout=5)
+                time.sleep(0.8)
+                focused = next((w["id"] for ws in query() if ws["focused"] for w in ws["windows"] if w["focused"]), None)
+                assert focused == target, f"{name}: expected target, got {focused}; events {events}"
+                native = fixture_reply(b, "focused"), fixture_reply(a, "focused")
+                assert native == ("target", "background"), f"{name}: keys went elsewhere (B, A) = {native}"
+                print("PASS:", name, "leaves the keys with the window under the pointer")
+
+            for attempt, delay in enumerate([0.05, 0.15, 0.3, 0.6, 1.0, 0.15]):
+                close_then_exit(f"window close then process exit {attempt + 1} ({delay}s)", delay)
+
             # Real key input: cross-process CGEvent.postToPid can silently drop keyboard events.
             if "--manual-keys" in sys.argv:
                 # A selected placeholder leaves paw with the keyboard: ⌘W and ⌘Q go to its own app.

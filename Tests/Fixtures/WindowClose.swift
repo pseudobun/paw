@@ -47,6 +47,12 @@ final class Fixture: NSObject, NSApplicationDelegate {
                             CGAssociateMouseAndMouseCursorPosition(1)
                         }
                         self.windows[name]?.close()
+                        // Alacritty's ⌘W: the window goes, then the process lingers (its shell exits) before it does.
+                        if let i = CommandLine.arguments.firstIndex(of: "--exit-after-close"),
+                           let delay = Double(CommandLine.arguments[i + 1]) {
+                            self.windows[name] = nil // destroyed, not just ordered out
+                            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { exit(0) }
+                        }
                         print("ok")
                     case "quit":
                         if parts.count == 3 {
