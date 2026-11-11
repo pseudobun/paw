@@ -3,6 +3,13 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.10](https://github.com/pseudobun/paw/compare/v0.1.0-beta.9...v0.1.0-beta.10) (2026-11-11)
+
+
+### Bug Fixes
+
+* **zoom:** move focus to the next display at the edge of a zoom ([#40](https://github.com/pseudobun/paw/issues/40)) ([fdfd44c](https://github.com/pseudobun/paw/commit/fdfd44c7ecdada8fa4516ea3fff6056cb6d7beeb))
+
 ## [0.1.0-beta.9](https://github.com/pseudobun/paw/compare/v0.1.0-beta.8...v0.1.0-beta.9) (2026-11-11)
 
 
