@@ -66,20 +66,30 @@ struct BorderTests {
         #expect(!border.panel.isVisible)
     }
 
-    @Test func screenEdgesClipWithoutShrinkingTheOutline() throws {
+    @Test func screenEdgesKeepTheFullStrokeVisibleWithTwoPointPadding() throws {
         let border = FocusBorder()
         defer { border.hide() }
-        let edge = CGRect(x: 0, y: 1700, width: 400, height: 300)
-        border.show(edge, window: 42, above: false, screen: screen, config: config(), radius: 26)
-        let path = try #require(border.shape.path)
-        #expect(path.boundingBoxOfPath.size == CGSize(width: 406, height: 306))
-        #expect(path.boundingBoxOfPath.minX == -3)
-        #expect(path.boundingBoxOfPath.minY == -3)
+        let edge = CGRect(x: 2, y: 1698, width: 400, height: 300)
+        let c = config()
+        func strokeBounds() throws -> CGRect {
+            let path = try #require(border.shape.path)
+            let cocoa = path.boundingBoxOfPath.offsetBy(dx: border.panel.frame.minX, dy: border.panel.frame.minY)
+            return ScreenGeometry.axFrame(ofScreen: cocoa, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
+                .insetBy(dx: -c.width / 2, dy: -c.width / 2)
+        }
+        border.show(edge, window: 42, above: false, screen: screen, config: c, radius: 26)
+        let stroke = try strokeBounds()
+        #expect(screen.insetBy(dx: -0.001, dy: -0.001).contains(stroke))
+        #expect(abs(stroke.minX - screen.minX) < 0.001)
+        #expect(abs(stroke.maxY - screen.maxY) < 0.001)
+        #expect(abs(stroke.minY - (edge.minY - c.offset - c.width)) < 0.001)
+        #expect(abs(stroke.maxX - (edge.maxX + c.offset + c.width)) < 0.001)
 
         let oldFrame = border.panel.frame
-        border.show(edge, window: 42, above: false, screen: screen.insetBy(dx: 10, dy: 10), config: config(), radius: 26)
+        let smaller = screen.insetBy(dx: 10, dy: 10)
+        border.show(edge, window: 42, above: false, screen: smaller, config: c, radius: 26)
         #expect(border.panel.frame != oldFrame)
-        #expect(border.shape.path?.boundingBoxOfPath.size == path.boundingBoxOfPath.size)
+        #expect(try smaller.insetBy(dx: -0.001, dy: -0.001).contains(strokeBounds()))
     }
 
     @Test func changingFromPlaceholderToWindowRestoresNormalLevel() {

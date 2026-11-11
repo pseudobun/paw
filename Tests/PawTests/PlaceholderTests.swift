@@ -5,6 +5,36 @@ import Testing
 
 @MainActor
 struct PlaceholderTests {
+    @Test func externalFocusBorderReplacesAccentWithFallbackWhenHidden() throws {
+        let view = PlaceholderView(frame: CGRect(x: 0, y: 0, width: 160, height: 140))
+        view.item = .init(id: 42, app: "Test", title: "Test", frame: view.bounds, focused: true)
+        var appearance = PawConfig.Appearance()
+        appearance.colors.accent = ARGB(0xffff0000)
+        appearance.colors.island = ARGB(0xff000000)
+        view.style = Style(appearance)
+
+        func edgeIsAccent() throws -> Bool {
+            let image = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 160, pixelsHigh: 140,
+                                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                                      isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            let context = try #require(NSGraphicsContext(bitmapImageRep: image))
+            NSGraphicsContext.saveGraphicsState()
+            defer { NSGraphicsContext.restoreGraphicsState() }
+            NSGraphicsContext.current = context
+            view.draw(view.bounds)
+            let color = try #require(image.colorAt(x: 1, y: 70)?.usingColorSpace(.deviceRGB))
+            return color.redComponent > 0.8 && color.greenComponent < 0.2 && color.blueComponent < 0.2
+        }
+
+        #expect(try edgeIsAccent())
+        view.focusBorderVisible = true
+        #expect(try !edgeIsAccent())
+        view.focusBorderVisible = false
+        #expect(try edgeIsAccent())
+        view.item = .init(id: 42, app: "Test", title: "Test", frame: view.bounds, focused: false)
+        #expect(try !edgeIsAccent())
+    }
+
     @Test func hoverFocusRespectsSettingAndCurrentFocus() throws {
         let view = PlaceholderView(frame: CGRect(x: 0, y: 0, width: 200, height: 150))
         var focused: [WindowID] = []

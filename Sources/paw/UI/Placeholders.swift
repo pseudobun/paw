@@ -26,7 +26,7 @@ final class Placeholders {
 
     private var panels: [WindowID: (panel: NSPanel, view: PlaceholderView)] = [:]
 
-    func apply(_ items: [Item], style: Style, focusFollowsMouse: Bool, actions: Actions) {
+    func apply(_ items: [Item], style: Style, focusFollowsMouse: Bool, focusBorder: WindowID?, actions: Actions) {
         let ids = Set(items.map(\.id))
         for (id, p) in panels where !ids.contains(id) {
             p.panel.orderOut(nil)
@@ -39,6 +39,7 @@ final class Placeholders {
             p.view.style = style
             p.view.actions = actions
             p.view.focusFollowsMouse = focusFollowsMouse
+            p.view.focusBorderVisible = focusBorder == item.id
             let f = ScreenGeometry.cocoa(fromAX: item.frame, primaryHeight: primaryHeight)
             if p.panel.frame != f { p.panel.setFrame(f, display: false) }
             p.view.needsDisplay = true
@@ -67,6 +68,7 @@ final class PlaceholderView: NSView {
     var style = Style(PawConfig.Appearance())
     var actions: Placeholders.Actions?
     var focusFollowsMouse = false
+    var focusBorderVisible = false
     private var downAt: CGPoint?
     private var dragging = false
     private var area: NSTrackingArea?
@@ -100,9 +102,11 @@ final class PlaceholderView: NSView {
         dash.setLineDash([6, 5], count: 2, phase: 0)
         dash.lineWidth = 1
         if item.focused {
-            c.accent.ns.setStroke()
-            path.lineWidth = 2
-            path.stroke()
+            if !focusBorderVisible {
+                c.accent.ns.setStroke()
+                path.lineWidth = 2
+                path.stroke()
+            }
         } else {
             c.muted.withAlpha(0.5).ns.setStroke()
             dash.stroke()

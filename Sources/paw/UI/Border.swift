@@ -38,7 +38,7 @@ final class FocusBorder {
     }
 
     /// `frame` in AX coordinates; nil hides it.
-    /// `screen` clips the outline without changing its corner geometry.
+    /// At a screen edge the stroke moves inward just enough to remain visible.
     func show(_ frame: CGRect?, window id: WindowID, above: Bool, screen: CGRect, config: PawConfig.Border, radius: CGFloat? = nil) {
         guard config.enabled, config.width > 0, let frame else { hide(); return }
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
@@ -49,7 +49,9 @@ final class FocusBorder {
         let ax = frame.insetBy(dx: -o - config.width, dy: -o - config.width).intersection(screen)
         guard !ax.isNull, ax.width > 2 * config.width, ax.height > 2 * config.width else { hide(); return }
         let cocoa = ScreenGeometry.cocoa(fromAX: ax, primaryHeight: primaryHeight)
-        let outline = ScreenGeometry.cocoa(fromAX: frame.insetBy(dx: -o, dy: -o), primaryHeight: primaryHeight)
+        let visibleOutline = frame.insetBy(dx: -o, dy: -o).intersection(screen.insetBy(dx: config.width / 2, dy: config.width / 2))
+        guard !visibleOutline.isNull, !visibleOutline.isEmpty else { hide(); return }
+        let outline = ScreenGeometry.cocoa(fromAX: visibleOutline, primaryHeight: primaryHeight)
         let r = outline.offsetBy(dx: -cocoa.minX, dy: -cocoa.minY)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
