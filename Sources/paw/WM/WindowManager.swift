@@ -106,6 +106,8 @@ final class WindowManager {
     private let focusQueue = DispatchQueue(label: "paw.focus", qos: .userInteractive)
     let dropPreview = DropPreview()
     private var indicatorsDirty = false
+    /// Which workspace each window was on when paw started (from the state file).
+    private var launchState: [WindowID: String] = [:]
     lazy var seams = SeamHandles(wm: self)
     lazy var gestures = MouseGestures(wm: self)
     lazy var overview = OverviewController(wm: self)
@@ -133,6 +135,7 @@ final class WindowManager {
 
         rebuildDisplays()
         let state = StateFile.load()
+        launchState = state.windows
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
             adopt(app, state: state.windows)
         }
@@ -410,12 +413,18 @@ final class WindowManager {
     // MARK: - Windows
 
     /// Every running app's windows paw doesn't manage yet (after the screen unlocks).
+    /// Each goes back to the workspace the state file has it on, as at launch.
     func adoptAll() {
         let before = windows.count
+        // Started while locked, paw has since saved a state without these windows: where they were
+        // at launch counts too.
+        let state = StateFile.load().windows.merging(launchState) { now, _ in now }
         AXQueue.run {
             for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
-                adopt(app, state: nil)
+                adopt(app, state: state)
             }
+            guard windows.count != before else { return }
+            layoutVisible(animated: false)
         }
         if windows.count != before { Log.app.info("adopted \(self.windows.count - before) more windows") }
     }
