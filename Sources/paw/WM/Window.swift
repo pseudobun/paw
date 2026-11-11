@@ -34,26 +34,34 @@ final class Window {
     }
     var isMinimized: Bool { element.bool(kAXMinimizedAttribute) ?? false }
 
+    /// The frame as the app has it. While a move of paw's is still on its way, `frame` (where it's
+    /// going) without asking: the app would answer with where it was, or not at all if it hangs.
     func readFrame() -> CGRect? {
+        if isMoving { return frame }
         let f = element.frame
         if let f { frame = f }
         return f
     }
 
     /// Size, position, size: the second size fixes apps that clamp size to the old screen.
-    /// Same size as before: just the position (one call instead of three).
-    func setFrame(_ r: CGRect) {
+    /// Same size as before: just the position (one call instead of three). `settle: false` sends
+    /// the size once (animation frames, where the next frame follows anyway).
+    func setFrame(_ r: CGRect, settle: Bool = true) {
         let size = r.size == frame.size ? nil : r.size
         frame = r
         if AXQueue.deferring {
             if size == nil, AXQueue.viaDock(self, r.origin) { return }
-            AXQueue.enqueue(self, size: size, origin: r.origin)
+            AXQueue.enqueue(self, size: size, origin: r.origin, settle: settle)
             return
         }
-        AXQueue.flush(self)
+        // Its app hung, or still busy with earlier moves: behind those, off the main thread.
+        guard AXQueue.flush(self), !AXHealth.isSlow(pid) else {
+            AXQueue.enqueue(self, size: size, origin: r.origin, settle: settle)
+            return
+        }
         if let size { element.setSize(size) }
         element.setPosition(r.origin)
-        if let size { element.setSize(size) }
+        if settle, let size { element.setSize(size) }
     }
 
     func setPosition(_ p: CGPoint) {
@@ -63,7 +71,10 @@ final class Window {
             AXQueue.enqueue(self, size: nil, origin: p)
             return
         }
-        AXQueue.flush(self)
+        guard AXQueue.flush(self), !AXHealth.isSlow(pid) else {
+            AXQueue.enqueue(self, size: nil, origin: p)
+            return
+        }
         element.setPosition(p)
     }
 
@@ -85,7 +96,20 @@ enum AXQueue {
         let window: Window
         var size: CGSize?
         var origin: CGPoint
+        var settle = true
     }
+
+    /// What a queue does with a move: the accessibility calls. Tests replace it.
+    nonisolated(unsafe) static var send: (Window, CGSize?, CGPoint, Bool) -> Void = { w, size, origin, settle in
+        let el = w.element
+        if let size { el.setSize(size) }
+        _ = el.setPosition(origin)
+        if settle, let size { el.setSize(size) }
+    }
+
+    /// How long the main thread waits for a send to an app already under way before it queues
+    /// its move behind it instead.
+    static let flushWait: TimeInterval = 0.05
 
     /// Main thread only.
     private(set) static var deferring = false
@@ -127,13 +151,13 @@ enum AXQueue {
         return true
     }
 
-    static func enqueue(_ w: Window, size: CGSize?, origin: CGPoint) {
+    static func enqueue(_ w: Window, size: CGSize?, origin: CGPoint, settle: Bool = true) {
         let pid = w.pid
         lock.lock()
         var m = pending[pid]?[w.id] ?? Move(window: w, size: nil, origin: origin)
         if pending[pid]?[w.id] == nil { order[pid, default: []].append(w.id) }
         m.origin = origin
-        if let size { m.size = size }
+        if let size { m.size = size; m.settle = settle }
         pending[pid, default: [:]][w.id] = m
         let start = busy.insert(pid).inserted
         let q = queues[pid] ?? DispatchQueue(label: "paw.ax.\(pid)", qos: .userInteractive)
@@ -159,12 +183,7 @@ enum AXQueue {
             // Taken before letting go of `lock`: a flush either finds a move pending or waits.
             appLock.lock()
             lock.unlock()
-            for m in moves {
-                let el = m.window.element
-                if let size = m.size { el.setSize(size) }
-                _ = el.setPosition(m.origin)
-                if let size = m.size { el.setSize(size) }
-            }
+            for m in moves { send(m.window, m.size, m.origin, m.settle) }
             lock.lock()
             sending.subtract(ids)
             lock.unlock()
@@ -176,16 +195,45 @@ enum AXQueue {
         lock.withLock { pending[w.pid]?[w.id] != nil || sending.contains(w.id) }
     }
 
-    /// Main thread: whatever was waiting for `w` is dropped (a sync move replaces it) and a
-    /// send to its app in progress is waited for.
-    static func flush(_ w: Window) {
+    /// Main thread, before a move made outside `run`: true when nothing of `w`'s is under way
+    /// any more, so the move can go now and land last. False when a send to its app is still
+    /// going after `flushWait` (the app is slow or hung): queue the move behind it instead.
+    @discardableResult
+    static func flush(_ w: Window, wait: TimeInterval = flushWait) -> Bool {
         lock.lock()
-        guard pending[w.pid]?[w.id] != nil || sending.contains(w.id) else { lock.unlock(); return }
-        pending[w.pid]?[w.id] = nil
-        order[w.pid]?.removeAll { $0 == w.id }
+        guard pending[w.pid]?[w.id] != nil || sending.contains(w.id) || busy.contains(w.pid) else { lock.unlock(); return true }
+        // Its app's queue is still working: a move sent now could land before older ones.
+        if pending[w.pid]?[w.id] == nil, !sending.contains(w.id) {
+            lock.unlock()
+            return false
+        }
         let appLock = appLocks[w.pid]
         lock.unlock()
-        appLock?.lock()
-        appLock?.unlock()
+        guard let appLock else { return true }
+        guard appLock.lock(before: Date(timeIntervalSinceNow: wait)) else { return false }
+        appLock.unlock()
+        // Done sending: nothing left that could land after the new move.
+        return lock.withLock { pending[w.pid]?[w.id] == nil && !busy.contains(w.pid) }
+    }
+
+    /// The app quit: its queue and lock go.
+    static func forget(_ pid: pid_t) {
+        lock.withLock {
+            guard !busy.contains(pid) else { return }
+            pending[pid] = nil
+            order[pid] = nil
+            queues[pid] = nil
+            appLocks[pid] = nil
+        }
+    }
+
+    /// For tests: waits until every queue is idle.
+    static func waitIdle(timeout: TimeInterval = 2) -> Bool {
+        let end = Date(timeIntervalSinceNow: timeout)
+        while Date() < end {
+            if lock.withLock({ busy.isEmpty }) { return true }
+            usleep(1000)
+        }
+        return false
     }
 }

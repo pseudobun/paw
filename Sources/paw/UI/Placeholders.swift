@@ -35,13 +35,15 @@ final class Placeholders {
         for item in items {
             let p = panels[item.id] ?? make()
             panels[item.id] = p
+            // Redrawn only when what it shows changed: this runs on every indicator update.
+            let changed = p.view.item != item || p.view.style.a != style.a
             p.view.item = item
             p.view.style = style
             p.view.actions = actions
             p.view.focusFollowsMouse = focusFollowsMouse
             let f = ScreenGeometry.cocoa(fromAX: item.frame, primaryHeight: primaryHeight)
             if p.panel.frame != f { p.panel.setFrame(f, display: false) }
-            p.view.needsDisplay = true
+            if changed { p.view.needsDisplay = true }
             if !p.panel.isVisible { p.panel.orderFrontRegardless() }
         }
     }

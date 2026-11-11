@@ -229,7 +229,7 @@
 
   // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.
   // Commands (also `paw <command>`; chain with ";"):
-  //   focus west|east|north|south|stack.next|stack.prev   swap|warp|stack <dir>   swap stack.next|stack.prev   unstack [all]
+  //   focus west|east|north|south|stack.next|stack.prev   swap|warp|join|stack <dir>   swap stack.next|stack.prev   unstack [all]
   //   layout bsp|columns|master|stack|float   toggle float|zoom|split   balance   rotate 90|180|270
   //   undo   redo   focus back|forward   find <app or title>   overview   zoom in|out
   //   resize <dir> <points>   grid rows:cols:x:y:w:h   workspace <n>|next|prev|last|new|close
@@ -257,6 +257,10 @@
     "cmd+shift+ctrl+up": "warp north",
     "cmd+shift+ctrl+down": "warp south",
     "cmd+shift+ctrl+left": "warp west",
+    "cmd+alt+ctrl+right": "join east",
+    "cmd+alt+ctrl+up": "join north",
+    "cmd+alt+ctrl+down": "join south",
+    "cmd+alt+ctrl+left": "join west",
     "ctrl+alt+u": "unstack",
     "hyper+w": "layout bsp",
     "hyper+f": "layout float",

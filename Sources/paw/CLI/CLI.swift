@@ -48,6 +48,8 @@ enum CLI {
           swap <dir>          swap with the window that way (another display when there is none)
           swap stack.next|stack.prev   move the window down / up its stack
           warp <dir>          move the window into that tile's place, splitting it
+          join <dir> [first]  move the window into the tile that way, splitting it across:
+                              | | | with the middle one joined east is | =
           stack <dir>         put the window on the stack that way
           unstack [all]       take the window (or every window) out of its stack
           layout bsp|columns|master|stack|float      toggle float|zoom|split      balance      rotate 90|180|270

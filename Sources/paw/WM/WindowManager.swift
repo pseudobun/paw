@@ -57,6 +57,9 @@ final class WindowManager {
     private var lastHover = Date.distantPast
     private var observers: [NSObjectProtocol] = []
     private var pruneTimer: Timer?
+    private var screensAsleep = false
+    private var hoverPending = false
+    private var lastFocusReported: WindowID?
     private var layoutEventWork: DispatchWorkItem?
     /// The zoom level last reported per workspace (`zoomChanged`).
     private var reportedZoom: [String: Int] = [:]
@@ -103,6 +106,9 @@ final class WindowManager {
     /// order, while the border, indicators and pointer move at once.
     private let focusQueue = DispatchQueue(label: "paw.focus", qos: .userInteractive)
     let dropPreview = DropPreview()
+    private var indicatorsDirty = false
+    /// Which workspace each window was on when paw started (from the state file).
+    private var launchState: [WindowID: String] = [:]
     lazy var seams = SeamHandles(wm: self)
     lazy var gestures = MouseGestures(wm: self)
     lazy var overview = OverviewController(wm: self)
@@ -130,6 +136,7 @@ final class WindowManager {
 
         rebuildDisplays()
         let state = StateFile.load()
+        launchState = state.windows
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
             adopt(app, state: state.windows)
         }
@@ -173,8 +180,27 @@ final class WindowManager {
         observers.append(ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.scheduleDisplaysChanged()
         })
+        // While the screen is locked, accessibility lists placeholders instead of an app's
+        // windows: paw started then (a login item, a restart over SSH) knows none of them. Once
+        // it's unlocked, take on every window it doesn't have yet.
+        let unlocked: (Notification) -> Void = { [weak self] _ in
+            for delay in [0.5, 2.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.adoptAll() }
+            }
+        }
+        observers.append(DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsUnlocked"),
+                                                                             object: nil, queue: .main, using: unlocked))
+        observers.append(ws.addObserver(forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main,
+                                        using: unlocked))
         // Catches windows that vanish without any notification (see pruneDead).
         pruneTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.pruneDead() }
+        pruneTimer?.tolerance = 0.5
+        observers.append(ws.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.screensAsleep = true
+        })
+        observers.append(ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.screensAsleep = false
+        })
         layoutAll(animated: false)
         if setupChanged { applySetup() }
         if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier { syncFocus(pid, force: true) }
@@ -387,6 +413,23 @@ final class WindowManager {
 
     // MARK: - Windows
 
+    /// Every running app's windows paw doesn't manage yet (after the screen unlocks).
+    /// Each goes back to the workspace the state file has it on, as at launch.
+    func adoptAll() {
+        let before = windows.count
+        // Started while locked, paw has since saved a state without these windows: where they were
+        // at launch counts too.
+        let state = StateFile.load().windows.merging(launchState) { now, _ in now }
+        AXQueue.run {
+            for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
+                adopt(app, state: state)
+            }
+            guard windows.count != before else { return }
+            layoutVisible(animated: false)
+        }
+        if windows.count != before { Log.app.info("adopted \(self.windows.count - before) more windows") }
+    }
+
     /// `fresh`: the app just launched, so its windows are new ones: they go next to the focused
     /// window and take focus, like any window opened later.
     private func adopt(_ app: NSRunningApplication, state: [WindowID: String]?, fresh: Bool = false) {
@@ -398,7 +441,7 @@ final class WindowManager {
         for w in el.elements(kAXWindowsAttribute) {
             if let win = add(w, pid: app.processIdentifier, state: state, initial: !fresh) { added.append(win.id) }
         }
-        if state == nil { layoutVisible(animated: true) }
+        if state == nil, !added.isEmpty { layoutVisible(animated: true) }
         if fresh, let id = added.last, let ws = workspaceOf(id), displayShowing(ws.name) != nil { focusWindow(id, warp: true) }
     }
 
@@ -450,6 +493,9 @@ final class WindowManager {
 
     private func remove(_ id: WindowID, relayout: Bool = true, closed: Bool = false) {
         guard let w = windows.removeValue(forKey: id) else { return }
+        suppressMoves[id] = nil
+        minimumBackoff[id] = nil
+        if lastFocusReported == id { lastFocusReported = nil }
         windowMins[id] = nil
         overflowSuspects[id] = nil
         minimumChecks[id] = nil
@@ -477,7 +523,11 @@ final class WindowManager {
 
     private func appTerminated(_ pid: pid_t) {
         tracker.forget(pid)
-        for w in windows.values where w.pid == pid { remember(w.id, for: 300); remove(w.id, closed: true) }
+        let gone = windows.values.filter { $0.pid == pid }.map(\.id)
+        for id in gone { remember(id, for: 300) }
+        removeAll(gone)
+        AXQueue.forget(pid)
+        AXHealth.forget(pid)
     }
 
     /// Drops windows macOS no longer has. Some apps (Find My) quit as their last window closes
@@ -492,12 +542,42 @@ final class WindowManager {
     }
 
     private func pruneDead() {
-        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return }
-        let alive = Set(list.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value })
+        if screensAsleep { return }
+        let alive = Self.liveWindows(Array(windows.keys))
         let dead = windows.keys.filter { !alive.contains($0) }
         guard !dead.isEmpty else { return }
         Log.app.info("pruning \(dead.count) closed windows")
-        for id in dead { remove(id, closed: true) }
+        removeAll(dead)
+    }
+
+    /// Which of `ids` the window server still has. Asks about these windows only (about 0.2 ms
+    /// for 30), not for the list of every window on the system (about 5 ms).
+    static func liveWindows(_ ids: [WindowID]) -> Set<WindowID> {
+        guard !ids.isEmpty else { return [] }
+        var ptrs = ids.map { UnsafeRawPointer(bitPattern: UInt($0)) }
+        guard let arr = CFArrayCreate(nil, &ptrs, ptrs.count, nil),
+              let list = CGWindowListCreateDescriptionFromArray(arr) as? [[String: Any]] else { return [] }
+        return Set(list.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value })
+    }
+
+    /// Several windows gone at once (an app quit, a prune): each workspace is laid out once, after
+    /// the last of its windows goes, instead of once per window.
+    private func removeAll(_ ids: [WindowID]) {
+        var last: [String: WindowID] = [:]
+        let removing = Set(ids)
+        for id in ids {
+            if let ws = workspaceOf(id) {
+                last[ws.name] = ws.focused.flatMap { removing.contains($0) ? $0 : nil } ?? id
+            }
+        }
+        let final = Set(last.values)
+        AXQueue.run {
+            for id in ids where !final.contains(id) {
+                assert(workspaceOf(id)?.focused != id, "The focused window must be removed last for close recovery")
+                remove(id, relayout: false, closed: true)
+            }
+            for id in ids where final.contains(id) { remove(id, closed: true) }
+        }
     }
 
     private func window(for el: AXUIElement) -> Window? {
@@ -511,6 +591,10 @@ final class WindowManager {
     // MARK: - Events
 
     private func handle(_ e: WindowTracker.Event) {
+        AXQueue.run { handleEvent(e) }
+    }
+
+    private func handleEvent(_ e: WindowTracker.Event) {
         switch e {
         case .created(let el, let pid):
             windowCreated(el, pid: pid, retries: 3)
@@ -530,8 +614,12 @@ final class WindowManager {
             if let w = window(for: el) { userMoved(w) }
         case .titleChanged(let el):
             if let w = window(for: el), w.refreshTitle() {
-                retryMinimum(w)
-                updateIndicators()
+                retryMinimum(w, fromTitle: true)
+                // Titles show in stack indicators and placeholders only: a ticking title elsewhere
+                // (a terminal's spinner, an unread count) redraws nothing.
+                if let ws = workspaceOf(w.id), (ws.tile(of: w.id)?.windows.count ?? 0) > 1 || windowMins[w.id] != nil {
+                    updateIndicators()
+                }
             }
         }
     }
@@ -777,7 +865,21 @@ final class WindowManager {
 
     /// A Chromium window can later accept a size it refused during startup or a transition.
     /// Retry while parked so a genuine minimum never flashes over its neighbours.
-    private func retryMinimum(_ w: Window, focus: Bool = false) {
+    /// Title changes retry a parked window's size with growing pauses (1 s, 2 s … 60 s): a window
+    /// whose title ticks would otherwise be resized every time it does.
+    private var minimumBackoff: [WindowID: (next: Date, interval: TimeInterval)] = [:]
+
+    static func nextBackoff(_ interval: TimeInterval?) -> TimeInterval { min(60, (interval ?? 0.5) * 2) }
+
+    private func retryMinimum(_ w: Window, focus: Bool = false, fromTitle: Bool = false) {
+        if fromTitle {
+            let now = Date()
+            if let b = minimumBackoff[w.id], now < b.next { return }
+            let interval = Self.nextBackoff(minimumBackoff[w.id]?.interval)
+            minimumBackoff[w.id] = (now.addingTimeInterval(interval), interval)
+        } else if focus {
+            minimumBackoff[w.id] = nil
+        }
         let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
         if var pending = minimumChecks[w.id] {
             if focus {
@@ -1075,7 +1177,12 @@ final class WindowManager {
             return
         }
         let (pid, element) = (w.pid, w.element)
-        focusQueue.async { SkyLight.focus(pid: pid, windowID: id, element: element) }
+        // Requests pile up behind a slow app: only the newest one still goes.
+        let ticket = FocusTicket.shared.issue()
+        focusQueue.async {
+            guard FocusTicket.shared.isLatest(ticket) else { return }
+            SkyLight.focus(pid: pid, windowID: id, element: element)
+        }
         pawFocus = (id, Date())
         if warp && config.focus.mouseFollowsFocus {
             let primary = NSScreen.screens.first?.frame.height ?? 0
@@ -1093,12 +1200,28 @@ final class WindowManager {
         if let m = mouseMonitor { NSEvent.removeMonitor(m); mouseMonitor = nil }
         guard config.focus.focusFollowsMouse else { return }
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
-            guard let self, Date().timeIntervalSince(lastHover) > 0.08, NSEvent.pressedMouseButtons == 0 else { return }
-            lastHover = Date()
-            let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
-            guard let id = topWindow(at: p), id != focusedWorkspace.focused else { return }
-            focusWindow(id, warp: false)
+            self?.hovered()
         }
+    }
+
+    /// At most one look every 80 ms while the pointer moves, and one more once it stops: the
+    /// last position always counts, even when it came between two looks.
+    private func hovered() {
+        guard NSEvent.pressedMouseButtons == 0 else { return }
+        let wait = 0.08 - Date().timeIntervalSince(lastHover)
+        guard wait <= 0 else {
+            guard !hoverPending else { return }
+            hoverPending = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                self?.hoverPending = false
+                self?.hovered()
+            }
+            return
+        }
+        lastHover = Date()
+        let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
+        guard let id = topWindow(at: p), id != focusedWorkspace.focused else { return }
+        focusWindow(id, warp: false)
     }
 
     /// The front-most window under a point, only if paw manages it.
@@ -1514,7 +1637,8 @@ final class WindowManager {
 
     func run(_ cmds: [Command]) {
         Log.app.debug("run \(String(describing: cmds), privacy: .public) on \(self.focusedWorkspace.name, privacy: .public) focused \(String(describing: self.focusedID), privacy: .public)")
-        for c in cmds { execute(c) }
+        // Window moves go to each app's own queue: the main thread never waits on a slow app.
+        AXQueue.run { for c in cmds { execute(c) } }
     }
 
     private var focusedID: WindowID? {
@@ -1550,6 +1674,9 @@ final class WindowManager {
         case .warp(let d):
             guard let id = fid else { return }
             if ws.warp(id, d, area: area) { relayout(); focusWindow(id, warp: true) }
+        case .join(let d, let first):
+            guard let id = fid else { return }
+            if ws.join(id, d, area: area, first: first) { relayout(); focusWindow(id, warp: true) }
         case .stack(let d):
             guard let id = fid, ws.stack(id, d, area: area) else { return }
             relayout()
@@ -1741,7 +1868,7 @@ final class WindowManager {
 
     static func changesLayout(_ c: Command) -> Bool {
         switch c {
-        case .swap, .swapStack, .warp, .stack, .unstack, .layout, .toggle, .balance, .rotate, .resize, .grid: return true
+        case .swap, .swapStack, .warp, .join, .stack, .unstack, .layout, .toggle, .balance, .rotate, .resize, .grid: return true
         default: return false
         }
     }
@@ -1784,6 +1911,10 @@ final class WindowManager {
     // MARK: - Focus history and search
 
     private func focusChanged(_ id: WindowID) {
+        // One focus change reaches here up to three times (paw's own focus, the app's
+        // focused-window notification, its activation): the hook and event go out once.
+        guard id != lastFocusReported else { return }
+        lastFocusReported = id
         runHook(config.hooks.windowFocused, ["PAW_WINDOW": "\(id)", "PAW_APP": windows[id]?.app ?? ""])
         if let w = windows[id] {
             publish("windowFocused", ["window": Int(id), "app": w.app, "title": w.title,
@@ -1872,9 +2003,10 @@ final class WindowManager {
 
     // MARK: - Events
 
-    func publish(_ event: String, _ data: [String: Any]) {
+    /// The payload is only built when something listens (`query()` costs a layout per display).
+    func publish(_ event: String, _ data: @autoclosure () -> [String: Any]) {
         guard EventBus.shared.hasSubscribers else { return }
-        EventBus.shared.publish(event, data)
+        EventBus.shared.publish(event, data())
     }
 
     private func emitWorkspaceChanged(prev: String) {
@@ -1981,7 +2113,7 @@ final class WindowManager {
 
     // MARK: - Seams
 
-    struct SeamInfo {
+    struct SeamInfo: Equatable {
         let key: String
         let workspace: String
         let split: ObjectIdentifier
@@ -2019,11 +2151,11 @@ final class WindowManager {
         let pos = s.axis == .horizontal ? (p.x - r.minX - config.layout.gap * (Double(s.index) + 0.5)) / max(1, r.width - gaps)
                                         : (p.y - r.minY - config.layout.gap * (Double(s.index) + 0.5)) / max(1, r.height - gaps)
         ws.setSeam(node, s.index, at: min(1, max(0, pos)), length: s.axis == .horizontal ? r.width : r.height)
-        layout(ws, animated: false)
+        AXQueue.run { layout(ws, animated: false) }
     }
 
     func seamEnded(_ s: SeamInfo) {
-        layout(workspace(s.workspace), animated: false)
+        AXQueue.run { layout(workspace(s.workspace), animated: false) }
         scheduleSave()
     }
 
@@ -2140,8 +2272,27 @@ final class WindowManager {
 
     // MARK: - Indicators, hooks, state
 
+    /// Indicators, placeholders, seams, edges and the border, redrawn once per run-loop turn
+    /// however many changes ask for it (a focus change alone asks three times: paw's own focus,
+    /// the app's focused-window notification and its activation).
     func updateIndicators() {
+        guard !indicatorsDirty else { return }
+        indicatorsDirty = true
+        DispatchQueue.main.async { [weak self] in self?.flushIndicators() }
+    }
+
+    /// Redraws now if a redraw is waiting.
+    func flushIndicators() {
+        guard indicatorsDirty else { return }
+        indicatorsDirty = false
+        refreshIndicators()
+    }
+
+    private(set) var indicatorRefreshes = 0
+
+    private func refreshIndicators() {
         if settling { return }
+        indicatorRefreshes += 1
         var stacks: [Stack] = []
         let focused = NSWorkspace.shared.frontmostApplication.flatMap { _ in focusedID }
         for (di, d) in displays.enumerated() {
@@ -2422,7 +2573,15 @@ enum StateFile {
 }
 
 enum Shell {
+    /// Hooks and `exec` start from here, in order, never on the main thread: starting a process
+    /// copies the environment and waits on fork.
+    private static let queue = DispatchQueue(label: "paw.shell", qos: .userInitiated)
+
     static func run(_ cmd: String, env: [String: String]) {
+        queue.async { start(cmd, env: env) }
+    }
+
+    private static func start(_ cmd: String, env: [String: String]) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = ["-c", cmd]
@@ -2434,4 +2593,16 @@ enum Shell {
         p.standardError = FileHandle.nullDevice
         try? p.run()
     }
+}
+
+
+/// The newest focus request: focus calls run in order on their own queue, and one waiting behind
+/// a slow app is dropped when a newer one came in meanwhile.
+final class FocusTicket: @unchecked Sendable {
+    static let shared = FocusTicket()
+    private let lock = NSLock()
+    private var latest = 0
+
+    func issue() -> Int { lock.withLock { latest += 1; return latest } }
+    func isLatest(_ t: Int) -> Bool { lock.withLock { t == latest } }
 }

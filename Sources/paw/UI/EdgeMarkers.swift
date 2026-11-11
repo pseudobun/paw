@@ -24,12 +24,11 @@ final class EdgeMarkers {
     var onClick: ((String) -> Void)?
     private var panels: [String: EdgePanel] = [:]
     private var shown: [String: Marker] = [:]
-    private var styleKey = ""
+    private var styleKey: (PawConfig.Appearance, PawConfig.Icons)?
 
     func apply(_ markers: [Marker], icons: AppIconMap, config: PawConfig) {
-        let key = "\(config.appearance)\(config.icons)"
-        let restyle = key != styleKey
-        styleKey = key
+        let restyle = styleKey.map { $0.0 != config.appearance || $0.1 != config.icons } ?? true
+        styleKey = (config.appearance, config.icons)
         var keep = Set<String>()
         for m in markers {
             let k = "\(m.display)-\(m.left ? "l" : "r")"

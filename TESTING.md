@@ -43,6 +43,13 @@
 - [ ] `hyper+w/s/f` again; `paw layout columns` → equal columns, new windows add a column; `paw layout master` → 62% left, the rest in rows
 - [ ] Animations: smooth? Try `animation.curve: "spring"`, `durationMs: 250`, `resize: "animate"`, `enabled: false`
 
+## A hung app
+
+- [ ] Put TextEdit windows on workspaces 1 and 2, then `kill -STOP $(pgrep -x TextEdit)`: `hyper+w/s`, swaps, resizes, focus and workspace switches still answer at once (`just bench hung TextEdit`: every command well under 100 ms); `kill -CONT` → TextEdit's windows land where the layout says
+- [ ] Hold a resize key for a few seconds, let go → resizing stops at once (no backlog keeps running)
+- [ ] Scroll and type in other apps while paw lays out many windows → no stutter
+- [ ] Lock the screen, `paw quit; open -a paw` (or restart over SSH), unlock → within a couple of seconds paw manages every window (`paw status` → `windows:`)
+
 ## Workspaces
 
 - [ ] `ctrl+1…0` and `ralt+1…0` switch instantly; windows of other workspaces are out of sight (one pixel in the bottom-right corner)

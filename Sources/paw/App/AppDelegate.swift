@@ -31,7 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if AX.isTrusted {
             wm.start()
         } else {
-            AX.requestTrust()
+            // Right after login (or a fresh grant) Accessibility can read false for a moment:
+            // ask only if it still does a little later, so a granted paw never opens the prompt.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Self.askForTrustOnce() }
             trustTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] t in
                 guard AX.isTrusted else { return }
                 t.invalidate()
@@ -45,6 +47,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         setUpStatusItem()
         Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
+    }
+
+    /// macOS's Accessibility prompt, at most once per build and only while access is missing:
+    /// reopening paw never asks again (Settings → Permissions has the button).
+    static func askForTrustOnce(defaults: UserDefaults = .standard, build: String = AppPaths.version,
+                                isTrusted: () -> Bool = { AX.isTrusted }, request: () -> Void = { AX.requestTrust() }) {
+        let key = "accessibilityPromptedBuild"
+        guard !isTrusted(), defaults.string(forKey: key) != build else { return }
+        defaults.set(build, forKey: key)
+        request()
     }
 
     /// Starts the CLI socket, and keeps trying every 5 s while it can't, so a passing problem
@@ -232,8 +244,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "iconFont": wm.indicators.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok",
                     "windowMoves": DockBridge.shared.statusLine]
         case "query":
-            let data = (try? JSONSerialization.data(withJSONObject: wm.query(), options: [.prettyPrinted, .sortedKeys])) ?? Data()
-            return ["json": String(decoding: data, as: UTF8.self)]
+            // Encoded by the IPC thread (IPC.Server.serve), not here on the main thread.
+            return [IPC.jsonObjectKey: wm.query()]
         default:
             Log.app.error("unknown command \(name, privacy: .public)")
             return ["error": "unknown command \(name)"]

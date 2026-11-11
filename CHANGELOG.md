@@ -3,6 +3,26 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.13](https://github.com/pseudobun/paw/compare/v0.1.0-beta.12...v0.1.0-beta.13) (2026-11-11)
+
+
+### Features
+
+* add `join` to move a window into its neighbour's tile as a row ([6fe1364](https://github.com/pseudobun/paw/commit/6fe1364cce0bd59151b0db84a342c5b02b0b111c))
+* add indicator themes and a live preview in Settings ([#50](https://github.com/pseudobun/paw/issues/50)) ([26143e2](https://github.com/pseudobun/paw/commit/26143e23a9e5e3f19cc33fa416cc8aa853b95374))
+
+
+### Bug Fixes
+
+* **dock:** harden the Dock helper and its uninstall ([bc4b41e](https://github.com/pseudobun/paw/commit/bc4b41e8b2aed52311dfd29c28faf434c915f401))
+* **dock:** restart the helper daemon in place when reinstalling ([#46](https://github.com/pseudobun/paw/issues/46)) ([442a519](https://github.com/pseudobun/paw/commit/442a5191abf930eda7cc6977dc948e8d4082512e))
+* **focus:** prevent hover focus through native dialogs ([#48](https://github.com/pseudobun/paw/issues/48)) ([efc0e10](https://github.com/pseudobun/paw/commit/efc0e1016ee0166a6cab9add45d9342e93117717))
+
+
+### Performance
+
+* keep the main thread off slow apps and cut redraw work ([#52](https://github.com/pseudobun/paw/issues/52)) ([8b00024](https://github.com/pseudobun/paw/commit/8b0002483091cbd485fb25157d0006ddbea4dd28))
+
 ## [0.1.0-beta.12](https://github.com/pseudobun/paw/compare/v0.1.0-beta.11...v0.1.0-beta.12) (2026-11-11)
 
 
