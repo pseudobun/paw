@@ -38,6 +38,7 @@ enum DockCLI {
         }
         let src = AppPaths.appBundle.bundleURL.appending(path: "Contents/Resources/dock")
         let fm = FileManager.default
+        var restarted = false
         guard fm.fileExists(atPath: src.appending(path: "PawDock.dylib").path) else {
             fputs("paw: this build has no Dock helper (\(src.path))\n", stderr)
             return 1
@@ -59,14 +60,22 @@ enum DockCLI {
                 "StandardErrorPath": "/var/log/paw-dock.log",
             ]
             let data = try PropertyListSerialization.data(fromPropertyList: daemon, format: .xml, options: 0)
-            _ = launchctl(["bootout", "system/\(label)"])
-            try data.write(to: URL(fileURLWithPath: plist))
-            try fm.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0, .groupOwnerAccountID: 0], ofItemAtPath: plist)
+            // Already set up the same way (reinstalling after an update): restart the daemon on
+            // the new loader in place. Unloading and loading it again would register it with
+            // background task management anew, which logs errors racing its own last update.
+            if fm.contents(atPath: plist) == data, launchctl(["print", "system/\(label)"]) == 0,
+               launchctl(["kickstart", "-k", "system/\(label)"]) == 0 {
+                restarted = true
+            } else {
+                _ = launchctl(["bootout", "system/\(label)"])
+                try data.write(to: URL(fileURLWithPath: plist))
+                try fm.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0, .groupOwnerAccountID: 0], ofItemAtPath: plist)
+            }
         } catch {
             fputs("paw: \(error.localizedDescription)\n", stderr)
             return 1
         }
-        guard launchctl(["bootstrap", "system", plist]) == 0 else {
+        guard restarted || launchctl(["bootstrap", "system", plist]) == 0 else {
             fputs("paw: launchctl bootstrap failed\n", stderr)
             return 1
         }
