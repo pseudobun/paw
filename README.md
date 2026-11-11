@@ -645,7 +645,7 @@ overview's geometry, neighbours, commands, key specs, easing, config.
 seams, gestures), `Stacks/` and `UI/` (indicators, overview, HUD), `App/` (socket, events), `CLI/`. `just examples` regenerates `examples/config.json5` from the built-in
 template. Manual checks: [TESTING.md](TESTING.md).
 
-The main thread never waits on an app: every window move goes to that app's own queue
+See [PERFORMANCE.md](PERFORMANCE.md) for what was measured. The main thread never waits on an app: every window move goes to that app's own queue
 (`AXQueue`), an app whose accessibility calls time out is skipped for a while (`AXHealth`), and
 the event taps run on a thread of their own. `just bench` measures it against the running dev
 build, with a few windows on workspaces 1 and 2:
