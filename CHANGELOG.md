@@ -3,6 +3,13 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.9](https://github.com/pseudobun/paw/compare/v0.1.0-beta.8...v0.1.0-beta.9) (2026-11-11)
+
+
+### Bug Fixes
+
+* **zoom:** keep directional focus inside a zoom and report the zoom level ([#38](https://github.com/pseudobun/paw/issues/38)) ([f3239f0](https://github.com/pseudobun/paw/commit/f3239f0f48c0fe7844c11343b20931d229cb39b7))
+
 ## [0.1.0-beta.8](https://github.com/pseudobun/paw/compare/v0.1.0-beta.7...v0.1.0-beta.8) (2026-11-10)
 
 
