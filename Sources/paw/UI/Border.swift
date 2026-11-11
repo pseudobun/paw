@@ -46,6 +46,8 @@ final class FocusBorder {
         let radius = max(0, (radius ?? CGFloat(config.radius)) + CGFloat(o))
         let state = State(id: id, frame: frame, above: above, screen: screen, primaryHeight: primaryHeight, config: config, radius: radius)
         if shownFor == state, panel.isVisible { return }
+        // Moving a parent also moves its children; position the border independently first.
+        panel.parent?.removeChildWindow(panel)
         let ax = frame.insetBy(dx: -o - config.width, dy: -o - config.width).intersection(screen)
         guard !ax.isNull, ax.width > 2 * config.width, ax.height > 2 * config.width else { hide(); return }
         let cocoa = ScreenGeometry.cocoa(fromAX: ax, primaryHeight: primaryHeight)

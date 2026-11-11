@@ -34,12 +34,33 @@ struct PlaceholderTests {
         let placeholder = try #require(NSApp.windows.first { ($0.contentView as? PlaceholderView)?.item?.id == id })
         // Commit AppKit ordering before inspecting the WindowServer's front-to-back list.
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
-        let windows = try #require(CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]])
+        // Only the onscreen query guarantees front-to-back ordering.
+        let windows = try #require(CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]])
         let ids = windows.compactMap { $0[kCGWindowNumber as String] as? Int }
         let borderIndex = try #require(ids.firstIndex(of: border.panel.windowNumber))
         let placeholderIndex = try #require(ids.firstIndex(of: placeholder.windowNumber))
         #expect(borderIndex < placeholderIndex)
         #expect((placeholder.contentView as? PlaceholderView)?.focusBorderVisible == true)
+        #expect(border.panel.parent === placeholder)
+
+        let moved = frame.offsetBy(dx: 40, dy: 20)
+        border.show(moved, window: id, above: false, screen: screen, config: config)
+        #expect(border.panel.parent == nil)
+        let expected = border.panel.frame
+        placeholders.apply([.init(id: id, app: "Test", title: "Test", frame: moved, focused: true)],
+                           style: Style(.init()), focusFollowsMouse: false, focusBorder: border, actions: actions)
+        #expect(border.panel.parent === placeholder)
+        #expect(border.panel.frame == expected)
+        border.hide()
+        #expect(border.panel.parent == nil)
+
+        border.show(moved, window: id, above: false, screen: screen, config: config)
+        placeholders.apply([.init(id: id, app: "Test", title: "Test", frame: moved, focused: true)],
+                           style: Style(.init()), focusFollowsMouse: false, focusBorder: border, actions: actions)
+        #expect(border.panel.parent === placeholder)
+        border.show(moved, window: id, above: true, screen: screen, config: config)
+        #expect(border.panel.parent == nil)
+        #expect(border.panel.level == .normal)
     }
 
     @Test func externalFocusBorderReplacesAccentWithFallbackWhenHidden() throws {

@@ -43,9 +43,10 @@ final class Placeholders {
             let f = ScreenGeometry.cocoa(fromAX: item.frame, primaryHeight: primaryHeight)
             if p.panel.frame != f { p.panel.setFrame(f, display: false) }
             p.view.needsDisplay = true
-            if !p.panel.isVisible {
-                p.panel.orderFrontRegardless()
-                if p.view.focusBorderVisible { focusBorder.panel.orderFrontRegardless() }
+            if !p.panel.isVisible { p.panel.orderFrontRegardless() }
+            if p.view.focusBorderVisible, focusBorder.panel.parent !== p.panel {
+                focusBorder.panel.parent?.removeChildWindow(focusBorder.panel)
+                p.panel.addChildWindow(focusBorder.panel, ordered: .above)
             }
         }
     }
