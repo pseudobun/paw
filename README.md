@@ -304,7 +304,7 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Key bindings** in the config (left/right modifiers like `ralt` work, `hyper` = ⌘⌃⌥⇧), and
   the same commands on the CLI: `paw focus west`, `paw workspace 3`
 - **Events** for status bars and scripts: `paw subscribe` streams JSON lines (a snapshot first,
-  then `workspaceChanged`, `windowFocused`, `windowsChanged`, `layoutChanged`, `modeChanged`,
+  then `workspaceChanged`, `windowFocused`, `windowsChanged`, `layoutChanged`, `zoomChanged`, `modeChanged`,
   `displaysChanged`, `setupChanged`, `configReloaded`) over one connection, and `--exec` runs a
   command per event ([sketchybar example](examples/sketchybar/paw_spaces.lua)). Shell hooks still
   work

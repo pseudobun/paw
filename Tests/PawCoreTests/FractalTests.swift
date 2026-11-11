@@ -194,8 +194,12 @@ struct FractalTests {
         #expect(f[2] == area && f[3] == nil)
         #expect(!ws.zoomIn(toward: 2))
         #expect(ws.zoomDepth(of: 2) == (2, 2))
+        #expect(ws.zoomLevel == (2, 2) && ws.isZoomedByHand)
+        // Tile 1 is outside the zoom: directional focus must not reach it.
+        #expect(ws.neighbor(of: ws.tile(of: 2)!, .west, area: area) === ws.tile(of: 1) && !ws.isShown(ws.tile(of: 1)!))
         #expect(ws.zoomOut() && ws.zoomOut() && !ws.zoomOut())
         #expect(frames(ws).count == 3)
+        #expect(ws.zoomLevel.level == 0 && !ws.isZoomedByHand)
         // The shown branch disappearing shows everything again.
         #expect(ws.zoomIn(toward: 3) && ws.zoomIn(toward: 3))
         ws.remove(3)

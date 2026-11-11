@@ -57,6 +57,8 @@ final class WindowManager {
     private var observers: [NSObjectProtocol] = []
     private var pruneTimer: Timer?
     private var layoutEventWork: DispatchWorkItem?
+    /// The zoom level last reported per workspace (`zoomChanged`).
+    private var reportedZoom: [String: Int] = [:]
     /// Per workspace: trees before each layout change (undo) and after undoing (redo).
     private var undoStack: [String: [WorkspaceSnapshot]] = [:]
     private var redoStack: [String: [WorkspaceSnapshot]] = [:]
@@ -697,6 +699,7 @@ final class WindowManager {
         updateIndicators()
         scheduleSave()
         scheduleLayoutEvent(ws.name)
+        reportZoom(ws)
         if !targets.isEmpty { scheduleOverflowCheck(ws.name, after: config.animation.durationMs / 1000 + 0.05) }
     }
 
@@ -1589,6 +1592,8 @@ final class WindowManager {
         let ws = focusedWorkspace
         let area = self.area(of: ws)
         if let id = focusedID, let t = ws.tile(of: id), let n = ws.neighbor(of: t, d, area: area) {
+            // Zoomed in by hand: tiles outside the zoom stay out of reach; zoom out to get there.
+            if ws.isZoomedByHand, !ws.isShown(n) { return }
             focusWindow(n.activeWindow, warp: true)
             return
         }
@@ -1796,6 +1801,15 @@ final class WindowManager {
                 ["index": i + 1, "id": Int(d.id), "name": d.name, "workspace": label(d.workspace), "focused": i == focusedDisplay] as [String: Any]
             },
         ]
+    }
+
+    /// `zoomChanged` when how far a workspace is zoomed in changes (sketchybar shows it).
+    private func reportZoom(_ ws: Workspace) {
+        let z = ws.zoomLevel
+        guard reportedZoom[ws.name, default: 0] != z.level else { return }
+        reportedZoom[ws.name] = z.level
+        publish("zoomChanged", ["workspace": label(ws.name), "level": z.level, "levels": z.levels,
+                                "display": displayShowing(ws.name).map { $0 + 1 } ?? 0, "workspaces": query()])
     }
 
     /// `layoutChanged` once tiles settle: every window's frame on the workspace.
@@ -2207,6 +2221,7 @@ final class WindowManager {
                     "displayID": home.map { Int(displays[$0].id) } ?? 0, "pinned": pinned != nil,
                     "arrangement": home.map { Self.arrangement(of: displays[$0].id) } ?? 0,
                     "display": displayShowing(name).map { $0 + 1 } ?? 0, "layout": ws.layout.rawValue,
+                    "zoom": ws.zoomLevel.level, "zoomLevels": ws.zoomLevel.levels,
                     "windows": ws.allWindows.compactMap { id -> [String: Any]? in
                         guard let w = windows[id] else { return nil }
                         let color = AppColors.shared.color(for: w.app, icons: config.icons)?.description ?? ""
