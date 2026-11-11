@@ -9,9 +9,12 @@ final class AppColors {
 
     /// The app's own icon, for apps sketchybar-app-font has no glyph for.
     func image(for app: String, side: Int) -> CGImage? {
-        let side = min(max(side, 1), 1024)
+        // A few sizes only: callers draw it into any rect, and every pixel size (a zooming
+        // overview, a dragged placeholder) would otherwise be another image kept for good.
+        let side = Self.bucket(side)
         let key = "\(app)@\(side)"
         if let i = images[key] { return i }
+        if images.count >= Self.maxImages { images.removeAll(keepingCapacity: true) }
         var i: CGImage?
         if !app.isEmpty, let url = Self.appURL(app) {
             var rect = CGRect(x: 0, y: 0, width: side, height: side)
@@ -19,6 +22,15 @@ final class AppColors {
         }
         images[key] = i
         return i
+    }
+
+    static let maxImages = 256
+
+    /// The smallest of 16, 32, … 1024 pixels at least `side` (1024 at most).
+    static func bucket(_ side: Int) -> Int {
+        var b = 16
+        while b < min(max(side, 1), 1024) { b *= 2 }
+        return b
     }
 
     /// The colour for an app's icon: the config's override, else the picked one; nil when off or

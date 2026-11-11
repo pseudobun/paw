@@ -645,6 +645,17 @@ overview's geometry, neighbours, commands, key specs, easing, config.
 seams, gestures), `Stacks/` and `UI/` (indicators, overview, HUD), `App/` (socket, events), `CLI/`. `just examples` regenerates `examples/config.json5` from the built-in
 template. Manual checks: [TESTING.md](TESTING.md).
 
+The main thread never waits on an app: every window move goes to that app's own queue
+(`AXQueue`), an app whose accessibility calls time out is skipped for a while (`AXHealth`), and
+the event taps run on a thread of their own. `just bench` measures it against the running dev
+build, with a few windows on workspaces 1 and 2:
+
+```sh
+just bench switch 200     # workspace switches: round trip, and until every window is on screen
+just bench ops 200        # focus, swap, resize, layout changes, query
+just bench hung TextEdit  # the same with TextEdit stopped, as a hung app would be
+```
+
 ### Releasing
 
 Releases come from [Conventional Commits](https://www.conventionalcommits.org) on `main`.

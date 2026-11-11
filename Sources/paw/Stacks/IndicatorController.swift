@@ -7,6 +7,8 @@ final class IndicatorController {
     private(set) var style: Style
     private var panels: [String: IndicatorPanel] = [:]
     private var stacks: [Stack] = []
+    /// Panels drawn so far (tests).
+    private(set) var renders = 0
     private let title = TitlePanel()
     private var hidden = false
     /// Focus a window (click on its icon, scrolling).
@@ -42,6 +44,8 @@ final class IndicatorController {
 
     func apply(_ new: [Stack], force: Bool = false) {
         if !force, new == stacks, panels.count == new.count { return }
+        // Stacks that didn't change keep their panels as they are: no new layers, no fade.
+        let previous = force ? [:] : Dictionary(stacks.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
         stacks = new
         guard !hidden, config.indicator.enabled else {
             for p in panels.values { p.orderOut(nil) }
@@ -61,17 +65,21 @@ final class IndicatorController {
                                                        side: config.indicator.side, metrics: config.indicator.metrics)
             let key = stack.key
             keep.insert(key)
+            if previous[key] == stack, let panel = panels[key], panel.isVisible { _ = panel; continue }
             let panel = panels[key] ?? IndicatorPanel()
             let isNew = panels[key] == nil
             panels[key] = panel
+            renders += 1
             panel.setFrame(ScreenGeometry.cocoa(fromAX: axRect, primaryHeight: primary), display: false)
             configure(panel.view, stack: stack, side: side, axRect: axRect, scale: screens[si].backingScaleFactor)
             panel.view.redraw()
             if isNew { panel.orderFrontRegardless() }
             let target = stack.hasFocus ? 1 : CGFloat(config.indicator.unfocusedOpacity)
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = fade
-                panel.animator().alphaValue = target
+            if isNew || panel.alphaValue != target {
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = fade
+                    panel.animator().alphaValue = target
+                }
             }
         }
         for (key, panel) in panels where !keep.contains(key) {

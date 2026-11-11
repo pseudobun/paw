@@ -39,8 +39,9 @@ final class Animator {
             var from = w.frame
             if let m = moves[w.id] { from = Easing.lerp(m.from, m.to, progress) }
             if s.resize == "start", from.size != r.size {
-                w.element.setSize(r.size)
+                // Its final size now (through its app's queue), the position animates from here.
                 from.size = r.size
+                AXQueue.run { w.setFrame(CGRect(origin: w.frame.origin, size: r.size), settle: false) }
             }
             moves[w.id] = Move(window: w, from: from, to: r)
         }
@@ -59,7 +60,13 @@ final class Animator {
         return s.curve.value(t)
     }
 
+    /// Every frame's moves go to the apps' queues (or the Dock helper, as one update): a frame
+    /// never waits for an app, and a slow one only skips the frames it can't keep up with.
     private func tick() {
+        AXQueue.run { step() }
+    }
+
+    private func step() {
         let s = settings()
         let now = CACurrentMediaTime()
         let t = s.durationMs > 0 ? (now - start) * 1000 / s.durationMs : 1
@@ -74,9 +81,7 @@ final class Animator {
         for m in moves.values {
             let r = Easing.lerp(m.from, m.to, p)
             if s.resize == "animate" {
-                m.window.element.setSize(r.size)
-                m.window.setPosition(r.origin)
-                m.window.frame = r
+                m.window.setFrame(r, settle: false)
             } else {
                 m.window.setPosition(r.origin)
             }
