@@ -4,6 +4,19 @@ import Testing
 @testable import paw
 
 struct WindowHitTests {
+    @Test func placeholderStandsInForItsParkedWindow() {
+        let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        let placeholder = info(100, frame: frame, layer: -1)
+        let point = CGPoint(x: 400, y: 300)
+        #expect(WindowManager.topWindow(at: point, in: [placeholder], standIns: [100: 1], isManaged: { _ in false }) == 1)
+        #expect(WindowManager.topWindow(at: point, in: [info(2, frame: frame), placeholder],
+                                        standIns: [100: 1], isManaged: { $0 == 2 }) == 2)
+        #expect(WindowManager.topWindow(at: point, in: [info(2, frame: frame), placeholder],
+                                        standIns: [100: 1], isManaged: { _ in false }) == nil)
+        #expect(WindowManager.topWindow(at: point, in: [placeholder], ignoring: [1],
+                                        standIns: [100: 1], isManaged: { _ in false }) == nil)
+    }
+
     @Test func closingWindowDoesNotOccludeHoveredSurvivor() {
         let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
         let list = [info(1, frame: frame), info(2, frame: frame)]

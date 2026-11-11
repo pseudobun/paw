@@ -2,6 +2,10 @@ import AppKit
 
 final class Fixture: NSObject, NSApplicationDelegate {
     var windows: [String: NSWindow] = [:]
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        CommandLine.arguments.contains("--quit-on-close")
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         DispatchQueue.global().async {
             while let line = readLine() {
@@ -20,17 +24,23 @@ final class Fixture: NSObject, NSApplicationDelegate {
                         window.makeKeyAndOrderFront(nil)
                         NSApp.activate(ignoringOtherApps: true)
                         print(window.windowNumber)
-                    case "focus":
-                        self.windows[name]?.makeKeyAndOrderFront(nil)
-                        NSApp.activate(ignoringOtherApps: true)
-                        print("ok")
                     case "close":
+                        if parts.count == 4 {
+                            CGWarpMouseCursorPosition(CGPoint(x: Double(parts[2])!, y: Double(parts[3])!))
+                            CGAssociateMouseAndMouseCursorPosition(1)
+                        }
                         self.windows[name]?.close()
                         print("ok")
-                    case "hover":
-                        CGWarpMouseCursorPosition(CGPoint(x: Double(parts[1])!, y: Double(parts[2])!))
-                        CGAssociateMouseAndMouseCursorPosition(1)
+                    case "quit":
+                        if parts.count == 3 {
+                            CGWarpMouseCursorPosition(CGPoint(x: Double(parts[1])!, y: Double(parts[2])!))
+                            CGAssociateMouseAndMouseCursorPosition(1)
+                        }
                         print("ok")
+                        fflush(stdout)
+                        NSApp.terminate(nil)
+                    case "front":
+                        print(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "none")
                     case "focused":
                         print(NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid()
                               ? self.windows.first(where: { $0.value.isKeyWindow })?.key ?? "none" : "background")

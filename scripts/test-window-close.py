@@ -56,17 +56,20 @@ def main():
             subprocess.run(["swiftc", str(ROOT / "Tests/Fixtures/WindowClose.swift"), "-o", str(binary)], check=True)
             paw("workspace", empty["name"])
             paw("layout", "bsp")
-            for role in ["A", "B"]:
+            def launch(role, *args):
                 contents = pathlib.Path(temporary) / ("PAW Close " + role + ".app") / "Contents"
-                (contents / "MacOS").mkdir(parents=True)
+                (contents / "MacOS").mkdir(parents=True, exist_ok=True)
                 (contents / "Info.plist").write_bytes(plistlib.dumps({
                     "CFBundleIdentifier": "com.pseudobun.paw.close-fixture." + role,
                     "CFBundleName": "PAW Close " + role,
                     "CFBundleExecutable": "fixture", "CFBundlePackageType": "APPL"}))
                 shutil.copy2(binary, contents / "MacOS/fixture")
-                processes.append(subprocess.Popen([str(contents / "MacOS/fixture")], stdin=subprocess.PIPE,
-                                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True))
-            a, b = processes
+                process = subprocess.Popen([str(contents / "MacOS/fixture"), *args], stdin=subprocess.PIPE,
+                                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                processes.append(process)
+                return process
+
+            a, b = launch("A"), launch("B")
             ids = {name: int(fixture_reply(a, "new " + name))
                    for name in ["placeholder", "survivor", "other", "closing"]}
             target = int(fixture_reply(b, "new target"))
@@ -92,22 +95,30 @@ def main():
             reader.start()
             assert ready.wait(5), "Focus event subscription did not start"
 
-            def check(name, closing, expected, native_process, native_name):
-                paw("find", "PAW-close-" + ("other" if name == "background close" else "closing"))
+            def check(name, closing, expected, native_process, native_name, owner=a, quit_app=False):
+                focused_name = "other" if name == "background close" else "closing"
+                paw("find", "PAW-close-" + focused_name)
                 # Let the prior close's focus suppression and resize animation finish.
                 time.sleep(0.5)
                 hovered = next(w for w in windows() if w["id"] == (target if name == "background close" else expected))
-                assert hovered["onScreen"], "The hover target must be a real visible window"
+                assert hovered["onScreen"] == (native_name is not None), "Unexpected real-window/placeholder state"
                 f = hovered["frame"]
-                fixture_reply(a, f"hover {f['x'] + f['w'] / 4} {f['y'] + f['h'] / 4}")
-                time.sleep(0.1)
+                selected = ids["other"] if name == "background close" else ids[closing]
+                wait_for(lambda: any(ws["focused"] and any(w["id"] == selected and w["focused"] for w in ws["windows"])
+                                     for ws in query()))
+                assert fixture_reply(owner, "focused") == focused_name, "Close must start with native focus on the intended window"
                 events.clear()
-                fixture_reply(a, "close " + closing)
+                # Warp and close in one app turn so focus-follows-mouse cannot mask close recovery.
+                position = f"{f['x'] + f['w'] / 4} {f['y'] + f['h'] / 4}"
+                fixture_reply(owner, ("quit " if quit_app else "close " + closing + " ") + position)
                 wait_for(lambda: all(w["id"] != ids[closing] for w in windows()))
                 time.sleep(0.6)
                 focused = next((w for ws in query() if ws["focused"] for w in ws["windows"] if w["focused"]), None)
                 assert focused and focused["id"] == expected, f"{name}: expected {expected}, got {focused and focused['id']}"
-                assert fixture_reply(native_process, "focused") == native_name, name + ": native keyboard focus is wrong"
+                if native_name is None:
+                    assert fixture_reply(native_process, "front") == "com.pseudobun.paw.dev", name + ": placeholder left keys with another app"
+                else:
+                    assert fixture_reply(native_process, "focused") == native_name, name + ": native keyboard focus is wrong"
                 assert all(id == expected for id in events), f"{name}: intermediate focus targets {events}"
                 print("PASS:", name, "keeps focus on the intended window without intermediate focus targets")
 
@@ -116,6 +127,17 @@ def main():
             ids["closing"] = int(fixture_reply(a, "new closing"))
             wait_for(lambda: any(w["id"] == ids["closing"] for w in windows()))
             check("cross-app close with placeholder", "closing", target, b, "target")
+            ids["closing"] = int(fixture_reply(a, "new closing"))
+            wait_for(lambda: any(w["id"] == ids["closing"] for w in windows()))
+            check("hovered placeholder", "closing", ids["placeholder"], a, None)
+
+            fixture_reply(b, "new decoy")
+            for attempt in range(5):
+                c = launch("C", "--quit-on-close")
+                ids["closing"] = int(fixture_reply(c, "new closing"))
+                wait_for(lambda: any(w["id"] == ids["closing"] for w in windows()))
+                check(f"process exit {attempt + 1}", "closing", target, b, "target", owner=c, quit_app=attempt % 2 == 0)
+                c.wait(timeout=5)
         finally:
             if subscriber is not None:
                 subscriber.terminate()

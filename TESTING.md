@@ -60,6 +60,7 @@
 - [ ] Close the focused window with the mouse over another visible window → that window receives keyboard focus, including another window of the same app or on another display; a placeholder must not flash as selected first
 - [ ] Repeat with an undersized Discord-like placeholder in the top-left tile and the mouse over a Spotify-like real window → the real window wins; with no hovered window, the existing same-app/workspace fallback applies without jumping to a hidden workspace
 - [ ] Close a background window → the focused window stays focused
+- [ ] Close the last window of an Alacritty process (⌘W) and quit an app (⌘Q) with the pointer over a real window, then a placeholder → the hovered target wins; a selected placeholder keeps keyboard commands in paw rather than an unrelated parked window
 - [ ] Minimise / ⌘H an app → its tile closes; restore → it comes back to the same tile and size
 - [ ] Quit an app whose windows were tiled, open it again → same tiles
 - [ ] `just install` (paw restarts) → every workspace keeps its tiles, sizes and stacks
@@ -110,9 +111,10 @@ With Paw Dev running with Accessibility access and an empty hidden workspace, ru
 python3 scripts/test-window-close.py
 ```
 
-This live AX regression checks same-app closes, background closes, and cross-app closes with
-an undersized placeholder present. It verifies native keyboard focus and rejects intermediate
-focus events for other windows. Only disposable fixture windows are closed; the previous
+This live AX regression checks same-app closes, background closes, cross-app closes, and a
+hovered placeholder. It also repeats five single-window process exits, alternating explicit
+quit and last-window close. It verifies native keyboard focus (paw owns it for placeholders)
+and rejects intermediate focus events for other windows. Only disposable fixture windows are closed; the previous
 workspace and the empty workspace's layout are restored. Leave the keyboard and mouse alone.
 
 ## Changing a window's minimum size

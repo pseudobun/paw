@@ -26,6 +26,13 @@ final class Placeholders {
 
     private var panels: [WindowID: (panel: NSPanel, view: PlaceholderView)] = [:]
 
+    var standIns: [WindowID: WindowID] {
+        Dictionary(uniqueKeysWithValues: panels.compactMap { id, p in
+            guard p.panel.isVisible, let number = WindowID(exactly: p.panel.windowNumber) else { return nil }
+            return (number, id)
+        })
+    }
+
     func apply(_ items: [Item], style: Style, focusFollowsMouse: Bool, actions: Actions) {
         let ids = Set(items.map(\.id))
         for (id, p) in panels where !ids.contains(id) {

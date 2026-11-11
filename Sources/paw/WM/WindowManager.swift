@@ -639,8 +639,8 @@ final class WindowManager {
     private func syncFocus(_ pid: pid_t, force: Bool = false) {
         guard force || Date() > ignoreFocusUntil else { return }
         focusWork?.cancel()
-        // An unmanaged app taking focus also supersedes a recovery's focus request.
-        focusRevision += 1
+        // Taking the keyboard for a placeholder has no native window and preserves its size retry.
+        if pid != getpid() || NSApp.keyWindow != nil { focusRevision += 1 }
         if force { applyFocus(pid, force: true); return }
         // Let close notifications arrive before accepting macOS's automatic replacement.
         let work = DispatchWorkItem { [weak self] in
@@ -653,6 +653,12 @@ final class WindowManager {
 
     private func applyFocus(_ pid: pid_t, force: Bool = false) {
         guard force || Date() > ignoreFocusUntil else { return }
+        // A process exit can activate its replacement before destruction/termination is reported.
+        if !force, !screensAsleep, let previous = focusedWorkspace.focused, windows[previous] != nil,
+           !Self.liveWindows([previous]).contains(previous) {
+            AXQueue.run { remove(previous, closed: true) }
+            return
+        }
         let app = AXUIElementCreateApplication(pid)
         guard let el = app.element(kAXFocusedWindowAttribute), let id = el.windowID else { return }
         if windows[id] == nil {
@@ -1152,6 +1158,7 @@ final class WindowManager {
         guard let id, let w = windows[id] else { return }
         focusWork?.cancel()
         focusRevision += 1
+        let ticket = FocusTicket.shared.issue()
         if let ws = workspaceOf(id) {
             ws.focused = id
             ws.activate(id)
@@ -1163,7 +1170,9 @@ final class WindowManager {
         }
         // A placeholder: focus is paw's (moves, swaps); the window itself waits out of sight.
         if isCramped(id) {
+            NSApp.activate(ignoringOtherApps: true)
             retryMinimum(w, focus: true)
+            minimumChecks[id]?.frontmost = getpid()
             if warp && config.focus.mouseFollowsFocus, let ws = workspaceOf(id), let di = displayShowing(ws.name),
                let r = TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] {
                 let primary = NSScreen.screens.first?.frame.height ?? 0
@@ -1178,7 +1187,6 @@ final class WindowManager {
         }
         let (pid, element) = (w.pid, w.element)
         // Requests pile up behind a slow app: only the newest one still goes.
-        let ticket = FocusTicket.shared.issue()
         focusQueue.async {
             guard FocusTicket.shared.isLatest(ticket) else { return }
             SkyLight.focus(pid: pid, windowID: id, element: element)
@@ -1230,18 +1238,25 @@ final class WindowManager {
             return nil
         }
         let ignored = ignored.union(NSApp.windows.filter(\.ignoresMouseEvents).compactMap { WindowID(exactly: $0.windowNumber) })
-        return Self.topWindow(at: p, in: list, ignoring: ignored) {
+        return Self.topWindow(at: p, in: list, ignoring: ignored,
+                              standIns: placeholders.standIns.filter { windows[$0.value] != nil }) {
             windows[$0]?.isHidden == false
         }
     }
 
     static func topWindow(at p: CGPoint, in list: [[String: Any]], ignoring ignored: Set<WindowID> = [],
+                          standIns: [WindowID: WindowID] = [:],
                           isManaged: (WindowID) -> Bool) -> WindowID? {
         for info in list {
-            guard let layer = info[kCGWindowLayer as String] as? Int, layer >= 0,
+            guard let layer = info[kCGWindowLayer as String] as? Int,
                   let id = info[kCGWindowNumber as String] as? UInt32, !ignored.contains(id),
                   let bounds = info[kCGWindowBounds as String] as? [String: Any],
                   let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary), frame.contains(p) else { continue }
+            if let standIn = standIns[id] {
+                if ignored.contains(standIn) { continue }
+                return standIn
+            }
+            guard layer >= 0 else { continue }
             // Unmanaged dialogs still occlude windows behind them.
             return isManaged(id) ? id : nil
         }
