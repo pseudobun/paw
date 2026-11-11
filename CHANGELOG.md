@@ -3,6 +3,13 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.12](https://github.com/pseudobun/paw/compare/v0.1.0-beta.11...v0.1.0-beta.12) (2026-11-11)
+
+
+### Features
+
+* switch workspaces faster and show the neighbouring workspaces ([#44](https://github.com/pseudobun/paw/issues/44)) ([4caac46](https://github.com/pseudobun/paw/commit/4caac46e426b83da0ed96ce7a6259fe67d60f352))
+
 ## [0.1.0-beta.11](https://github.com/pseudobun/paw/compare/v0.1.0-beta.10...v0.1.0-beta.11) (2026-11-11)
 
 
