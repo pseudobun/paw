@@ -357,8 +357,13 @@ config. The Settings window writes the same file, so people and agents can both 
   connected displays by itself, pins each workspace to its display and numbers them display by
   display like yabai (`workspace new` on a display numbers it after that display's others).
   `paw initiate <setup>` (or the menu bar icon, or hop's "Set Workspace") forces one
-- **Settings window** (menu bar icon → Settings…, or `paw settings`) for every key; it writes the
-  same commented JSON5 file, so people and agents can keep editing the file too
+- **Settings window** (menu bar icon → Settings…, or `paw settings`) for every key, laid out like
+  System Settings; it writes the same commented JSON5 file, so people and agents can keep editing
+  the file too. On the pages about the indicators' look, every indicator shows around the window
+  and changes as you edit
+- **Themes** for every indicator: OG, OG Light, Modern, Minimal, Solarpunk and Cyberpunk set
+  colours, fonts and shape at once (Settings → Appearance: hover one to see it, click to use it;
+  or `paw theme <name>`). Any appearance key overrides the theme
 - **Animations** for window moves: duration, curve (`easeOutCubic`, `spring`, `easeOutBack`…),
   and how sizes change
 - **Stack indicators**: a vertical island next to each stack with one app icon per window, each
@@ -453,7 +458,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
 | `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
 | `indicator` | `enabled` (true), `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
-| `appearance` | `font`, `fontSize`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `borderWidth`, `shadow`, `colors {island islandHi border fg muted dim accent wave good bad}` |
+| `appearance` | `theme` (og, og-light, modern, minimal, solarpunk, cyberpunk; the other keys override it), `font` (a family, or system / system-mono / system-rounded), `fontSize`, `fontWeight`, `boldWeight`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `pills`, `islandHeight`, `borderWidth`, `shadow`, `shadowOpacity`, `shadowRadius`, `hudOpacity`, `edgeOpacity`, `colors {island islandHi border fg muted dim accent wave good bad}` |
 | `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`), `brandColors` (true), `colors` (`"App": "#RRGGBB"`) |
 | `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged`, `displaysChanged` (shell commands with `PAW_*` variables) |
 | `mouse` | `dropZones` (true), `stackModifier` (`alt`), `seamHandles` (true), `gestures` (`[{ button: "middle", direction: "left", command: "workspace prev" }, …]`; buttons `middle back forward`, directions `left right up down click`) |
@@ -619,7 +624,7 @@ Bindings and the CLI take the same commands; chain several with `;`
 
 paw itself: `paw status`, `paw query [--json]`, `paw subscribe [events] [--reconnect] [--exec cmd]`, `paw setups [--json]`, `paw settings`,
 `paw hide|show` (indicators), `paw update`, `paw reload`, `paw config path|check|show|template|format`,
-`paw icon <app>`, `paw color <app>`, `paw preview out.png`, `paw quit`.
+`paw icon <app>`, `paw color <app>`, `paw theme [list|<name>]`, `paw preview out.png`, `paw quit`.
 
 ## Development
 

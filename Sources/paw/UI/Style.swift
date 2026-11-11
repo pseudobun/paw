@@ -14,15 +14,18 @@ struct Style {
     /// nil when sketchybar-app-font isn't installed: cells then show the app's initial.
     let appFont: NSFont?
     var colors: PawConfig.Colors { a.colors }
-    /// sketchybar's island height, for title islands.
-    let islandHeight: CGFloat = 28
+    /// Height of title islands (sketchybar's: 28).
+    var islandHeight: CGFloat { max(12, a.islandHeight) }
 
     init(_ a: PawConfig.Appearance) {
         self.a = a
-        font = Self.font(a.font, size: a.fontSize, weight: "medium")
-        bold = Self.font(a.font, size: a.fontSize, weight: "semibold")
+        font = Self.font(a.font, size: a.fontSize, weight: a.fontWeight)
+        bold = Self.font(a.font, size: a.fontSize, weight: a.boldWeight)
         appFont = NSFont(name: a.appFont, size: a.appIconSize)
     }
+
+    /// Corner radius for a pill-shaped island `height` tall: round ends, or `radius` without pills.
+    func pillRadius(_ height: CGFloat) -> CGFloat { a.pills ? height / 2 : min(a.radius, height / 2) }
 
     static func font(_ family: String, size: Double, weight: String) -> NSFont {
         let (w, sys): (Int, NSFont.Weight) = switch weight.lowercased() {
@@ -30,6 +33,14 @@ struct Style {
         case "medium": (6, .medium)
         case "semibold": (8, .semibold)
         default: (9, .bold)
+        }
+        switch family.lowercased().replacingOccurrences(of: " ", with: "-") {
+        case "system", "sf-pro": return .systemFont(ofSize: size, weight: sys)
+        case "system-mono", "sf-mono": return .monospacedSystemFont(ofSize: size, weight: sys)
+        case "system-rounded", "sf-pro-rounded":
+            let base = NSFont.systemFont(ofSize: size, weight: sys)
+            return base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: size) } ?? base
+        default: break
         }
         if let f = NSFontManager.shared.font(withFamily: family, traits: [], weight: w, size: size) { return f }
         if let f = NSFont(name: family, size: size) { return f }
@@ -57,8 +68,8 @@ struct Style {
         l.cornerCurve = .continuous
         if a.shadow {
             l.shadowColor = CGColor(gray: 0, alpha: 1)
-            l.shadowOpacity = 0.35
-            l.shadowRadius = 4
+            l.shadowOpacity = Float(a.shadowOpacity)
+            l.shadowRadius = a.shadowRadius
             l.shadowOffset = CGSize(width: 0, height: -1)
             l.shadowPath = CGPath(roundedRect: CGRect(origin: .zero, size: l.bounds.size), cornerWidth: radius, cornerHeight: radius, transform: nil)
         }

@@ -120,6 +120,33 @@ struct PresetConfigTests {
         #expect(ConfigLoader.unknownKeys(Data(text.utf8)).isEmpty)
     }
 
+    @Test func themeIsTheBaseOfAppearance() throws {
+        let c = try ConfigLoader.decode(Data("{ appearance: { theme: 'cyberpunk', radius: 5, colors: { accent: '#ff0000' } } }".utf8))
+        let t = try #require(Themes.named("cyberpunk"))
+        #expect(c.appearance.font == t.appearance.font)
+        #expect(c.appearance.colors.island == t.appearance.colors.island)
+        #expect(c.appearance.radius == 5)
+        #expect(c.appearance.colors.accent == ARGB(0xffff_0000))
+        #expect(c.appearance.overrides == ["radius", "colors.accent"])
+        #expect(c.appearance.resetToTheme().overrides.isEmpty)
+        #expect(Themes.og.appearance == PawConfig.Appearance())
+    }
+
+    @Test func themesRoundTrip() throws {
+        for t in Themes.all {
+            var c = PawConfig()
+            c.appearance = t.appearance
+            c.appearance.fontSize += 1
+            let text = ConfigTemplate.render(c)
+            #expect(try ConfigLoader.decode(Data(text.utf8)) == c)
+            #expect(ConfigLoader.unknownKeys(Data(text.utf8)).isEmpty)
+            #expect(ConfigLoader.warnings(c).isEmpty)
+        }
+        let bad = try ConfigLoader.decode(Data("{ appearance: { theme: 'nope', fontWeight: 'heavy' } }".utf8))
+        #expect(ConfigLoader.warnings(bad).contains { $0.hasPrefix("appearance.theme") })
+        #expect(ConfigLoader.warnings(bad).contains { $0.hasPrefix("appearance.fontWeight") })
+    }
+
     @Test func setupMatchesDisplays() throws {
         let s = PawConfig.Setup(displays: ["builtin", "DELL", "external"])
         #expect(s.matches([("Built-in Retina Display", true), ("Gigabyte M32U", false), ("DELL U2717D", false)]))

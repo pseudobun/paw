@@ -93,10 +93,11 @@ final class PlaceholderView: NSView {
         guard let item else { return }
         let c = style.colors
         let r = bounds.insetBy(dx: 1, dy: 1)
-        let path = NSBezierPath(roundedRect: r, xRadius: 12, yRadius: 12)
+        let radius = style.a.radius + 3
+        let path = NSBezierPath(roundedRect: r, xRadius: radius, yRadius: radius)
         c.island.withAlpha(1).ns.setFill()
         path.fill()
-        let dash = NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), xRadius: 12, yRadius: 12)
+        let dash = NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
         dash.setLineDash([6, 5], count: 2, phase: 0)
         dash.lineWidth = 1
         if item.focused {

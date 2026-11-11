@@ -66,7 +66,7 @@ final class SettingsWindow: NSWindow {
 
 @MainActor
 final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate,
-    NSTextFieldDelegate, NSSearchFieldDelegate {
+    NSTextFieldDelegate, NSSearchFieldDelegate, NSComboBoxDelegate {
     let window = SettingsWindow()
     let settings: Settings
     /// What the file holds: the last config read, plus changes written since.
@@ -96,6 +96,11 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var handlers: [Handler] = []
     private var shown: (error: String?, warnings: [String]) = (nil, [])
     private var colorWrite: DispatchWorkItem?
+    /// Every indicator around the window, on the pages about their look.
+    private let stage = IndicatorStage()
+    /// The theme under the pointer in the picker: shown around the window until the pointer leaves.
+    var hoveredTheme: String?
+    private var observers: [NSObjectProtocol] = []
 
     init(settings: Settings) {
         self.settings = settings
@@ -103,6 +108,15 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         super.init()
         Theme.registerFonts()
         build()
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.stage.hide() }
+            },
+            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshStage() }
+            },
+        ]
     }
 
     func show(page: String? = nil) {
@@ -117,6 +131,7 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         showPage()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        refreshStage()
     }
 
     func configDidChange() {
@@ -126,15 +141,44 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             // The echo of a change written here only refreshes, so a control in use stays.
             let same = settings.config == config && settings.error == shown.error && settings.warnings == shown.warnings
             config = settings.config
-            if same || editingText { refreshValues() } else { showPage(keepScroll: true) }
+            if same || editingText { refreshValues(); refreshStage() } else { showPage(keepScroll: true) }
         }
     }
 
     func windowWillClose(_ notification: Notification) {
         window.makeFirstResponder(nil) // commits a field being edited
+        stage.hide()
+        hoveredTheme = nil
         NSColorPanel.shared.orderOut(nil)
         if let app = previousApp, !app.isTerminated { app.activate() }
         previousApp = nil
+    }
+
+    func windowDidMove(_ notification: Notification) { stage.follow(window.frame, icons: settings.icons) }
+    func windowDidResize(_ notification: Notification) { stage.follow(window.frame, icons: settings.icons) }
+    func windowDidMiniaturize(_ notification: Notification) { stage.hide() }
+    func windowDidDeminiaturize(_ notification: Notification) { refreshStage() }
+
+    // MARK: - Live preview
+
+    /// Draws the indicators around the window from `config` (the hovered theme's when there is
+    /// one), or hides them when the page isn't about their look.
+    func refreshStage(_ override: PawConfig? = nil) {
+        guard window.isVisible, !window.isMiniaturized, page.preview, settings.error == nil else {
+            stage.hide()
+            return
+        }
+        var c = override ?? config
+        if let hoveredTheme, let t = Themes.named(hoveredTheme) { c = Self.applying(t, to: c) }
+        stage.render(c, around: window.frame, icons: settings.icons, borderAlways: page.id == "border")
+    }
+
+    /// `c` in theme `t`: its look, the app icon font kept, the border in the theme's colour.
+    static func applying(_ t: IndicatorTheme, to c: PawConfig) -> PawConfig {
+        var c = c
+        c.appearance = c.appearance.resetToTheme(t.id)
+        c.border.color = t.borderColor
+        return c
     }
 
     // MARK: - Layout
@@ -154,26 +198,23 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         NSColorPanel.shared.showsAlpha = true
 
         let root = NSView()
-        root.wantsLayer = true
-        root.layer?.backgroundColor = Theme.background.cgColor
         window.contentView = root
 
-        // Sidebar
-        let side = NSView()
-        side.wantsLayer = true
-        side.layer?.backgroundColor = Theme.card.cgColor
+        // Sidebar: System Settings' translucent material.
+        let side = NSVisualEffectView()
+        side.material = .sidebar
+        side.blendingMode = .behindWindow
+        side.state = .followsWindowActiveState
         side.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(side)
 
-        let divider = NSView()
-        divider.wantsLayer = true
-        divider.layer?.backgroundColor = Theme.border.cgColor
+        let divider = Hairline(vertical: true)
         divider.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(divider)
 
         search.placeholderString = "Search settings"
         search.font = Theme.sans(13)
-        search.focusRingType = .none
+        search.controlSize = .large
         search.delegate = self
         search.sendsSearchStringImmediately = true
         search.target = self
@@ -184,10 +225,9 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         sidebar.addTableColumn(NSTableColumn(identifier: .init("page")))
         sidebar.headerView = nil
         sidebar.backgroundColor = .clear
-        sidebar.selectionHighlightStyle = .none
-        sidebar.intercellSpacing = NSSize(width: 0, height: 2)
+        sidebar.style = .sourceList
+        sidebar.intercellSpacing = NSSize(width: 0, height: 0)
         sidebar.focusRingType = .none
-        sidebar.style = .plain
         sidebar.dataSource = self
         sidebar.delegate = self
         let sideScroll = NSScrollView()
@@ -228,12 +268,12 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             divider.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             divider.widthAnchor.constraint(equalToConstant: 1),
 
-            search.topAnchor.constraint(equalTo: side.topAnchor, constant: 44),
-            search.leadingAnchor.constraint(equalTo: side.leadingAnchor, constant: 12),
-            search.trailingAnchor.constraint(equalTo: side.trailingAnchor, constant: -12),
-            sideScroll.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 10),
-            sideScroll.leadingAnchor.constraint(equalTo: side.leadingAnchor, constant: 8),
-            sideScroll.trailingAnchor.constraint(equalTo: side.trailingAnchor, constant: -8),
+            search.topAnchor.constraint(equalTo: side.topAnchor, constant: 42),
+            search.leadingAnchor.constraint(equalTo: side.leadingAnchor, constant: 10),
+            search.trailingAnchor.constraint(equalTo: side.trailingAnchor, constant: -10),
+            sideScroll.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 8),
+            sideScroll.leadingAnchor.constraint(equalTo: side.leadingAnchor),
+            sideScroll.trailingAnchor.constraint(equalTo: side.trailingAnchor),
             sideScroll.bottomAnchor.constraint(equalTo: side.bottomAnchor),
 
             contentScroll.leadingAnchor.constraint(equalTo: divider.trailingAnchor),
@@ -313,44 +353,44 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     func numberOfRows(in tableView: NSTableView) -> Int { sidebarRows.count }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        if case .header = sidebarRows[row] { return row == 0 ? 22 : 34 }
-        return 30
+        if case .header = sidebarRows[row] { return row == 0 ? 20 : 30 }
+        return 28
     }
+
+    func tableView(_ tableView: NSTableView, isGroupRow row: Int) -> Bool { false }
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
         if case .page = sidebarRows[row] { return true }
         return false
     }
 
-    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? { SidebarRowView() }
-
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let cell = NSView()
+        let cell = NSTableCellView()
         switch sidebarRows[row] {
         case .header(let title):
-            let label = NSTextField(labelWithAttributedString: Theme.labelString(title))
+            let label = NSTextField(labelWithAttributedString: Theme.groupString(title))
             label.translatesAutoresizingMaskIntoConstraints = false
             cell.addSubview(label)
             NSLayoutConstraint.activate([
-                label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 10),
-                label.bottomAnchor.constraint(equalTo: cell.bottomAnchor, constant: -4),
+                label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
+                label.bottomAnchor.constraint(equalTo: cell.bottomAnchor, constant: -3),
             ])
         case .page(let page):
             let icon = NSImageView(image: Theme.tile(page.symbol, page.color, size: 20))
             let label = NSTextField(labelWithString: page.title)
-            label.font = Theme.sans(13.5, page.id == pageID ? 500 : 400)
-            label.textColor = Theme.foreground
+            label.font = Theme.sans(13)
             label.lineBreakMode = .byTruncatingTail
+            cell.textField = label
             for v in [icon, label] as [NSView] {
                 v.translatesAutoresizingMaskIntoConstraints = false
                 cell.addSubview(v)
             }
             NSLayoutConstraint.activate([
-                icon.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
+                icon.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
                 icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
                 icon.widthAnchor.constraint(equalToConstant: 20),
                 icon.heightAnchor.constraint(equalToConstant: 20),
-                label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 9),
+                label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
                 label.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -8),
                 label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])
@@ -363,7 +403,7 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         guard row >= 0, row < sidebarRows.count, case .page(let page) = sidebarRows[row], page.id != pageID else { return }
         window.makeFirstResponder(sidebar) // commits a field being edited on the old page
         pageID = page.id
-        sidebar.reloadData(forRowIndexes: IndexSet(integersIn: 0..<sidebarRows.count), columnIndexes: [0])
+        hoveredTheme = nil
         showPage()
     }
 
@@ -415,6 +455,8 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 build(editor)
             case .footer(let footer):
                 contentStack.addArrangedSubview(footerView(footer))
+            case .themes:
+                addCard(themePicker())
             }
         }
         if settings.error != nil {
@@ -426,6 +468,7 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         contentStack.layoutSubtreeIfNeeded()
         contentScroll.contentView.scroll(to: keepScroll ? scroll : .zero)
         contentScroll.reflectScrolledClipView(contentScroll.contentView)
+        refreshStage()
     }
 
     func addTitle(_ title: String) {
@@ -451,7 +494,7 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         icon.widthAnchor.constraint(equalToConstant: 36).isActive = true
         icon.heightAnchor.constraint(equalToConstant: 36).isActive = true
         let title = NSTextField(labelWithString: page.title)
-        title.font = Theme.sans(22, 500)
+        title.font = Theme.sans(20, 700)
         title.textColor = Theme.foreground
         let subtitle = NSTextField(labelWithString: page.subtitle)
         subtitle.font = Theme.meta
@@ -636,8 +679,16 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             let popup = self.popup(options, selected: value as? String ?? "") { [unowned self] v in write(field, v) }
             bind(field, popup) { Self.select($0 as? String ?? "", in: popup) }
             row = rowStack([textColumn(field.label, field.help), popup])
+        case .font(let placeholder):
+            let combo = fontBox(value as? String ?? "", placeholder: placeholder) { [unowned self] name in write(field, name) }
+            bind(field, combo) { combo.stringValue = $0 as? String ?? "" }
+            row = rowStack([textColumn(field.label, field.help), combo])
         case .color:
-            let (well, group) = colorWell(value as? ARGB ?? ARGB(0)) { [unowned self] c in write(field, c) }
+            let (well, group) = colorWell(value as? ARGB ?? ARGB(0), live: { [unowned self] c in
+                var preview = config
+                field.value.set(&preview, c)
+                refreshStage(preview)
+            }) { [unowned self] c in write(field, c) }
             bind(field, group) { value in
                 guard let c = value as? ARGB, !well.isActive else { return }
                 well.color = c.ns
@@ -743,8 +794,33 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         }
     }
 
-    /// A colour well and its 0xAARRGGBB value; picking writes once the colour rests.
-    func colorWell(_ value: ARGB, _ action: @escaping (ARGB) -> Void) -> (NSColorWell, NSStackView) {
+    /// Installed font families, with SF's names first.
+    private static let fontFamilies: [String] = ["system", "system-mono", "system-rounded"]
+        + NSFontManager.shared.availableFontFamilies.filter { !$0.hasPrefix(".") }
+
+    /// A font family field with the installed families in its list; `action` runs on a pick or ↵.
+    func fontBox(_ value: String, placeholder: String, _ action: @escaping (String) -> Void) -> NSComboBox {
+        let combo = NSComboBox()
+        combo.addItems(withObjectValues: Self.fontFamilies)
+        combo.numberOfVisibleItems = 14
+        combo.completes = true
+        combo.stringValue = value
+        combo.placeholderString = placeholder
+        combo.font = Theme.sans(13)
+        combo.delegate = self
+        combo.widthAnchor.constraint(equalToConstant: 240).isActive = true
+        let commit: (NSTextField) -> Void = { t in
+            let name = t.stringValue.trimmingCharacters(in: .whitespaces)
+            if !name.isEmpty { action(name) }
+        }
+        commits[ObjectIdentifier(combo)] = commit
+        on(combo) { commit(combo) }
+        return combo
+    }
+
+    /// A colour well and its 0xAARRGGBB value; picking writes once the colour rests. `live` sees
+    /// every colour on the way (the preview around the window).
+    func colorWell(_ value: ARGB, live: ((ARGB) -> Void)? = nil, _ action: @escaping (ARGB) -> Void) -> (NSColorWell, NSStackView) {
         let well = NSColorWell(style: .default)
         well.color = value.ns
         well.widthAnchor.constraint(equalToConstant: 44).isActive = true
@@ -755,6 +831,7 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         on(well) { [unowned self] in
             let c = ARGB(well.color)
             hex.stringValue = c.description
+            live?(c)
             colorWrite?.cancel()
             let work = DispatchWorkItem { action(c) }
             colorWrite = work
@@ -814,6 +891,7 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         do {
             try ConfigTemplate.render(c).write(to: settings.url, atomically: true, encoding: .utf8)
             config = c
+            refreshStage()
         } catch {
             NSAlert(error: error).beginSheetModal(for: window)
             return
@@ -912,17 +990,15 @@ private final class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// A rounded card holding rows separated by hairlines.
+/// A grouped section, as in System Settings: rows on a rounded fill, separated by hairlines.
+/// Drawn rather than layer-coloured, so it follows light and dark mode.
 final class Card: NSView {
     let stack = NSStackView()
+    private let tint: NSColor?
 
     init(tint: NSColor? = nil) {
+        self.tint = tint
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.backgroundColor = (tint?.withAlphaComponent(0.10) ?? Theme.card).cgColor
-        layer?.borderWidth = 1
-        layer?.borderColor = (tint?.withAlphaComponent(0.35) ?? Theme.border).cgColor
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 0
@@ -939,38 +1015,48 @@ final class Card: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 10, yRadius: 10)
+        (tint?.withAlphaComponent(0.10) ?? Theme.card).setFill()
+        path.fill()
+        (tint?.withAlphaComponent(0.35) ?? Theme.border).setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+
     /// Adds a full-width row, under a hairline when it isn't the first.
     func add(_ row: NSView) {
-        if !stack.arrangedSubviews.isEmpty { stack.addArrangedSubview(Hairline()) }
+        if !stack.arrangedSubviews.isEmpty { stack.addArrangedSubview(Hairline(inset: 16)) }
         stack.addArrangedSubview(row)
         row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
     }
 }
 
-private final class Hairline: NSView {
-    init() {
+/// A one-point separator line.
+final class Hairline: NSView {
+    private let vertical: Bool
+    private let inset: CGFloat
+
+    init(vertical: Bool = false, inset: CGFloat = 0) {
+        self.vertical = vertical
+        self.inset = inset
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.backgroundColor = Theme.border.cgColor
-        heightAnchor.constraint(equalToConstant: 1).isActive = true
+        if vertical {
+            widthAnchor.constraint(equalToConstant: 1).isActive = true
+        } else {
+            heightAnchor.constraint(equalToConstant: 1).isActive = true
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.separatorColor.setFill()
+        bounds.insetBy(dx: vertical ? 0 : inset, dy: 0).fill()
+    }
+
     override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
-        if let stack = superview as? NSStackView { widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        if !vertical, let stack = superview as? NSStackView { widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
     }
-}
-
-private final class SidebarRowView: NSTableRowView {
-    override func drawSelection(in dirtyRect: NSRect) {}
-
-    override func drawBackground(in dirtyRect: NSRect) {
-        guard isSelected else { return }
-        Theme.wash(0.09).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
-    }
-
-    override var isSelected: Bool { didSet { needsDisplay = true } }
 }

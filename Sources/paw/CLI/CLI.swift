@@ -20,6 +20,7 @@ enum CLI {
         "setups": setups,
         "subscribe": subscribe,
         "preview": Preview.run,
+        "theme": theme,
         "dock": DockCLI.run,
     ]
 
@@ -79,6 +80,8 @@ enum CLI {
           icon <app name>     the sketchybar-app-font glyph for an app
           color <app name>    the app's colour (0xAARRGGBB, from its icon or icons.colors)
           preview <out.png> [--fonts=DIR]   render stack indicators with your config
+          theme [list | <name>]   the indicators' theme; a name switches to it (its own colours, fonts
+                              and shape; the app icon font stays), list shows them all
           settings [page]     open the settings window, e.g. on its about page (also in the menu bar icon)
           update [--check]    install the newest version now (paw restarts); --check only looks
           dock install|uninstall|status
@@ -271,6 +274,42 @@ enum CLI {
         default:
             fputs("paw config path | check | show | template | format\n", stderr)
             return 64
+        }
+        return 0
+    }
+
+    /// `paw theme`: the current theme, `list`, or a theme's name to switch to it.
+    static func theme(_ args: [String]) -> Int32 {
+        let settings = Settings(url: Settings.defaultURL)
+        let a = settings.config.appearance
+        switch args.first {
+        case nil:
+            let changed = a.overrides
+            print(a.theme + (changed.isEmpty ? "" : " (changed: \(changed.sorted().joined(separator: ", ")))"))
+        case "list", "--json":
+            if args.contains("--json") {
+                let list = Themes.all.map { ["id": $0.id, "label": $0.label, "summary": $0.summary, "light": $0.light, "current": $0.id == a.theme] as [String: Any] }
+                let data = (try? JSONSerialization.data(withJSONObject: list, options: [.prettyPrinted, .sortedKeys])) ?? Data()
+                print(String(decoding: data, as: UTF8.self))
+            } else {
+                for t in Themes.all {
+                    print("\(t.id == a.theme ? "*" : " ") \(t.id.padding(toLength: 10, withPad: " ", startingAt: 0)) \(t.summary)")
+                }
+            }
+        case let name?:
+            guard let t = Themes.named(name) else {
+                fputs("paw: no theme “\(name)”; one of \(Themes.all.map(\.id).joined(separator: ", "))\n", stderr)
+                return 64
+            }
+            if let e = settings.error { fputs("paw: the config can't be read: \(e)\n", stderr); return 1 }
+            var c = settings.config
+            c.appearance = a.resetToTheme(t.id)
+            c.border.color = t.borderColor
+            do { try ConfigTemplate.render(c).write(to: settings.url, atomically: true, encoding: .utf8) } catch {
+                fputs("paw: \(error.localizedDescription)\n", stderr)
+                return 1
+            }
+            print("theme: \(t.label)")
         }
         return 0
     }

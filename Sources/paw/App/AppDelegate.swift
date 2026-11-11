@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             exit(0)
         }
         installSignalHandlers()
+        Theme.registerFonts() // bundled fonts, for themes' indicators and the settings window
         settings.start()
         wm = WindowManager(settings: settings)
         settings.onChange = { [weak self] in self?.apply() }

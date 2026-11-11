@@ -30,6 +30,8 @@ struct SettingsField {
         case number(min: Double, max: Double, step: Double = 1, unit: String = "")
         case choice([(value: String, label: String)])
         case color
+        /// A font family: typed, or picked from the installed ones.
+        case font(placeholder: String = "")
     }
 
     let key: String
@@ -98,6 +100,8 @@ struct SettingsSection {
         case rows([SettingsRow])
         case editor(SettingsEditor)
         case footer(SettingsFooter)
+        /// The indicator themes, side by side.
+        case themes
     }
 
     var title: String?
@@ -116,6 +120,11 @@ struct SettingsSection {
     }
 
     init(footer: SettingsFooter) { content = .footer(footer) }
+
+    init(themes title: String) {
+        self.title = title
+        content = .themes
+    }
 }
 
 struct SettingsPage {
@@ -126,6 +135,8 @@ struct SettingsPage {
     let color: NSColor
     /// The page's `enabled` key: off greys out the rest of the page.
     var gate: String?
+    /// Show every indicator around the window while the page is open, drawn from its values.
+    var preview = false
     let sections: [SettingsSection]
 
     var fields: [SettingsField] {
@@ -151,6 +162,7 @@ struct SettingsPage {
                 }
             case .editor(let e): words.append(e.haystack)
             case .footer: words += ["pseudobun", "github", "website", "email", "open source"]
+            case .themes: words += ["theme", "themes", "look"] + Themes.all.map(\.label)
             }
         }
         return words.joined(separator: " ").lowercased()
@@ -410,7 +422,7 @@ enum SettingsCatalog {
 
     static var indicators: SettingsPage {
         SettingsPage(id: "indicators", title: "Indicators", subtitle: "The islands that show a stack's windows.",
-                     symbol: "square.stack.3d.up.fill", color: Theme.chart5, sections: [
+                     symbol: "square.stack.3d.up.fill", color: Theme.chart5, preview: true, sections: [
             SettingsSection([
                 f(\.indicator.enabled, "indicator.enabled", "Show indicators", .toggle, "Islands beside stacks, one icon per window."),
                 e(\.indicator.side, "indicator.side", "Side", "Auto: outside, on the side nearer the screen edge."),
@@ -439,20 +451,38 @@ enum SettingsCatalog {
         func color(_ path: WritableKeyPath<PawConfig.Colors, ARGB>, _ key: String, _ label: String, _ help: String? = nil) -> SettingsRow {
             f((\PawConfig.appearance.colors).appending(path: path), "appearance.colors.\(key)", label, .color, help)
         }
-        return SettingsPage(id: "appearance", title: "Appearance", subtitle: "Fonts, shape and colours of indicators and islands.",
-                            symbol: "paintpalette.fill", color: Theme.chart2, sections: [
+        let weights = SettingsField.Kind.choice(Themes.weights.map { (value: $0, label: $0.prefix(1).uppercased() + $0.dropFirst()) })
+        return SettingsPage(id: "appearance", title: "Appearance", subtitle: "Theme, fonts, shape and colours of every indicator.",
+                            symbol: "paintpalette.fill", color: Theme.chart2, preview: true, sections: [
+            SettingsSection(themes: "Theme"),
             SettingsSection("Fonts", [
-                f(\.appearance.font, "appearance.font", "Font", .text(placeholder: "GeistMono Nerd Font"), "Titles; falls back to SF Mono."),
-                f(\.appearance.fontSize, "appearance.fontSize", "Font size", .number(min: 6, max: 48, unit: "pt")),
-                f(\.appearance.appFont, "appearance.appFont", "App icon font", .text(placeholder: "sketchybar-app-font"),
-                  "Ligatures, like the bar; without it cells show the app's initial."),
+                f(\.appearance.font, "appearance.font", "Font", .font(placeholder: "GeistMono Nerd Font"),
+                  "Titles and numbers. system, system-mono and system-rounded are SF; a missing font falls back to SF Mono."),
+                f(\.appearance.fontSize, "appearance.fontSize", "Font size", .number(min: 6, max: 48, step: 0.5, unit: "pt")),
+                f(\.appearance.fontWeight, "appearance.fontWeight", "Weight", weights),
+                f(\.appearance.boldWeight, "appearance.boldWeight", "Bold weight", weights, "Workspace numbers and app names."),
+                f(\.appearance.appFont, "appearance.appFont", "App icon font", .font(placeholder: "sketchybar-app-font"),
+                  "Ligatures, like the bar; without it cells show the app's initial. Themes keep it."),
                 f(\.appearance.appIconSize, "appearance.appIconSize", "Icon size", .number(min: 6, max: 48, unit: "pt")),
             ]),
             SettingsSection("Shape", [
                 f(\.appearance.radius, "appearance.radius", "Island radius", .number(min: 0, max: 40, unit: "pt")),
-                f(\.appearance.cellRadius, "appearance.cellRadius", "Cell radius", .number(min: 0, max: 40, unit: "pt")),
+                f(\.appearance.cellRadius, "appearance.cellRadius", "Cell radius", .number(min: 0, max: 40, unit: "pt"),
+                  "The highlighted window in a stack."),
+                f(\.appearance.pills, "appearance.pills", "Pills", .toggle,
+                  "Round ends on the workspace HUD, the move strip and the edge markers; off: the island radius."),
+                f(\.appearance.islandHeight, "appearance.islandHeight", "Island height", .number(min: 12, max: 60, unit: "pt"),
+                  "Title islands; the workspace HUD is 2 pt taller."),
                 f(\.appearance.borderWidth, "appearance.borderWidth", "Border", .number(min: 0, max: 10, step: 0.5, unit: "pt")),
                 f(\.appearance.shadow, "appearance.shadow", "Shadow", .toggle),
+                f(\.appearance.shadowOpacity, "appearance.shadowOpacity", "Shadow strength", .number(min: 0, max: 1, step: 0.05)),
+                f(\.appearance.shadowRadius, "appearance.shadowRadius", "Shadow blur", .number(min: 0, max: 40, unit: "pt")),
+            ]),
+            SettingsSection("Opacity", [
+                f(\.appearance.hudOpacity, "appearance.hudOpacity", "Workspace HUD", .number(min: 0.1, max: 1, step: 0.05)),
+                f(\.appearance.edgeOpacity, "appearance.edgeOpacity", "Edge markers", .number(min: 0.1, max: 1, step: 0.05),
+                  "While the pointer isn't on them."),
+                f(\.indicator.unfocusedOpacity, "indicator.unfocusedOpacity", "Unfocused stacks", .number(min: 0, max: 1, step: 0.05)),
             ]),
             SettingsSection("Colours", [
                 color(\.island, "island", "Island"),
@@ -461,7 +491,7 @@ enum SettingsCatalog {
                 color(\.fg, "fg", "Text"),
                 color(\.muted, "muted", "Muted"),
                 color(\.dim, "dim", "Dim"),
-                color(\.accent, "accent", "Accent", "The focused window's icon."),
+                color(\.accent, "accent", "Accent", "The focused window's icon, workspace numbers."),
                 color(\.wave, "wave", "Wave"),
                 color(\.good, "good", "Good"),
                 color(\.bad, "bad", "Bad"),
@@ -471,7 +501,7 @@ enum SettingsCatalog {
 
     static var icons: SettingsPage {
         SettingsPage(id: "icons", title: "Icons", subtitle: "App glyphs and their colours.",
-                     symbol: "square.grid.3x3.fill", color: Theme.chart1, sections: [
+                     symbol: "square.grid.3x3.fill", color: Theme.chart1, preview: true, sections: [
             SettingsSection([
                 f(\.icons.brandColors, "icons.brandColors", "Brand colours", .toggle, "Each icon in its app's own colour, taken from its app icon."),
                 f(\.icons.map, "icons.map", "Icon map", .wide(placeholder: "~/.config/sketchybar/helpers/app_icons.lua"),
@@ -484,7 +514,7 @@ enum SettingsCatalog {
 
     static var border: SettingsPage {
         SettingsPage(id: "border", title: "Border", subtitle: "A line around the focused window.",
-                     symbol: "square.dashed", color: Theme.chart1, gate: "border.enabled", sections: [
+                     symbol: "square.dashed", color: Theme.chart1, gate: "border.enabled", preview: true, sections: [
             SettingsSection([
                 f(\.border.enabled, "border.enabled", "Focus border", .toggle),
                 f(\.border.color, "border.color", "Colour", .color),
@@ -498,7 +528,7 @@ enum SettingsCatalog {
 
     static var overview: SettingsPage {
         SettingsPage(id: "overview", title: "Overview & HUD", subtitle: "The overview of every workspace and the workspace flash.",
-                     symbol: "rectangle.grid.2x2.fill", color: Theme.chart4, sections: [
+                     symbol: "rectangle.grid.2x2.fill", color: Theme.chart4, preview: true, sections: [
             SettingsSection("Overview", [
                 f(\.overview.thumbnails, "overview.thumbnails", "Window pictures", .choice([
                     ("auto", "When allowed"), ("on", "On"), ("off", "Off"),

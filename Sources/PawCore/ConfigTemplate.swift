@@ -143,28 +143,7 @@ public enum ConfigTemplate {
           },
 
           appearance: {
-            font: \(str(ap.font)),
-            fontSize: \(num(ap.fontSize)),
-            appFont: \(str(ap.appFont)),
-            appIconSize: \(num(ap.appIconSize)),
-            radius: \(num(ap.radius)),
-            cellRadius: \(num(ap.cellRadius)),
-            borderWidth: \(num(ap.borderWidth)),
-            shadow: \(ap.shadow),
-            // 0xAARRGGBB or "#RRGGBB"
-            colors: {
-              island: \(str(k.island.description)),
-              islandHi: \(str(k.islandHi.description)),
-              border: \(str(k.border.description)),
-              fg: \(str(k.fg.description)),
-              muted: \(str(k.muted.description)),
-              dim: \(str(k.dim.description)),
-              accent: \(str(k.accent.description)),
-              wave: \(str(k.wave.description)),
-              good: \(str(k.good.description)),
-              bad: \(str(k.bad.description)),
-            },
-          },
+        \(appearance(ap))  },
 
           icons: {
             // sketchybar's app → glyph map; paw's built-in copy is used when it's missing
@@ -316,6 +295,43 @@ public enum ConfigTemplate {
     }
 
     /// A JSON string literal.
+    /// The theme, then every key: the theme's own values commented out (delete-to-default),
+    /// the ones that override it as live keys.
+    static func appearance(_ a: PawConfig.Appearance) -> String {
+        let base = Themes.appearance(a.theme)
+        var o = """
+            // Indicator look: a theme (\(Themes.all.map(\.id).joined(separator: ", "))), then keys that
+            // override it. Commented keys show the theme's value; paw theme <name> or Settings → Appearance switch it.
+            theme: \(str(a.theme)),
+
+        """
+        func line(_ key: String, _ value: String, _ same: Bool, indent: String = "    ") {
+            o += "\(indent)\(same ? "// " : "")\(key): \(value),\n"
+        }
+        line("font", str(a.font), a.font == base.font)
+        line("fontSize", num(a.fontSize), a.fontSize == base.fontSize)
+        line("fontWeight", str(a.fontWeight), a.fontWeight == base.fontWeight)
+        line("boldWeight", str(a.boldWeight), a.boldWeight == base.boldWeight)
+        line("appFont", str(a.appFont), a.appFont == base.appFont)
+        line("appIconSize", num(a.appIconSize), a.appIconSize == base.appIconSize)
+        line("radius", num(a.radius), a.radius == base.radius)
+        line("cellRadius", num(a.cellRadius), a.cellRadius == base.cellRadius)
+        line("borderWidth", num(a.borderWidth), a.borderWidth == base.borderWidth)
+        line("shadow", "\(a.shadow)", a.shadow == base.shadow)
+        line("shadowOpacity", num(a.shadowOpacity), a.shadowOpacity == base.shadowOpacity)
+        line("shadowRadius", num(a.shadowRadius), a.shadowRadius == base.shadowRadius)
+        line("islandHeight", num(a.islandHeight), a.islandHeight == base.islandHeight)
+        line("pills", "\(a.pills)", a.pills == base.pills)
+        line("hudOpacity", num(a.hudOpacity), a.hudOpacity == base.hudOpacity)
+        line("edgeOpacity", num(a.edgeOpacity), a.edgeOpacity == base.edgeOpacity)
+        o += "    // 0xAARRGGBB or \"#RRGGBB\"\n    colors: {\n"
+        for key in PawConfig.Colors.CodingKeys.allCases {
+            line(key.rawValue, str(a.colors[key].description), a.colors[key] == base.colors[key], indent: "      ")
+        }
+        o += "    },\n"
+        return o
+    }
+
     static func str(_ s: String) -> String {
         let data = (try? JSONSerialization.data(withJSONObject: [s], options: [.withoutEscapingSlashes])) ?? Data("[\"\"]".utf8)
         return String(String(decoding: data, as: UTF8.self).dropFirst().dropLast())
