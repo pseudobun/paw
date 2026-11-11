@@ -15,7 +15,11 @@ cask "paw" do
   binary "#{appdir}/paw.app/Contents/MacOS/paw"
 
   uninstall quit:      "com.pseudobun.paw",
-            launchctl: "com.pseudobun.paw"
+            launchctl: ["com.pseudobun.paw", "com.pseudobun.paw.dock"],
+            delete:    [
+              "/Library/LaunchDaemons/com.pseudobun.paw.dock.plist",
+              "/Library/Application Support/paw",
+            ]
 
   zap trash: [
     "~/.config/paw",

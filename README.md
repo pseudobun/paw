@@ -112,8 +112,12 @@ Updates are signed (EdDSA) and keep the Accessibility grant.
 ### Uninstall
 
 ```sh
+sudo paw dock uninstall                          # only if you installed the Dock helper
 brew uninstall --cask pseudobun/tap/paw          # add --zap to remove the config and state too
 ```
+
+The Dock helper is a root launch daemon, so remove it first; Homebrew tries to as well, but
+needs your password for it.
 
 Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
 again (it remembers which workspace each window was on) or run `paw recover`.
@@ -167,7 +171,7 @@ Everything else works the same with SIP on; without the helper paw simply uses A
 
 > [!warning]
 > Turning off SIP's debugging, filesystem and NVRAM protections lets any process running as
-> **root** read and change other processes (Dock among them), system files and NVRAM. Ordinary
+> **root** read and change other processes (Dock among them) and NVRAM. Ordinary
 > apps without root gain nothing, but anything you ever run with `sudo` can do more harm than
 > with SIP fully on. Some software (anti-cheat, MDM, iOS apps on the Mac) may refuse to run with
 > SIP partly off. You can turn it back on any time (step 5).
@@ -179,8 +183,10 @@ Everything else works the same with SIP on; without the helper paw simply uses A
       choose **Options → Continue** and sign in.
    2. In the menu bar: **Utilities → Terminal**, then:
       ```sh
-      csrutil enable --without fs --without debug --without nvram
+      csrutil enable --without debug --without nvram
       ```
+      paw needs only `--without debug` (`task_for_pid` on Dock); `--without nvram` lets step 2
+      set the boot argument. Leave the file-system protection on.
    3. `reboot`.
 2. **Allow arm64e code from outside Apple in Dock** (Dock is an arm64e process), in macOS:
    ```sh

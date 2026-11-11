@@ -24,7 +24,28 @@ final class DockBridge {
     /// From config: "auto" uses the payload when it's there, "accessibility" never does.
     var enabled = true
 
-    static var socketPath: String { "/tmp/paw-dock-\(getuid()).sock" }
+    /// In the user's own temporary directory (0700), where the payload listens: not /tmp, where
+    /// another user could take the name.
+    static var socketPath: String {
+        var buf = [CChar](repeating: 0, count: Int(PATH_MAX))
+        let n = confstr(_CS_DARWIN_USER_TEMP_DIR, &buf, buf.count)
+        let dir = n > 0 && n <= buf.count ? String(cString: buf) : NSTemporaryDirectory()
+        return (dir as NSString).appendingPathComponent("paw-dock.sock")
+    }
+
+    static let dockPath = "/System/Library/CoreServices/Dock.app/Contents/MacOS/Dock"
+
+    /// The other end is Dock, running as this user: anything else on the socket is not the payload.
+    private static func peerIsDock(_ s: Int32) -> Bool {
+        var uid: uid_t = 0, gid: gid_t = 0
+        guard getpeereid(s, &uid, &gid) == 0, uid == getuid() else { return false }
+        var pid: pid_t = 0
+        var len = socklen_t(MemoryLayout<pid_t>.size)
+        guard getsockopt(s, SOL_LOCAL, LOCAL_PEERPID, &pid, &len) == 0, pid > 0 else { return false }
+        var path = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return false }
+        return String(cString: path) == dockPath
+    }
 
     /// SIP's "allow task_for_pid" (CSR_ALLOW_TASK_FOR_PID): what `csrutil enable --without debug` turns on.
     static let sipAllowsLoading: Bool = {
@@ -112,7 +133,7 @@ final class DockBridge {
         let ok = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(s, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
         }
-        guard ok == 0 else { close(s); return false }
+        guard ok == 0, Self.peerIsDock(s) else { close(s); return false }
         var tv = timeval(tv_sec: 0, tv_usec: 200_000)
         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
