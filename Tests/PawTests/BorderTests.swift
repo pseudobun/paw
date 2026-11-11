@@ -155,4 +155,32 @@ struct BorderTests {
         w.setFrame(CGRect(x: 200, y: 200, width: 500, height: 400))
         #expect(w.radiusForBorder(query: query) == 16 && calls == 2)
     }
+
+    @Test func tiledBordersUseDestinationDuringStartResizeAnimations() {
+        let w = Window(id: 1, element: AXUIElementCreateApplication(getpid()), pid: getpid(), app: "Test", frame: frame)
+        let target = CGRect(x: 600, y: 200, width: 500, height: 400)
+        let animator = Animator()
+        animator.settings = {
+            var animation = PawConfig.Animation()
+            animation.enabled = true
+            animation.durationMs = 1000
+            animation.resize = "start"
+            return animation
+        }
+        defer { animator.stop() }
+        animator.animate([(w, target)])
+        #expect(animator.isRunning)
+        #expect(w.borderFrame == nil)
+        #expect(w.frame != target)
+        #expect(w.frameForBorder(tile: target, placeholder: false) == target)
+
+        let observed = CGRect(x: 600, y: 200, width: 504, height: 402)
+        w.borderFrame = observed
+        #expect(w.frameForBorder(tile: target, placeholder: false) == observed)
+        #expect(w.frameForBorder(tile: target, placeholder: true) == target)
+        #expect(w.frameForBorder(tile: nil, placeholder: true) == nil)
+        #expect(w.frameForBorder(tile: nil, placeholder: false) == observed)
+        w.borderFrame = nil
+        #expect(w.frameForBorder(tile: nil, placeholder: false) == w.frame)
+    }
 }

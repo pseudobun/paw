@@ -26,7 +26,7 @@ final class Placeholders {
 
     private var panels: [WindowID: (panel: NSPanel, view: PlaceholderView)] = [:]
 
-    func apply(_ items: [Item], style: Style, focusFollowsMouse: Bool, focusBorder: WindowID?, actions: Actions) {
+    func apply(_ items: [Item], style: Style, focusFollowsMouse: Bool, focusBorder: FocusBorder, actions: Actions) {
         let ids = Set(items.map(\.id))
         for (id, p) in panels where !ids.contains(id) {
             p.panel.orderOut(nil)
@@ -39,11 +39,14 @@ final class Placeholders {
             p.view.style = style
             p.view.actions = actions
             p.view.focusFollowsMouse = focusFollowsMouse
-            p.view.focusBorderVisible = focusBorder == item.id
+            p.view.focusBorderVisible = focusBorder.windowID == item.id
             let f = ScreenGeometry.cocoa(fromAX: item.frame, primaryHeight: primaryHeight)
             if p.panel.frame != f { p.panel.setFrame(f, display: false) }
             p.view.needsDisplay = true
-            if !p.panel.isVisible { p.panel.orderFrontRegardless() }
+            if !p.panel.isVisible {
+                p.panel.orderFrontRegardless()
+                if p.view.focusBorderVisible { focusBorder.panel.orderFrontRegardless() }
+            }
         }
     }
 

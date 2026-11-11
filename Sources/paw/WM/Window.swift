@@ -20,6 +20,10 @@ final class Window {
 
     func invalidateCornerRadius() { cornerRadiusRead = false }
 
+    func frameForBorder(tile: CGRect?, placeholder: Bool) -> CGRect? {
+        placeholder ? tile : (borderFrame ?? tile ?? frame)
+    }
+
     func radiusForBorder(query: (UInt32) -> CGFloat? = SkyLight.cornerRadius) -> CGFloat? {
         if !cornerRadiusRead {
             cornerRadius = query(id)

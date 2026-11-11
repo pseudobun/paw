@@ -5,6 +5,43 @@ import Testing
 
 @MainActor
 struct PlaceholderTests {
+    @Test func newPlaceholderStaysBelowInsetFocusBorder() throws {
+        _ = NSApplication.shared
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let screen = ScreenGeometry.axFrame(ofScreen: try #require(NSScreen.main).frame, primaryHeight: primaryHeight)
+        let frame = CGRect(x: screen.minX + 100, y: screen.minY + 100, width: 200, height: 150)
+        let target = NSWindow(contentRect: frame, styleMask: [.titled], backing: .buffered, defer: false)
+        target.isReleasedWhenClosed = false
+        let border = FocusBorder()
+        let placeholders = Placeholders()
+        let id = UInt32(target.windowNumber)
+        var config = PawConfig.Border()
+        config.enabled = true
+        config.offset = -2
+        let actions = Placeholders.Actions(focus: { _ in }, zoom: { _ in }, drag: { _, _ in }, drop: { _, _ in })
+        defer {
+            placeholders.apply([], style: Style(.init()), focusFollowsMouse: false, focusBorder: border, actions: actions)
+            border.hide()
+            target.close()
+        }
+        target.orderBack(nil)
+        border.show(frame, window: id, above: true, screen: screen, config: config)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
+        target.orderOut(nil)
+        border.show(frame, window: id, above: false, screen: screen, config: config)
+        placeholders.apply([.init(id: id, app: "Test", title: "Test", frame: frame, focused: true)],
+                           style: Style(.init()), focusFollowsMouse: false, focusBorder: border, actions: actions)
+        let placeholder = try #require(NSApp.windows.first { ($0.contentView as? PlaceholderView)?.item?.id == id })
+        // Commit AppKit ordering before inspecting the WindowServer's front-to-back list.
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
+        let windows = try #require(CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]])
+        let ids = windows.compactMap { $0[kCGWindowNumber as String] as? Int }
+        let borderIndex = try #require(ids.firstIndex(of: border.panel.windowNumber))
+        let placeholderIndex = try #require(ids.firstIndex(of: placeholder.windowNumber))
+        #expect(borderIndex < placeholderIndex)
+        #expect((placeholder.contentView as? PlaceholderView)?.focusBorderVisible == true)
+    }
+
     @Test func externalFocusBorderReplacesAccentWithFallbackWhenHidden() throws {
         let view = PlaceholderView(frame: CGRect(x: 0, y: 0, width: 160, height: 140))
         view.item = .init(id: 42, app: "Test", title: "Test", frame: view.bounds, focused: true)

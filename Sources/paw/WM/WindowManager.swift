@@ -855,7 +855,9 @@ final class WindowManager {
                 w.borderNeedsRefresh = false
             } else { scheduleBorderRefresh() }
         }
-        let frame = placeholder ? TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] : (w.borderFrame ?? w.frame)
+        let tile = placeholder || (w.borderFrame == nil && !ws.isFloating(id))
+            ? TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] : nil
+        let frame = w.frameForBorder(tile: tile, placeholder: placeholder)
         let radius = !placeholder && config.border.autoRadius ? w.radiusForBorder() : nil
         border.show(frame, window: id, above: !placeholder, screen: displays[di].frame, config: config.border, radius: radius)
     }
@@ -2176,7 +2178,7 @@ final class WindowManager {
             }
         }
         updateBorder(cramped: Set(holders.map(\.id)))
-        placeholders.apply(holders, style: indicators.style, focusFollowsMouse: config.focus.focusFollowsMouse, focusBorder: border.windowID, actions: .init(
+        placeholders.apply(holders, style: indicators.style, focusFollowsMouse: config.focus.focusFollowsMouse, focusBorder: border, actions: .init(
             focus: { [weak self] id in self?.focusWindow(id, warp: false) },
             zoom: { [weak self] id in self?.makeRoom(for: id) },
             drag: { [weak self] id, p in self?.placeholderDragged(id, to: p) },
