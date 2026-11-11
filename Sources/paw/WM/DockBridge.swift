@@ -1,0 +1,132 @@
+import Darwin
+import Foundation
+import PawCore
+
+/// Window moves through paw's payload inside Dock.app (see Sources/PawDock): the window server
+/// moves a window at once, instead of asking its app over accessibility and waiting for the app
+/// to get round to it. Needs SIP's debugging restrictions off and the payload loaded
+/// (`paw dock load`); without it every move goes over accessibility as before.
+final class DockBridge {
+    static let shared = DockBridge()
+
+    enum State: String {
+        /// The setting says accessibility.
+        case off
+        /// SIP doesn't allow loading into Dock.
+        case sipEnabled
+        /// Allowed, but the payload isn't loaded (Dock restarted, or never loaded).
+        case notLoaded
+        case ready
+    }
+
+    private var fd: Int32 = -1
+    private var lastTry = Date.distantPast
+    /// From config: "auto" uses the payload when it's there, "accessibility" never does.
+    var enabled = true
+
+    static var socketPath: String { "/tmp/paw-dock-\(getuid()).sock" }
+
+    /// SIP's "allow task_for_pid" (CSR_ALLOW_TASK_FOR_PID): what `csrutil enable --without debug` turns on.
+    static let sipAllowsLoading: Bool = {
+        typealias Fn = @convention(c) (UnsafeMutablePointer<UInt32>) -> Int32
+        guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "csr_get_active_config") else { return false }
+        var config: UInt32 = 0
+        guard unsafeBitCast(sym, to: Fn.self)(&config) == 0 else { return false }
+        return config & 0x4 != 0
+    }()
+
+    var state: State {
+        guard enabled else { return .off }
+        guard Self.sipAllowsLoading else { return .sipEnabled }
+        return connect() ? .ready : .notLoaded
+    }
+
+    var isReady: Bool { enabled && Self.sipAllowsLoading && connect() }
+
+    /// For `paw status` and settings.
+    var statusLine: String {
+        switch state {
+        case .off: return "off: windows move over accessibility"
+        case .sipEnabled: return "SIP is on: windows move over accessibility (README, Faster workspace switching)"
+        case .notLoaded: return "Dock helper not loaded: sudo paw dock install"
+        case .ready: return "through the Dock helper"
+        }
+    }
+
+    /// Whether the payload answers (for `paw dock status`, from the CLI).
+    func ping() -> Bool { Self.sipAllowsLoading && connect(force: true) }
+
+    /// Moves windows (AX coordinates) in one screen update. False when the payload isn't there.
+    @discardableResult
+    func move(_ moves: [(WindowID, CGPoint)]) -> Bool {
+        guard !moves.isEmpty else { return true }
+        var body = Data([0x02])
+        append(&body, UInt32(moves.count))
+        for (id, p) in moves {
+            append(&body, UInt32(id))
+            append(&body, Double(p.x))
+            append(&body, Double(p.y))
+        }
+        return send(body)
+    }
+
+    /// Brings windows to the front, in order (the last ends up on top).
+    @discardableResult
+    func order(_ ids: [WindowID]) -> Bool {
+        guard !ids.isEmpty else { return true }
+        var body = Data([0x03])
+        append(&body, UInt32(ids.count))
+        for id in ids { append(&body, UInt32(id)) }
+        return send(body)
+    }
+
+    private func append<T>(_ d: inout Data, _ v: T) {
+        withUnsafeBytes(of: v) { d.append(contentsOf: $0) }
+    }
+
+    private func send(_ body: Data) -> Bool {
+        guard connect() else { return false }
+        var msg = Data()
+        append(&msg, UInt32(body.count))
+        msg.append(body)
+        if IPC.writeAll(fd, msg) { return true }
+        // Dock restarted (the payload went with it): try once more on a new connection.
+        close(fd); fd = -1
+        guard connect(force: true), IPC.writeAll(fd, msg) else { return false }
+        return true
+    }
+
+    /// An open, greeted connection to the payload. Retries at most every 2 s when it isn't there.
+    private func connect(force: Bool = false) -> Bool {
+        if fd >= 0 { return true }
+        guard Self.sipAllowsLoading, force || Date().timeIntervalSince(lastTry) > 2 else { return false }
+        lastTry = Date()
+        let s = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard s >= 0 else { return false }
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let path = Self.socketPath
+        withUnsafeMutableBytes(of: &addr.sun_path) { p in
+            path.utf8CString.withUnsafeBytes { src in p.copyMemory(from: UnsafeRawBufferPointer(rebasing: src.prefix(p.count - 1))) }
+        }
+        let ok = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(s, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        guard ok == 0 else { close(s); return false }
+        var tv = timeval(tv_sec: 0, tv_usec: 200_000)
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var nosig: Int32 = 1
+        setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &nosig, socklen_t(MemoryLayout<Int32>.size))
+        // Hello: the payload answers with its version.
+        var hello = Data()
+        withUnsafeBytes(of: UInt32(1)) { hello.append(contentsOf: $0) }
+        hello.append(0x01)
+        var reply = [UInt8](repeating: 0, count: 64)
+        guard IPC.writeAll(s, hello), read(s, &reply, reply.count) > 0,
+              String(decoding: reply, as: UTF8.self).hasPrefix("paw-dock ") else { close(s); return false }
+        fd = s
+        Log.app.notice("dock: payload connected")
+        return true
+    }
+}

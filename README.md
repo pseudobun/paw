@@ -89,6 +89,8 @@ Press `ctrl+←/→` to move focus, `hyper+w` for bsp, `hyper+tab` for the overv
 
 - **Start at login:** set `openAtLogin: true` in the config.
 - **Workspaces in your menu bar:** see [Status bar](#status-bar) for a step-by-step sketchybar setup.
+- **Much faster workspace switching:** the optional Dock helper, see
+  [Faster workspace switching](#faster-workspace-switching-optional). It needs SIP partly off.
 
 ### Updates
 
@@ -143,6 +145,68 @@ Accessibility after every rebuild. `paw` (and hop, and your bar) talks to whiche
 
 </details>
 
+## Faster workspace switching (optional)
+
+Out of the box paw moves windows the way every macOS window manager without special rights
+does: over Accessibility, asking each window's app to move it. That works everywhere, but an
+app moves its window only when it gets round to it, so a workspace switch takes 30–150 ms
+(longer for busy apps), and windows of different apps don't land in the same frame.
+
+The **Dock helper** moves windows straight in the window server instead: a small library paw
+loads into Dock.app, the one process macOS lets move any window. Every window of a switch then
+moves at once, in the same frame, without waiting for any app. Measured on an M-series MacBook:
+
+| | Accessibility | Dock helper |
+|---|---|---|
+| windows in place after a switch (median) | ~100 ms | ~30 ms |
+| new windows shown and old ones hidden | apart, as each app gets to it | in the same frame |
+
+Loading code into Dock needs **System Integrity Protection partly off** (its debugging
+restrictions), like [yabai's scripting addition](https://github.com/koekeishiya/yabai/wiki/Disabling-System-Integrity-Protection).
+Everything else works the same with SIP on; without the helper paw simply uses Accessibility.
+
+> [!warning]
+> Turning off SIP's debugging, filesystem and NVRAM protections lets any process running as
+> **root** read and change other processes (Dock among them), system files and NVRAM. Ordinary
+> apps without root gain nothing, but anything you ever run with `sudo` can do more harm than
+> with SIP fully on. Some software (anti-cheat, MDM, iOS apps on the Mac) may refuse to run with
+> SIP partly off. You can turn it back on any time (step 5).
+
+**Apple silicon only** (the helper is built for arm64e).
+
+1. **Turn off SIP's debugging restrictions** (in Recovery; SIP can't be changed from macOS):
+   1. Shut the Mac down. Hold the power button until *Loading startup options* appears,
+      choose **Options → Continue** and sign in.
+   2. In the menu bar: **Utilities → Terminal**, then:
+      ```sh
+      csrutil enable --without fs --without debug --without nvram
+      ```
+   3. `reboot`.
+2. **Allow arm64e code from outside Apple in Dock** (Dock is an arm64e process), in macOS:
+   ```sh
+   sudo nvram boot-args=-arm64e_preview_abi
+   ```
+   then restart once more. If `nvram boot-args` already shows other arguments, keep them:
+   `sudo nvram boot-args="<what's there> -arm64e_preview_abi"`.
+3. **Check:** `csrutil status` says *Custom Configuration* with *Debugging Restrictions:
+   disabled*, and `nvram boot-args` shows `-arm64e_preview_abi`.
+4. **Install the helper:**
+   ```sh
+   sudo paw dock install     # paw-dev for a build from source
+   paw dock status           # sip: …off, installed: yes, loaded: yes
+   ```
+   It copies the helper (from paw.app) to `/Library/Application Support/paw`, owned by root, and
+   adds a launch daemon (`com.pseudobun.paw.dock`) that loads it into Dock now, after every
+   restart and whenever Dock restarts. paw picks it up within a couple of seconds; `paw status`
+   shows `windowMoves: through the Dock helper`. Updating paw? Run `sudo paw dock install` again
+   so the helper matches.
+5. **Undo:** `sudo paw dock uninstall` (then `killall Dock`), and to turn SIP fully back on, in
+   Recovery: `csrutil enable`; `sudo nvram -d boot-args` removes the boot argument.
+
+`layout.windowServer: false` keeps windows on Accessibility even with the helper loaded. A size
+change still goes through the window's app (only it can lay itself out again); the helper moves
+windows that keep their size, which is every window of an ordinary workspace switch.
+
 ## Requirements
 
 - macOS 14 Sonoma or later. Release builds are universal; paw is developed and tested on Apple
@@ -150,6 +214,8 @@ Accessibility after every rebuild. `paw` (and hop, and your bar) talks to whiche
 - The **Accessibility** permission
 - Optional: the **Screen Recording** permission, for live window pictures in the overview
   (`overview.thumbnails`)
+- Optional, Apple silicon: SIP's debugging restrictions off, for the Dock helper
+  ([Faster workspace switching](#faster-workspace-switching-optional))
 - Optional: [sketchybar-app-font](https://github.com/kvndrsslr/sketchybar-app-font) in
   `~/Library/Fonts` for app glyphs in the indicators (without it they show the app's own icon),
   and a Nerd Font such as `brew install --cask font-geist-mono-nerd-font` for their text
@@ -377,7 +443,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 
 | Section | Keys |
 |---|---|
-| `layout` | `default` (`stack`; also `bsp columns master float`), `minTileWidth` (0: off), `minTileHeight` (0), `placeholders` (true: a placeholder for windows that won't shrink to their tile; false: they stick out), `placeholderMinWidth` (160), `placeholderMinHeight` (120), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10), `unassignedWorkspace` ("": windows of apps no preset places stay put; or a workspace) |
+| `layout` | `default` (`stack`; also `bsp columns master float`), `minTileWidth` (0: off), `minTileHeight` (0), `placeholders` (true: a placeholder for windows that won't shrink to their tile; false: they stick out), `placeholderMinWidth` (160), `placeholderMinHeight` (120), `windowServer` (true: move windows through the Dock helper when it's loaded, see Faster workspace switching), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10), `unassignedWorkspace` ("": windows of apps no preset places stay put; or a workspace) |
 | `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends), `wrapWorkspaces` (false: workspace next/prev stop at the first and last) |
 | `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
 | `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |
@@ -392,7 +458,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged`, `displaysChanged` (shell commands with `PAW_*` variables) |
 | `mouse` | `dropZones` (true), `stackModifier` (`alt`), `seamHandles` (true), `gestures` (`[{ button: "middle", direction: "left", command: "workspace prev" }, …]`; buttons `middle back forward`, directions `left right up down click`) |
 | `overview` | `thumbnails` (`auto`: when Screen Recording is allowed; `on` asks for it; `off`) |
-| `hud` | `workspace` (true), `durationMs` (600) |
+| `hud` | `workspace` (true), `durationMs` (600), `edges` (true) |
 | `border` | `enabled` (false), `color` (`0xccead186`), `width` (2), `radius` (12), `offset` (2) |
 | `updates` | `check` (true: look once a day and offer new versions), `automatic` (false: install without asking) |
 | `openAtLogin` | |
@@ -589,6 +655,8 @@ follow [Conventional Commits](https://www.conventionalcommits.org).
 ## Credits
 
 App glyphs come from [sketchybar-app-font](https://github.com/kvndrsslr/sketchybar-app-font).
+The Dock helper's loader follows yabai's scripting-addition loader, whose arm64e path is based on
+work by [Jeremy Legendre](https://github.com/jslegendre).
 Ideas borrowed with thanks from [yabai](https://github.com/koekeishiya/yabai),
 [AeroSpace](https://github.com/nikitabobko/AeroSpace) and TrellisWM.
 

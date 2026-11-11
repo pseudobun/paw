@@ -228,7 +228,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "workspaces": names, "stacks": "\(wm.indicators.snapshot.count)",
                     "config": settings.url.path, "error": settings.error ?? "",
                     "bindings": wm.hotkeys.problems.isEmpty ? "ok" : wm.hotkeys.problems.joined(separator: "; "),
-                    "iconFont": wm.indicators.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok"]
+                    "iconFont": wm.indicators.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok",
+                    "windowMoves": DockBridge.shared.statusLine]
         case "query":
             let data = (try? JSONSerialization.data(withJSONObject: wm.query(), options: [.prettyPrinted, .sortedKeys])) ?? Data()
             return ["json": String(decoding: data, as: UTF8.self)]

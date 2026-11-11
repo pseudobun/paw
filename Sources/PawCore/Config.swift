@@ -60,6 +60,10 @@ public struct PawConfig: Codable, Equatable, Sendable {
         /// Resizing stops before a tile (and so a placeholder) gets smaller than this.
         public var placeholderMinWidth = 160.0
         public var placeholderMinHeight = 120.0
+        /// Move windows through paw's Dock helper when it's loaded (`sudo paw dock install`,
+        /// needs SIP's debugging restrictions off): straight in the window server, without
+        /// waiting for each app, so workspaces switch much faster. false: always accessibility.
+        public var windowServer = true
         /// Where `initiate` and setup switches put windows of apps no preset or rule places:
         /// a workspace name, or "" to leave them on the workspace they're on.
         public var unassignedWorkspace = ""
@@ -282,6 +286,9 @@ public struct PawConfig: Codable, Equatable, Sendable {
         /// Flash the workspace's number and apps when it changes.
         public var workspace = true
         public var durationMs = 600.0
+        /// Islands at the middle of a display's left and right edges: the workspaces
+        /// `workspace prev|next` go to there.
+        public var edges = true
         public init() {}
     }
 
@@ -382,13 +389,14 @@ extension PawConfig {
 }
 
 extension PawConfig.Layout {
-    enum CodingKeys: String, CodingKey, CaseIterable { case `default`, gap, padding, barTop, barBottom, workspaces, unassignedWorkspace, minTileWidth, minTileHeight, placeholders, placeholderMinWidth, placeholderMinHeight }
+    enum CodingKeys: String, CodingKey, CaseIterable { case `default`, gap, padding, barTop, barBottom, workspaces, unassignedWorkspace, minTileWidth, minTileHeight, placeholders, placeholderMinWidth, placeholderMinHeight, windowServer }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.default, &`default`); try f(.gap, &gap); try f(.padding, &padding); try f(.barTop, &barTop)
         try f(.barBottom, &barBottom); try f(.workspaces, &workspaces); try f(.unassignedWorkspace, &unassignedWorkspace)
         try f(.minTileWidth, &minTileWidth); try f(.minTileHeight, &minTileHeight)
         try f(.placeholders, &placeholders); try f(.placeholderMinWidth, &placeholderMinWidth); try f(.placeholderMinHeight, &placeholderMinHeight)
+        try f(.windowServer, &windowServer)
     }
 }
 
@@ -444,10 +452,10 @@ extension PawConfig.Border {
 }
 
 extension PawConfig.HUD {
-    enum CodingKeys: String, CodingKey, CaseIterable { case workspace, durationMs }
+    enum CodingKeys: String, CodingKey, CaseIterable { case workspace, durationMs, edges }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.workspace, &workspace); try f(.durationMs, &durationMs)
+        try f(.workspace, &workspace); try f(.durationMs, &durationMs); try f(.edges, &edges)
     }
 }
 

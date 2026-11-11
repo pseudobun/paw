@@ -20,6 +20,7 @@ enum CLI {
         "setups": setups,
         "subscribe": subscribe,
         "preview": Preview.run,
+        "dock": DockCLI.run,
     ]
 
     static func runIfRequested(_ argv: [String]) {
@@ -80,6 +81,9 @@ enum CLI {
           preview <out.png> [--fonts=DIR]   render stack indicators with your config
           settings [page]     open the settings window, e.g. on its about page (also in the menu bar icon)
           update [--check]    install the newest version now (paw restarts); --check only looks
+          dock install|uninstall|status
+                              the Dock helper: windows move through the window server, much faster
+                              workspace switching (needs SIP's debugging restrictions off; sudo)
           quit                quit (puts hidden windows back on screen)
           version
         """)
@@ -146,7 +150,7 @@ enum CLI {
 
     static func status(_ args: [String]) -> Int32 {
         guard let r = request("status", timeout: 3) else { return 1 }
-        for k in ["version", "pid", "trusted", "windows", "workspaces", "stacks", "bindings", "iconFont", "config", "error"] {
+        for k in ["version", "pid", "trusted", "windows", "workspaces", "stacks", "bindings", "iconFont", "windowMoves", "config", "error"] {
             if let v = r[k] as? String, !v.isEmpty { print("\(k): \(v)") }
         }
         return 0

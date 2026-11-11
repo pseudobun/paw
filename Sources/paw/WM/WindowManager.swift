@@ -82,6 +82,12 @@ final class WindowManager {
     let moveHUD = MoveHUD()
     let placeholders = Placeholders()
     let border = FocusBorder()
+    let edges = EdgeMarkers()
+    /// Inside a workspace switch: indicators, border and edges wait until switching settles.
+    private var settling = false
+    private var settleWork: DispatchWorkItem?
+    /// The workspace a run of quick switches started from (for one workspaceChanged at the end).
+    private var burstPrev: String?
     /// Sizes apps keep their windows at, at least (learned when a window sticks out of its tile).
     private var windowMins: [WindowID: CGSize] = [:]
     private var overflowSuspects: [WindowID: CGSize] = [:]
@@ -116,6 +122,7 @@ final class WindowManager {
         tracker.onEvent = { [weak self] in self?.handle($0) }
         hotkeys.run = { [weak self] in self?.run($0) }
         indicators.onFocus = { [weak self] id in self?.focusWindow(id, warp: false) }
+        edges.onClick = { [weak self] name in self?.show(name) }
         configChanged()
         gestures.start()
         if !hotkeys.start() { Log.app.error("key bindings: event tap not allowed (Accessibility)") }
@@ -151,7 +158,9 @@ final class WindowManager {
             if let self, app.activationPolicy == .regular, !self.tracker.isObserving(app.processIdentifier) {
                 self.adopt(app, state: nil)
             }
-            self?.pruneDead()
+            // Not right away: listing every window waits on the window server, and an app comes
+            // forward with every workspace switch.
+            self?.schedulePrune()
             self?.syncFocus(app.processIdentifier)
             // Another app in front (one paw doesn't manage, say): the border follows at once.
             self?.updateIndicators()
@@ -172,6 +181,7 @@ final class WindowManager {
     }
 
     func configChanged() {
+        DockBridge.shared.enabled = config.layout.windowServer
         hotkeys.set(config.bindings, modes: config.modes)
         gestures.configChanged()
         if let m = mode, config.modes[m] == nil { setMode(nil) }
@@ -219,11 +229,12 @@ final class WindowManager {
     /// and the screen edge, with `indicator.offsetX` on both sides of it.
     private func indicatorPadding(_ p: Padding) -> Padding {
         let i = config.indicator
-        guard i.enabled else { return p }
-        let room = i.width + 2 * i.offsetX
         var p = p
-        if [.auto, .left].contains(i.side) { p.left = max(p.left, room) }
-        if [.auto, .right].contains(i.side) { p.right = max(p.right, room) }
+        if i.enabled {
+            let room = i.width + 2 * i.offsetX
+            if [.auto, .left].contains(i.side) { p.left = max(p.left, room) }
+            if [.auto, .right].contains(i.side) { p.right = max(p.right, room) }
+        }
         return p
     }
 
@@ -352,14 +363,6 @@ final class WindowManager {
 
     var orderedNames: [String] { workspaces.keys.sorted(by: Self.nameOrder) }
 
-    /// sketchybar's arrangement-id for a display: its 1-based position among the window server's
-    /// managed displays (NSScreen.screens and CGGetActiveDisplayList use other orders).
-    static func arrangement(of id: CGDirectDisplayID) -> Int {
-        guard let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(),
-              let text = CFUUIDCreateString(nil, uuid) as String? else { return 0 }
-        return SkyLight.managedDisplayUUIDs().firstIndex { $0.caseInsensitiveCompare(text) == .orderedSame }.map { $0 + 1 } ?? 0
-    }
-
     /// Numbers in order, then names.
     static func nameOrder(_ a: String, _ b: String) -> Bool {
         switch (Int(a), Int(b)) {
@@ -459,6 +462,12 @@ final class WindowManager {
             layout(ws, animated: true)
             if wasFocused {
                 // macOS would focus another window of the same app, maybe on a hidden workspace.
+                // One of the same app here keeps it, though (a popup closing, say): the one the
+                // app itself has focused, else any; the keys stay with the app being typed in.
+                let appFocused = AXUIElementCreateApplication(w.pid).element(kAXFocusedWindowAttribute)?.windowID
+                if let same = appFocused.flatMap({ ws.contains($0) ? $0 : nil }) ?? ws.allWindows.first(where: { windows[$0]?.pid == w.pid }) {
+                    ws.focused = same
+                }
                 ignoreFocus(0.35)
                 focusWindow(ws.focused, warp: false)
             }
@@ -473,6 +482,15 @@ final class WindowManager {
 
     /// Drops windows macOS no longer has. Some apps (Find My) quit as their last window closes
     /// without a destroyed element paw can match or a terminate notification reaching it.
+    private var pruneWork: DispatchWorkItem?
+
+    private func schedulePrune() {
+        pruneWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.pruneDead() }
+        pruneWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+
     private func pruneDead() {
         guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return }
         let alive = Set(list.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value })
@@ -483,8 +501,11 @@ final class WindowManager {
     }
 
     private func window(for el: AXUIElement) -> Window? {
+        // Comparing elements stays in paw; asking for the window number goes to the app (and
+        // every window paw moves sends a notification).
+        if let w = windows.values.first(where: { CFEqual($0.element, el) }) { return w }
         if let id = el.windowID, let w = windows[id] { return w }
-        return windows.values.first { CFEqual($0.element, el) }
+        return nil
     }
 
     // MARK: - Events
@@ -936,6 +957,11 @@ final class WindowManager {
     /// Right after paw set a window's frame: AX set calls return once the app has applied them,
     /// so a bigger size read back now is the app's own minimum. Learns it; true when new.
     private func learnClamp(_ w: Window, _ r: CGRect) -> Bool {
+        // Moves still waiting to go out: look once they have.
+        if AXQueue.deferring || w.isMoving {
+            if let ws = workspaceOf(w.id) { scheduleOverflowCheck(ws.name, after: 0.15) }
+            return false
+        }
         guard let s = w.element.size else { return false }
         let over = CGSize(width: s.width > r.width + 4 ? s.width : 0, height: s.height > r.height + 4 ? s.height : 0)
         guard over.width > 0 || over.height > 0 else { return false }
@@ -970,7 +996,11 @@ final class WindowManager {
     /// Parks a window in a corner of its display with one pixel showing (AeroSpace's trick:
     /// macOS keeps windows that are fully off screen from moving).
     private func hide(_ w: Window, from ws: Workspace) {
-        if ws.isFloating(w.id), !w.isHidden { _ = w.readFrame(); w.floatFrame = w.frame }
+        if ws.isFloating(w.id), !w.isHidden {
+            // Still on its way somewhere: where it's going is where it is.
+            if !w.isMoving { _ = w.readFrame() }
+            w.floatFrame = w.frame
+        }
         animator.cancel(w.id)
         guard let origin = parkingSpot(for: w) else { return }
         suppressMoves[w.id] = Date().addingTimeInterval(1)
@@ -1082,22 +1112,42 @@ final class WindowManager {
         let old = displays[di].workspace
         workspace(old).clearZoom()
         ignoreFocus(0.5)
-        for id in workspace(old).allWindows { if let w = windows[id], !w.isHidden { hide(w, from: workspace(old)) } }
+        // Switching through workspaces quickly: what isn't the windows themselves (indicators,
+        // border, edges, the workspaceChanged event) catches up once it stops.
+        settling = true
+        defer { settling = false; scheduleSettle() }
+        if burstPrev == nil { burstPrev = label(old) }
         displays[di].workspace = name
         focusedDisplay = di
         lastSwitch = Date()
         if old != name { lastWorkspace = old }
-        layout(ws, animated: false)
+        // The new windows come up and the old ones go away together, every app at once.
+        AXQueue.run {
+            layout(ws, animated: false)
+            for id in workspace(old).allWindows { if let w = windows[id], !w.isHidden { hide(w, from: workspace(old)) } }
+        }
         if let f = ws.focused ?? ws.allWindows.first {
             focusWindow(f, warp: true)
         } else {
             // Nothing there: no window on another workspace keeps the keys.
             NSApp.activate(ignoringOtherApps: true)
-            updateIndicators()
         }
-        emitWorkspaceChanged(prev: label(old))
         showHUD(name, on: di)
         scheduleSave()
+    }
+
+    private func scheduleSettle() {
+        settleWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            updateIndicators()
+            if let prev = burstPrev {
+                burstPrev = nil
+                emitWorkspaceChanged(prev: prev)
+            }
+        }
+        settleWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
     }
 
     /// The display a workspace belongs to: its preset's pin or the display it was made on.
@@ -2059,6 +2109,7 @@ final class WindowManager {
     // MARK: - Indicators, hooks, state
 
     func updateIndicators() {
+        if settling { return }
         var stacks: [Stack] = []
         let focused = NSWorkspace.shared.frontmostApplication.flatMap { _ in focusedID }
         for (di, d) in displays.enumerated() {
@@ -2093,6 +2144,32 @@ final class WindowManager {
             drag: { [weak self] id, p in self?.placeholderDragged(id, to: p) },
             drop: { [weak self] id, p in self?.placeholderDropped(id, at: p) }))
         seams.update()
+        updateEdges()
+    }
+
+    /// The edge islands: on each display, the workspaces `workspace prev|next` would show there.
+    private func updateEdges() {
+        guard config.hud.edges else { edges.hideAll(); return }
+        let names = numbered
+        var markers: [EdgeMarkers.Marker] = []
+        for (di, d) in displays.enumerated() {
+            guard let i = names.firstIndex(of: d.workspace), names.count > 1 else { continue }
+            for step in [-1, 1] {
+                var j = i + step
+                if !names.indices.contains(j) {
+                    guard config.focus.wrapWorkspaces else { continue }
+                    j = (j + names.count) % names.count
+                }
+                let n = names[j]
+                // Only a workspace that would come up on this very display.
+                guard n != d.workspace, displayShowing(n) == nil, (homeDisplay(n) ?? focusedDisplay) == di else { continue }
+                var apps: [String] = []
+                for a in workspace(n).allWindows.compactMap({ windows[$0]?.app }) where !apps.contains(a) { apps.append(a) }
+                markers.append(.init(display: d.id, left: step < 0, name: n, label: label(n), apps: apps, area: d.area, screen: d.frame))
+            }
+        }
+        edges.style = indicators.style
+        edges.apply(markers, icons: settings.icons, config: config)
     }
 
     private func runHook(_ cmd: String, _ env: [String: String]) {
@@ -2224,15 +2301,36 @@ final class WindowManager {
 
     /// Workspaces for `paw query`.
     func query() -> [[String: Any]] {
-        numbered.map { name in
+        // Labels once for all (each `label` call works out the whole order again).
+        let core = numberedWorkspaces
+        let byNumber = extraPins.isEmpty == false || orderedNames.contains(where: { homeDisplay($0) != nil })
+        let index = Dictionary(core.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        func label(_ name: String) -> String {
+            if name == Self.side { return "+\(workspaces[name]?.allWindows.count ?? 0)" }
+            return byNumber ? index[name].map { "\($0 + 1)" } ?? name : name
+        }
+        let focusedName = focusedWorkspace.name
+        // sketchybar's arrangement-id for a display: its 1-based position among the window
+        // server's managed displays (NSScreen.screens and CGGetActiveDisplayList use other
+        // orders). One window-server call for all, not one per workspace.
+        let uuids = SkyLight.managedDisplayUUIDs()
+        var arrangement: [CGDirectDisplayID: Int] = [:]
+        for d in displays {
+            guard let uuid = CGDisplayCreateUUIDFromDisplayID(d.id)?.takeRetainedValue(),
+                  let text = CFUUIDCreateString(nil, uuid) as String? else { continue }
+            arrangement[d.id] = uuids.firstIndex { $0.caseInsensitiveCompare(text) == .orderedSame }.map { $0 + 1 } ?? 0
+        }
+        let names = (workspaces[Self.side] != nil ? [Self.side] : []) + core
+        return names.map { name -> [String: Any] in
             let ws = workspace(name)
             let pinned = homeDisplay(name)
-            let home = pinned ?? displayShowing(name)
-            let shown = displayShowing(name).map { TreeLayout.windowFrames(ws, in: displays[$0].area, gap: config.layout.gap) } ?? [:]
-            return ["name": label(name), "id": name, "visible": displayShowing(name) != nil, "focused": name == focusedWorkspace.name,
+            let showing = displayShowing(name)
+            let home = pinned ?? showing
+            let shown = showing.map { TreeLayout.windowFrames(ws, in: displays[$0].area, gap: config.layout.gap) } ?? [:]
+            return ["name": label(name), "id": name, "visible": showing != nil, "focused": name == focusedName,
                     "displayID": home.map { Int(displays[$0].id) } ?? 0, "pinned": pinned != nil,
-                    "arrangement": home.map { Self.arrangement(of: displays[$0].id) } ?? 0,
-                    "display": displayShowing(name).map { $0 + 1 } ?? 0, "layout": ws.layout.rawValue,
+                    "arrangement": home.flatMap { arrangement[displays[$0].id] } ?? 0,
+                    "display": showing.map { $0 + 1 } ?? 0, "layout": ws.layout.rawValue,
                     "zoom": ws.zoomLevel.level, "zoomLevels": ws.zoomLevel.levels,
                     "windows": ws.allWindows.compactMap { id -> [String: Any]? in
                         guard let w = windows[id] else { return nil }
