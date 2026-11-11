@@ -72,6 +72,27 @@ local-cert:
     security import "$d/c.p12" -k ~/Library/Keychains/login.keychain-db -P paw -T /usr/bin/codesign
     echo "created {{local_identity}}; run just dev, then grant Accessibility to paw Dev once"
 
+# Signing for just bench only: a separate keychain (never on the search list except while
+# just bench prepare signs), so builds don't prompt and paw Dev's own grants stay apart.
+# Remove with: security delete-keychain ~/Library/Keychains/paw-bench.keychain-db; rm ~/Library/Keychains/paw-bench.keychain-db.password
+bench-cert:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    kc="$HOME/Library/Keychains/paw-bench.keychain-db"
+    if [ -e "$kc" ]; then echo "already exists: $kc"; exit 0; fi
+    d=$(mktemp -d); trap 'rm -rf "$d"' EXIT
+    printf '[req]\ndistinguished_name=dn\nprompt=no\nx509_extensions=ext\n[dn]\nCN=paw Bench Signing\n[ext]\nbasicConstraints=critical,CA:false\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=critical,codeSigning\n' > "$d/c.cnf"
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout "$d/k.pem" -out "$d/c.pem" -days 3650 -config "$d/c.cnf" 2>/dev/null
+    legacy=$(openssl version | grep -q LibreSSL || echo -legacy)
+    openssl pkcs12 -export $legacy -inkey "$d/k.pem" -in "$d/c.pem" -out "$d/c.p12" -passout pass:paw
+    pw=$(openssl rand -hex 24)
+    (umask 077; printf %s "$pw" > "$kc.password")
+    security create-keychain -p "$pw" "$kc"
+    security set-keychain-settings "$kc"
+    security import "$d/c.p12" -k "$kc" -P paw -T /usr/bin/codesign >/dev/null
+    security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$kc" >/dev/null
+    echo "created paw Bench Signing in $kc; next: just bench prepare <label>, then just bench grant <label> --user $(id -un)"
+
 # Start the release paw at login with launchd instead of the openAtLogin login item
 launchd:
     mkdir -p "$(dirname "{{launch_agent}}")"

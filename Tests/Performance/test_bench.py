@@ -1,6 +1,7 @@
 """Controller checks with synthetic records and mocked processes; no desktop benchmark."""
 import contextlib
 import copy
+import ctypes
 import importlib.util
 import io
 import json
@@ -154,30 +155,45 @@ class SafetyTests(unittest.TestCase):
         except RuntimeError as error:
             self.assertEqual(bench.error_chain(error), ["socket missing", "cleanup failed"])
 
-    def test_private_distinct_account_registration(self):
-        with tempfile.TemporaryDirectory() as directory:
-            actual = SimpleNamespace(pw_name="pawperf", pw_uid=os.getuid(), pw_dir=directory)
-            daily = SimpleNamespace(pw_name="daily", pw_uid=os.getuid() + 1)
-            marker = Path(directory) / bench.ACCOUNT_MARKER
-            with self.assertRaises(RuntimeError): bench.account_registration(marker, actual)
-            with patch.object(bench, "local_test_user", return_value=actual), patch.object(bench.pwd, "getpwnam", return_value=daily), contextlib.redirect_stdout(io.StringIO()):
-                args = SimpleNamespace(test_user="pawperf", daily_user="daily"); bench.register_test_user(args)
-                bench.account_registration(marker, actual)
-                with self.assertRaises(FileExistsError): bench.register_test_user(args)
-                marker.chmod(0o644)
-                with self.assertRaises(RuntimeError): bench.account_registration(marker, actual)
-                marker.chmod(0o600)
-                with patch.object(bench.pwd, "getpwnam", return_value=actual):
-                    with self.assertRaises(RuntimeError): bench.account_registration(marker, actual)
-                    marker.unlink()
-                    with self.assertRaises(RuntimeError): bench.register_test_user(args)
-            self.assertFalse(marker.exists())
+    def test_current_user_must_be_named_and_own_the_console(self):
+        actual = SimpleNamespace(pw_name="me", pw_uid=501, pw_dir="/Users/me")
+        def fake(*args, **kwargs):
+            return {"stat": "me", "who": "me console\nme ttys001"}.get(args[0], "")
+        with patch.object(bench.sys, "platform", "darwin"), patch.object(bench.os, "getuid", return_value=501), patch.object(bench.pwd, "getpwuid", return_value=actual), patch.object(bench.getpass, "getuser", return_value="me"), patch.object(Path, "home", return_value=Path(actual.pw_dir)), patch.object(bench, "command", side_effect=fake), patch.object(bench.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout="--env", stderr="")):
+            self.assertEqual(bench.current_user("me")["uid"], 501)
+            with self.assertRaises(RuntimeError): bench.current_user("other")
+            with patch.object(bench.os, "getuid", return_value=0), self.assertRaises(RuntimeError): bench.current_user("me")
 
-    def test_admin_and_wrong_login_refused(self):
-        actual = SimpleNamespace(pw_name="pawperf", pw_uid=501, pw_dir="/Users/pawperf")
-        with patch.object(bench.sys, "platform", "darwin"), patch.object(bench.os, "getuid", return_value=501), patch.object(bench.pwd, "getpwuid", return_value=actual), patch.object(bench.getpass, "getuser", return_value="pawperf"), patch.object(Path, "home", return_value=Path(actual.pw_dir)), patch.object(bench, "command", return_value="staff admin"):
-            with self.assertRaises(RuntimeError): bench.local_test_user("pawperf")
-            with self.assertRaises(RuntimeError): bench.local_test_user("daily")
+    def test_cli_processes_are_not_apps(self):
+        exe = {1: "/Applications/paw.app/Contents/MacOS/paw", 2: "/Users/me/Applications/paw Dev.app/Contents/MacOS/paw",
+               3: "/Applications/paw.app/Contents/MacOS/paw", 4: "/Users/me/Applications/paw Bench.app/Contents/MacOS/paw"}
+        ps = "\n".join([f"{os.getuid()} 1 {exe[1]}", f"{os.getuid()} 2 {exe[2]} -psn_0_1",
+                        f"{os.getuid()} 3 /opt/homebrew/bin/paw subscribe workspaceChanged",
+                        f"{os.getuid()} 4 {exe[4]} subscribe --reconnect", f"{os.getuid() + 1} 5 {exe[1]}"])
+        def pidpath(pid, buffer, size):
+            path = exe.get(pid, exe[1]).encode(); ctypes.memmove(buffer, path, len(path)); return len(path)
+        lib = SimpleNamespace(proc_pidpath=pidpath)
+        with patch.object(bench, "command", return_value=ps), patch.object(bench.ctypes, "CDLL", return_value=lib):
+            self.assertEqual(bench.main_apps(), [(1, Path("/Applications/paw.app")), (2, Path("/Users/me/Applications/paw Dev.app"))])
+
+    def test_restore_stops_benchmark_before_reopening_daily_paw(self):
+        app, daily, release = Path("/b/paw Bench.app"), Path("/d/paw Dev.app"), Path("/Applications/paw.app")
+        calls = []
+        with patch.object(bench, "stop_candidate", side_effect=lambda *a, **k: calls.append(("stop", a, k))), patch.object(bench, "main_apps", return_value=[(9, release)]), patch.object(bench, "command", side_effect=lambda *a: calls.append(a)):
+            bench.restore(app, [str(daily), str(release)])
+        self.assertEqual(calls, [("stop", (app,), {"force": True}), ("open", str(daily))])
+        with patch.object(bench, "stop_candidate", side_effect=RuntimeError("still running")), patch.object(bench, "command") as run:
+            with self.assertRaises(RuntimeError): bench.restore(app, [str(daily)])
+            run.assert_not_called()
+
+    def test_forced_stop_escalates_only_for_benchmark_app(self):
+        app = Path("/b/paw Bench.app")
+        with patch.object(bench, "main_apps", return_value=[(7, app)]), patch.object(bench, "wait_for", side_effect=RuntimeError("did not quit")), patch.object(bench.os, "kill") as kill:
+            with self.assertRaises(RuntimeError): bench.stop_candidate(app)
+            self.assertEqual([c.args for c in kill.call_args_list], [(7, signal.SIGTERM)])
+            kill.reset_mock()
+            with self.assertRaises(RuntimeError): bench.stop_candidate(app, force=True)
+            self.assertEqual([c.args for c in kill.call_args_list], [(7, signal.SIGTERM), (7, signal.SIGKILL)])
 
     def test_stale_pid_is_never_resumed(self):
         target = [123, os.getuid(), "start", "/test/TextEdit"]

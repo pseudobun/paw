@@ -3,7 +3,9 @@ import AppKit
 import Darwin
 import Foundation
 
-private let socketPath = NSHomeDirectory() + "/Library/Application Support/com.pseudobun.paw.dev/paw.sock"
+// Controlled runs pass paw Bench's socket; quick diagnostics use the running paw Dev.
+private let socketPath = ProcessInfo.processInfo.environment["PAW_BENCH_SOCKET"]
+    ?? NSHomeDirectory() + "/Library/Application Support/com.pseudobun.paw.dev/paw.sock"
 private func now() -> Double { Double(DispatchTime.now().uptimeNanoseconds) / 1e6 }
 
 private func send(_ text: String) throws -> [String: Any] {

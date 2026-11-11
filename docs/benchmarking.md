@@ -4,11 +4,8 @@ One entrypoint, `just bench`: the Swift driver owns workloads, and the stdlib Py
 owns artifacts, controlled sessions, captures and comparisons. Normal builds compile the
 in-app recorder out. This prepares measurement infrastructure, not an optimization.
 
-**Draft status:** app code compiled with/without `PAW_PROFILE`; the driver and pure helper
-checks compiled, and the fixture type-checked. Automated checks, signed profiling bundles,
-account setup, launches, traces and benchmark scenes have not been executed. Do not treat this
-as a validated regression gate until the pilot below passes. The first draft commit skips CI
-to preserve the explicit request not to run tests yet; the CI check step is prepared for later.
+**Status:** see "Validation status" at the end; it lists what has run on real hardware and what
+is still outstanding. Do not treat a verdict as trustworthy before those items pass.
 
 ## Quick diagnostics
 
@@ -37,85 +34,75 @@ including hidden windows. It is not presented-frame latency. Every reply must pa
 no application error; missing windows, timeouts and changed membership fail the run. The new
 workload is version 2 and cannot use the historical `PERFORMANCE.md` tables as calibration.
 
-## Prepare without running apps or tests
+## One-time setup
 
-Use full Xcode/Instruments, Python 3.9+ and a stable signing certificate. The existing bundler
-produces optimized Release apps, debug information and a matching dSYM before stripping its
-app copy. The build command never launches, installs or measures anything:
+Use full Xcode/Instruments and Python 3.9+. Benchmark builds are a separate app, **paw Bench**
+(`com.pseudobun.paw.bench.dev`): its own data, cache, defaults, socket and privacy grants. Your
+daily paw Dev/release PAW, their config, state and grants are never replaced; status bars talking
+to `paw`/`paw-dev` never reach it.
 
 ```sh
-just bench prepare plain-base --plain
-just bench prepare base
-# After the candidate code change, with the same compiler/signing identity:
-just bench prepare candidate
+just bench-cert                          # once: "paw Bench Signing" in its own keychain
+just bench prepare base                  # compile/archive only; never launches anything
+just bench grant base --user "$(id -un)" # once: opens paw Bench managing no window
 ```
+
+`bench-cert` creates `~/Library/Keychains/paw-bench.keychain-db` with a random password in a
+0600 file beside it. It is on the keychain search list only while `prepare` signs (codesign finds
+identities nowhere else), so builds never prompt and `just dev` keeps its own signing. Anyone who
+can run code as you can sign with it, so it is as strong as an "Always Allow" codesign key; remove
+it, and the grants, when done:
+
+```sh
+security delete-keychain ~/Library/Keychains/paw-bench.keychain-db
+rm ~/Library/Keychains/paw-bench.keychain-db.password
+tccutil reset Accessibility com.pseudobun.paw.bench.dev
+tccutil reset ScreenCapture com.pseudobun.paw.bench.dev
+```
+
+`grant` opens paw Bench's Settings → General with a config that ignores every window. Request
+Accessibility (and Screen Recording for `overview-on`) and enable paw Bench in System Settings;
+it waits up to 15 minutes. The grant follows the certificate and bundle ID, so later builds keep
+it. The runner never changes privacy settings itself.
 
 Artifacts live in `build.noindex/bench/builds/<label>/`; labels cannot be reused. Each contains
-the signed dev app, dSYM, fixture app, workload executable, source hashes, tracked dirty patch,
-untracked build-input source archive, UUIDs, compiler/environment/signing metadata and build logs.
-Source capture is restricted to the app/resources, package/version files, bundler, workload
-controller/driver and fixture; unrelated untracked documents are not copied. Changes
-to sources or revision while building fail preparation. The selected app/fixture/driver/dSYM
-hashes are verified before recording. Both A/B sides use the **base artifact's exact driver
-and fixture binaries**; their source and compiler versions must agree with the candidate.
-Do not edit the controller between calibration and comparison.
+the signed paw Bench app, dSYM, fixture app, workload executable, source hashes, tracked dirty
+patch, untracked build-input source archive, UUIDs, compiler/environment/signing metadata and
+build logs. Source capture is restricted to the app/resources, package/version files, bundler,
+workload controller/driver and fixture. Changes to sources or revision while building fail
+preparation. Both A/B sides use the **base artifact's exact driver and fixture binaries**; their
+source and compiler versions must agree with the candidate. Do not edit the controller between
+calibration and comparison: `run` refuses artifacts archived with another controller.
 
-If your checkout is private to the daily user, copy only the controller and prepared artifacts:
+## Controlled sessions (current user)
 
-```sh
-mkdir -p /Users/Shared/paw-bench
-cp scripts/bench/bench.py /Users/Shared/paw-bench/bench.py
-ditto build.noindex/bench/builds /Users/Shared/paw-bench/builds
-```
+`run` is live and opts in by naming your login (`--user`). It refuses root, another logged-in
+user, a console owned by someone else and an active `com.pseudobun.paw` launchd agent. Then it:
 
-The standalone copied controller supports `register`, `run --builds builds`, and `compare`.
-Quick commands, `prepare`, and `check` require the source checkout. No private signing key or
-second Apple Account is needed to run prepared artifacts.
+1. records the running PAW apps (CLI processes such as a status bar's `paw subscribe` are not
+   apps) and starts an independent restorer in its own session, attached by an EOF pipe;
+2. quits those apps with SIGTERM, which puts their hidden windows back;
+3. per batch, replaces only paw Bench's app/data/cache, launches it with an explicit config that
+   manages only the fixture's windows (every other app, including T3 Code, is ignored), starts the
+   fixture, runs the workload and verifies the result;
+4. when the session ends, fails, gets Ctrl-C or SIGTERM, its Terminal closes (SIGHUP) or the
+   controller is SIGKILLed, the restorer quits paw Bench (SIGKILL if it hangs) and reopens the
+   apps from step 1 that are not running. It never starts two window managers.
 
-## Separate local test user, later
-
-Create a Standard local macOS user (for example `pawperf`), save your daily work, and log out
-of the daily user. Fast user switching leaves it logged in. A separate local login shares the
-same machine and system services, but keeps daily files, PAW state and permissions separate.
-No Apple Account/iCloud sign-in is needed. The runner does not create accounts or grant access.
-
-In that test user, explicitly register against your actual daily local login:
+The fixture exits with its controller's pipe. Power loss or killing the restorer too can still
+leave PAW quit: reopen it yourself. Don't use, lock or compile on the desktop during a session.
 
 ```sh
-cd /Users/Shared/paw-bench
-python3 bench.py register --test-user pawperf --daily-user YOUR_DAILY_LOGIN
-```
-
-This creates only `~/.paw-bench-test-account.json` (owned, mode 0600), recording distinct daily
-and test identities. The runner refuses admins, mismatched identities/home/console, another
-logged-in user, and an active PAW launch agent. Registration is deliberate opt-in, not a
-sandbox against intentionally identifying the wrong accounts. If identities change, inspect
-and remove the marker before registering again. No registration has been performed here.
-
-One time, copy a prepared app to `~/Applications/paw Dev.app`, open it, grant Accessibility,
-and grant Screen Recording for `overview-on`. Quit it afterward. This step launches an app;
-it is intentionally left for the pilot. A stable certificate/path helps grants survive builds.
-If Instruments needs Developer Tools permission for the Standard user, resolve it explicitly;
-the runner never changes groups, security settings or permissions for you.
-
-## Controlled sessions, deliberately not run yet
-
-These commands launch apps, move windows and reset the test user's dev app/state/cache.
-They require **every PAW already stopped**. There is no automatic previous-app switching or
-backup/restore system. The installed release and daily user's home are outside the target
-paths. The disposable test account's last candidate app/state may remain after the session.
-
-```sh
-# First, one plain trace; inspect a known PAW symbol in Instruments:
-python3 bench.py run plain-base --builds builds --test-user pawperf --trace --batches 1 --iterations 2
-# Then, one instrumented pilot:
-python3 bench.py run base --builds builds --test-user pawperf --trace --batches 1 --iterations 2
-# After pilot inspection, five unchanged-build calibration batches:
-python3 bench.py run base --builds builds --test-user pawperf
-# Later, five alternating A/B pairs:
-python3 bench.py run base --against candidate --builds builds --test-user pawperf
-# Read-only comparison of the actual printed directories:
-python3 bench.py compare /path/to/calibration /path/to/paired-session
+# Pilots: one plain trace, then one instrumented trace; inspect them in Instruments:
+just bench run plain-base --user "$(id -un)" --trace --batches 1 --iterations 2
+just bench run base --user "$(id -un)" --trace --batches 1 --iterations 2
+# Five unchanged-build calibration batches:
+just bench run base --user "$(id -un)"
+# A/A negative control, then a real A/B, each five alternating pairs:
+just bench run base --against base --user "$(id -un)"
+just bench run base --against candidate --user "$(id -un)"
+# Read-only comparison of the printed directories:
+just bench compare /path/to/calibration /path/to/paired-session
 ```
 
 `--scene` is `switch` (default), `ops`, `idle`, `overview-off`, or `overview-on`. Eight static
@@ -129,8 +116,8 @@ before generalizing beyond this fixture.
 Defaults: 10 round trips/open-close cycles, 2-second spacing, 3-second final drain, 120-second
 idle scene and 5 batches/pairs. `--windows`, `--iterations`, `--pace`, `--settle`, `--duration`,
 `--batches` and `--trace` must match calibration and comparison. Use one display, fixed scaling,
-refresh/appearance and power settings. Do not use, lock or compile on the desktop during a
-scene. Sleep is inhibited while recording; a screen saver may still interfere.
+refresh/appearance and AC power. Sleep is inhibited while recording; a screen saver may still
+interfere. Each batch records the load average before it starts, to explain outliers.
 
 ## Results and profiling
 
@@ -164,20 +151,14 @@ when every pair agrees and the median paired difference exceeds the full calibra
 A zero range or ambiguous result is inconclusive. This is a conservative decision aid,
 not a confidence interval or approval of every resource/behavior trade-off.
 
-## Before taking the draft out of draft
+Ctrl-C/SIGTERM/SIGHUP enter cleanup; restoration runs in the independent restorer either way.
+Logs and incomplete sessions remain for inspection; comparison refuses them.
 
-Run `just bench check` later: pure Swift checks and Python controller checks use synthetic
-records/mocked processes and launch no PAW/fixture/desktop benchmark. This command is prepared
-in CI but has not been executed during preparation. Do not confuse compilation with passing tests.
+## Validation status
 
-Then explicitly run the plain and instrumented pilots. Confirm signing/trust and environment
-delivery; warm-up outside measurement markers; readable symbols/signposts; exact window
-distribution, both workspace directions and native final focus; separate overview open/close
-metrics and eight fresh images on each opening. Check normal exit, Ctrl-C, Terminal close,
-startup failure and the independent hung-app recovery with disposable processes. These checks
-are still outstanding. Only then collect calibration and start evidence-backed optimization.
-
-Ctrl-C/SIGTERM/SIGHUP enter cleanup. The candidate is found by its owned executable path even
-without a socket; fixtures and trace handles belong to the session. SIGKILL/power loss cannot
-clean up the controlled session: stop its candidate/fixture manually before retrying. Logs and
-incomplete sessions remain for inspection; comparison refuses them.
+`just bench check` (pure Swift checks and Python controller checks with synthetic records and
+mocked processes) runs in CI. Checked on real hardware with disposable processes: the hung
+diagnostic's watchdog resumes a stopped target after normal exit, SIGINT, SIGHUP and controller
+SIGKILL; a controlled session restores the daily paw Dev (and stops paw Bench) after a startup
+failure, SIGINT, SIGHUP and controller SIGKILL. Pilots, calibration and A/A/A/B results are
+summarized in the pull request that introduced this harness.

@@ -18,19 +18,20 @@ import select
 import shutil
 import signal
 import socket
-import stat
 import statistics
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import uuid
 from contextlib import ExitStack
 
 ROOT = Path(__file__).resolve().parents[2]
-DEV_ID = "com.pseudobun.paw.dev"
+DEV_ID = "com.pseudobun.paw.dev"  # quick diagnostics drive the developer's running paw Dev
+# Controlled runs use their own app, data, socket, defaults and privacy grants, never the daily PAW's.
+BENCH_ID = "com.pseudobun.paw.bench.dev"
 FIXTURE_NAME = "PAW Performance Fixture"
-ACCOUNT_MARKER = ".paw-bench-test-account.json"
 SCENES = ("switch", "ops", "idle", "overview-off", "overview-on")
 SOURCE_PATHS = ("Sources", "Resources", "Package.swift", "Package.resolved", "VERSION",
                 "scripts/bundle.sh", "scripts/bench", "Tests/Fixtures/Performance.swift")
@@ -96,6 +97,7 @@ def archive_untracked_sources(path):
 
 def build(args):
     out = args.builds.resolve() / label(args.label)
+    require((Path.home() / "Library/Keychains/paw-bench.keychain-db").exists(), "run just bench-cert once: benchmark builds need a stable signature")
     os.umask(0o077)
     out.mkdir(parents=True, exist_ok=False)
     revision = command("git", "rev-parse", "HEAD", cwd=ROOT)
@@ -106,11 +108,19 @@ def build(args):
     archive_untracked_sources(out / "untracked-sources.tar")
     (out / "source.diff").write_bytes(subprocess.run(["git", "diff", "--binary", "HEAD", "--", *SOURCE_PATHS],
                                         cwd=ROOT, capture_output=True, check=True).stdout)
-    env = dict(os.environ, PAW_DEV="1", PAW_DSYM="1", PAW_BUNDLE_ID=DEV_ID,
-               PAW_ARCHS=command("uname", "-m"), PAW_PROFILE="0" if args.plain else "1")
-    with (out / "build.log").open("w") as log:
-        subprocess.run([str(ROOT / "scripts/bundle.sh"), str(out)], env=env,
-                       stdout=log, stderr=subprocess.STDOUT, check=True, cwd=ROOT)
+    env = dict(os.environ, PAW_DEV="1", PAW_DSYM="1", PAW_BUNDLE_ID=BENCH_ID, PAW_APP_NAME="paw Bench",
+               PAW_ARCHS=command("uname", "-m"), PAW_PROFILE="0" if args.plain else "1", PAW_SIGN_IDENTITY="paw Bench Signing")
+    # codesign finds identities only on the search list: add the benchmark keychain just while signing.
+    keychain = Path.home() / "Library/Keychains/paw-bench.keychain-db"
+    command("security", "unlock-keychain", "-p", Path(str(keychain) + ".password").read_text(), keychain)
+    searched = [k for k in re.findall(r'"([^"]+)"', command("security", "list-keychains", "-d", "user")) if Path(k) != keychain]
+    command("security", "list-keychains", "-d", "user", "-s", *searched, keychain)
+    try:
+        with (out / "build.log").open("w") as log:
+            subprocess.run([str(ROOT / "scripts/bundle.sh"), str(out)], env=env,
+                           stdout=log, stderr=subprocess.STDOUT, check=True, cwd=ROOT)
+    finally:
+        command("security", "list-keychains", "-d", "user", "-s", *searched)
     app = out / "paw.app"
     exe = app / "Contents/MacOS/paw"
     fixture = out / (FIXTURE_NAME + ".app") / "Contents"
@@ -152,7 +162,8 @@ def ipc(path, text):
 
 
 def main_apps():
-    output = command("ps", "-axo", "uid=,pid=,command=")
+    """Running PAW apps of this user; CLI processes such as a status bar's `paw subscribe` are not apps."""
+    output = command("ps", "-axww", "-o", "uid=,pid=,command=")
     lib = ctypes.CDLL("/usr/lib/libproc.dylib")
     lib.proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
     apps = []
@@ -164,60 +175,31 @@ def main_apps():
             pid = int(parts[1])
             if lib.proc_pidpath(pid, buffer, len(buffer)) > 0:
                 exe = Path(os.fsdecode(buffer.value))
-                if exe.name == "paw":
+                # LaunchServices starts apps by their full path with no command; options start with "-".
+                if exe.name == "paw" and (parts[2] == str(exe) or parts[2].startswith(str(exe) + " -")):
                     app = exe.parents[2] if str(exe).endswith("/Contents/MacOS/paw") else exe.parent
                     apps.append((pid, app))
     return apps
 
 
-def local_test_user(name):
-    require(sys.platform == "darwin" and os.getuid() != 0, "run as the local test user on macOS, not root")
+def current_user(name):
+    """Deliberate opt-in: --user must name this login. Returns the identity kept with each session."""
+    require(sys.platform == "darwin" and os.getuid() != 0, "run as yourself on macOS, not root")
     actual = pwd.getpwuid(os.getuid())
-    require(name == actual.pw_name == getpass.getuser(), "--test-user must match the current local login")
+    require(name == actual.pw_name == getpass.getuser(), "--user must name the current login")
     require(Path.home() == Path(actual.pw_dir), "HOME must be this user's actual home")
-    require("admin" not in command("id", "-Gn", name).split(), "use the dedicated Standard test account")
-    require(command("stat", "-f", "%Su", "/dev/console") == name, "the test user must own the active console")
+    require(command("stat", "-f", "%Su", "/dev/console") == name, "this user must own the active console")
     logged_in = {line.split()[0] for line in command("who").splitlines() if line.split()}
     require(not (logged_in - {name, "root"}), "log out other users first; fast switching is insufficient")
-    return actual
-
-
-def register_test_user(args):
-    actual = local_test_user(args.test_user)
-    daily = pwd.getpwnam(args.daily_user)
-    require(daily.pw_uid != actual.pw_uid and daily.pw_uid != 0, "the daily and test accounts must be distinct local users")
-    marker = Path(actual.pw_dir) / ACCOUNT_MARKER
-    record = {"schema": 1, "test_user": actual.pw_name, "test_uid": actual.pw_uid, "test_home": actual.pw_dir,
-              "daily_user": daily.pw_name, "daily_uid": daily.pw_uid}
-    with os.fdopen(os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), "w") as output:
-        json.dump(record, output, indent=2, sort_keys=True)
-        output.write("\n")
-    print(f"Registered dedicated test account in {marker}; no apps launched or permissions changed.")
-
-
-def account_registration(marker, actual):
-    require(marker.exists() and not marker.is_symlink(), "test account is not registered; see docs/benchmarking.md")
-    info = marker.stat()
-    require(stat.S_ISREG(info.st_mode) and info.st_uid == actual.pw_uid and stat.S_IMODE(info.st_mode) == 0o600,
-            "test-account marker must be an owned, private (0600) regular file")
-    record = load(marker)
-    require(record.get("schema") == 1 and record["test_user"] == actual.pw_name
-            and record["test_uid"] == actual.pw_uid and record["test_home"] == actual.pw_dir,
-            "test-account registration does not match this user/home")
-    daily = pwd.getpwnam(record["daily_user"])
-    require(record["daily_uid"] == daily.pw_uid and daily.pw_uid not in (0, actual.pw_uid),
-            "registered daily and test accounts must remain distinct")
-    return record
-
-
-def test_account(name):
-    actual = local_test_user(name)
-    record = account_registration(Path(actual.pw_dir) / ACCOUNT_MARKER, actual)
     agent = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/com.pseudobun.paw"], capture_output=True)
-    require(agent.returncode != 0, "PAW's launchd supervisor is active; stop it manually in the test account first")
+    require(agent.returncode != 0, "PAW's launchd supervisor would restart PAW mid-run; stop it first")
     help_text = subprocess.run(["open", "--help"], text=True, capture_output=True)
     require("--env" in help_text.stdout + help_text.stderr, "this runner requires open --env support")
-    return record
+    return {"user": actual.pw_name, "uid": actual.pw_uid, "home": actual.pw_dir}
+
+
+def bench_app():
+    return Path.home() / "Applications/paw Bench.app"
 
 
 def config(windows, scene):
@@ -330,15 +312,26 @@ def check_scene(state, expected, focused=True):
         require(wanted == observed and len(wanted) == 1, "native foreground/key-window focus does not match")
 
 
-def stop_candidate(dev_app):
-    candidates = [(pid, path) for pid, path in main_apps() if path == dev_app]
-    require(len(candidates) <= 1, "multiple candidate processes; leave files in place and quit them manually")
+def stop_candidate(app, force=False):
+    candidates = [(pid, path) for pid, path in main_apps() if path == app]
+    require(len(candidates) <= 1, f"multiple {app.name} processes; quit them manually")
     if not candidates: return
     pid, _ = candidates[0]
-    # AppDelegate handles SIGTERM gracefully, including before the IPC socket is ready.
-    try: os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError: return
-    wait_for(lambda: (pid, dev_app) not in main_apps(), 10, "candidate did not quit; files will stay in place")
+    # AppDelegate handles SIGTERM gracefully (hidden windows come back), even before its socket is ready.
+    for sig in (signal.SIGTERM, signal.SIGKILL) if force else (signal.SIGTERM,):
+        try: os.kill(pid, sig)
+        except ProcessLookupError: return
+        try: return wait_for(lambda: (pid, app) not in main_apps(), 10, f"{app.name} did not quit")
+        except RuntimeError:
+            if sig == signal.SIGKILL or not force: raise
+
+
+def restore(app, daily):
+    """Stops the disposable benchmark PAW, then reopens the PAW apps that ran before the session."""
+    stop_candidate(app, force=True)  # Never two window managers; the benchmark app manages only fixtures.
+    running = {path for _, path in main_apps()}
+    for path in daily:
+        if Path(path) not in running: command("open", path)
 
 
 def number(value):
@@ -503,23 +496,48 @@ def compare(args):
     print(json.dumps(output, indent=2))
 
 
-def record_batch(artifact, tools_artifact, args, directory, app):
-    directory.mkdir()
-    cfg = directory / "config.json5"; save(cfg, config(args.windows, args.scene))
-    support = Path.home() / "Library/Application Support" / DEV_ID
-    cache = Path.home() / "Library/Caches" / DEV_ID
-    require(not main_apps(), "stop PAW before recording; this runner does not switch your existing app")
+def install(artifact, app):
+    """Fresh benchmark app, data and cache; only paths owned by BENCH_ID are replaced."""
+    support = Path.home() / "Library/Application Support" / BENCH_ID
+    cache = Path.home() / "Library/Caches" / BENCH_ID
+    require(not any(path == app for _, path in main_apps()), "paw Bench is already running")
     for path in (app, support, cache):
         require(not path.is_symlink() and (not path.exists() or path.is_dir()), "benchmark paths must be real directories")
-        require(path.resolve().is_relative_to(Path.home().resolve()), "benchmark path escapes this test user's home")
+        require(path.resolve().is_relative_to(Path.home().resolve()), "benchmark path escapes this user's home")
     if app.exists():
-        require(plistlib.loads((app / "Contents/Info.plist").read_bytes())["CFBundleIdentifier"] == DEV_ID, "refusing to replace an unrelated app")
+        require(plistlib.loads((app / "Contents/Info.plist").read_bytes())["CFBundleIdentifier"] == BENCH_ID, "refusing to replace an unrelated app")
     for path in (app, support, cache):
         if path.exists(): shutil.rmtree(path)
     app.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["ditto", str(artifact / "paw.app"), str(app)], check=True)
+    return support / "paw.sock"
+
+
+def grant(args):
+    """One-time privacy grants for paw Bench, launched with a config that manages no window."""
+    current_user(args.user)
+    app, artifact = bench_app(), args.builds.resolve() / label(args.label)
+    with ExitStack() as cleanup:
+        directory = Path(cleanup.enter_context(tempfile.TemporaryDirectory()))
+        cfg = directory / "config.json5"; save(cfg, dict(config(2, "switch"), rules=[{"app": "/.*/", "manage": False}]))
+        sock = install(artifact, app)
+        cleanup.callback(stop_candidate, app, True)
+        command("open", "-n", "--env", f"PAW_CONFIG={cfg}", "--env", f"PAW_PERF_OUTPUT={directory / 'unused.json'}", app)
+        wait_for(sock.exists, 15, "paw Bench socket did not appear")
+        ipc(sock, "settings general")
+        print("In paw Bench's Settings > General, request Accessibility (and Screen Recording for overview-on), "
+              "then enable paw Bench in System Settings. Waiting up to 15 minutes...", flush=True)
+        wait_for(lambda: ipc(sock, "status")["trusted"] == "yes", 900, "Accessibility was not granted")
+        print(f"Accessibility granted; Screen Recording: {ipc(sock, 'perf status')['screenRecording']}")
+
+
+def record_batch(artifact, tools_artifact, args, directory, app):
+    directory.mkdir()
+    cfg = directory / "config.json5"; save(cfg, config(args.windows, args.scene))
+    require(not main_apps(), "another PAW is running; the session stops it first")
+    load_average = os.getloadavg()
+    sock = install(artifact, app)
     manifest = load(artifact / "build.json")
-    sock = support / "paw.sock"
     with ExitStack() as cleanup:
         cleanup.enter_context((directory / "app.log").open("w"))
         cleanup.callback(stop_candidate, app)  # Also covers a launch that never creates its socket.
@@ -555,7 +573,8 @@ def record_batch(artifact, tools_artifact, args, directory, app):
         invocation = [str(tools_artifact / "wmbench"), args.scene, str(args.iterations * 2), "--pace", str(args.pace),
                       "--settle", str(args.settle), "--duration", str(args.duration), "--output", str(directory / "workload.json")]
         if manifest["instrumented"]: invocation.append("--record")
-        subprocess.run(invocation, stdout=workload_log, stderr=workload_log, check=True, timeout=3000)
+        subprocess.run(invocation, stdout=workload_log, stderr=workload_log, check=True, timeout=3000,
+                       env=dict(os.environ, PAW_BENCH_SOCKET=str(sock)))
         save(directory / "after.json", verify(sock, app, manifest, cfg))
         expected = {w["id"]: w for s in query(sock) for w in s["windows"]}
         check_scene(fixture.state(), expected)
@@ -567,14 +586,14 @@ def record_batch(artifact, tools_artifact, args, directory, app):
                            stdout=xlog, stderr=xlog, check=True)
             require((directory / "profile.trace").exists() and (directory / "profile-symbolicated.trace").exists(), "missing trace/symbolicated output")
         metrics = summarize(load(directory / "measurement.json"), load(directory / "workload.json")) if manifest["instrumented"] else None
-        result = {"valid": True, "metrics": metrics, "environment": load(directory / "fixture-environment.json")}
+        result = {"valid": True, "metrics": metrics, "environment": load(directory / "fixture-environment.json"),
+                  "load_average_before": load_average}
         save(directory / "result.json", result)
     return result
 
 
 def run(args):
-    registration = test_account(args.test_user)
-    require(not main_apps(), "stop every PAW in the test account before recording")
+    account = current_user(args.user)
     require(2 <= args.windows <= 32 and args.windows % 2 == 0, "need an even 2–32 windows")
     require(1 <= args.batches <= 20 and 1 <= args.iterations <= 100, "batch/iteration count out of range")
     require(all(number(v) for v in (args.pace, args.settle, args.duration)) and 2 <= args.pace <= 60
@@ -609,15 +628,29 @@ def run(args):
     signature = {"workload": workload, "config": config(args.windows, args.scene), "controller_sha256": sha(Path(__file__)),
                  "driver_sha256": base["driver_sha256"], "fixture_sha256": base["fixture_sha256"],
                  "environment": {k: v for k, v in env.items() if k != "power"}}
-    record = {"schema": 2, "signature": signature, "account": registration, "environment": env,
+    record = {"schema": 2, "signature": signature, "account": account, "environment": env,
               "builds": {s: m["binary_sha256"] for s, m in manifests.items()}, "against": bool(args.against), "batches": [], "complete": False}
     save(session / "session.json", record)
-    with subprocess.Popen(["caffeinate", "-di", "-w", str(os.getpid())]) as awake:
+    app = bench_app()
+    apps = main_apps()
+    require(all(path != app for _, path in apps), "paw Bench is already running; quit it first")
+    daily = sorted({str(path) for _, path in apps})
+    record["restored_apps"] = daily; save(session / "session.json", record)
+    # Its own session and an EOF pipe: restoration also runs after Terminal close or this controller's SIGKILL.
+    restorer = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "_restore", str(app), json.dumps(daily)],
+                                stdin=subprocess.PIPE, start_new_session=True)
+    with ExitStack() as cleanup, subprocess.Popen(["caffeinate", "-di", "-w", str(os.getpid())]) as awake:
+        @cleanup.callback
+        def restored():
+            restorer.stdin.close()
+            restorer.wait(timeout=60)
+            require(restorer.returncode == 0, "restoring PAW failed; reopen your PAW app and quit paw Bench manually")
         try:
+            for path in daily: stop_candidate(Path(path))  # Graceful quit puts the daily PAW's hidden windows back.
             for index in range(args.batches):
                 for side in (("a", "b") if index % 2 == 0 else ("b", "a")) if args.against else ("a",):
                     name = f"{index + 1:02}-{side}"
-                    result = record_batch(builds[side], builds["a"], args, session / name, Path.home() / "Applications/paw Dev.app")
+                    result = record_batch(builds[side], builds["a"], args, session / name, app)
                     current = environment()
                     require(all(current[k] == env[k] for k in env if k != "power"), "machine/power settings changed")
                     if "screens" not in signature: signature.update(result["environment"])
@@ -653,7 +686,7 @@ def resume(targets):
 
 def hung(driver, name):
     require(os.getuid() != 0, "do not run hung diagnostics as root")
-    sock = Path.home() / "Library/Application Support" / DEV_ID / "paw.sock"
+    sock = Path(os.environ.get("PAW_BENCH_SOCKET") or Path.home() / "Library/Application Support" / DEV_ID / "paw.sock")
     server = int(ipc(sock, "status")["pid"])
     targets = [identity(int(p)) for p in command("pgrep", "-u", os.getuid(), "-x", re.escape(name), check=False).splitlines()]
     require(targets and all(t and t[1] == os.getuid() and t[0] not in (os.getpid(), server)
@@ -678,15 +711,18 @@ def hung(driver, name):
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "_resume":
         targets = json.loads(sys.argv[2]); sys.stdin.buffer.read(); resume(targets); return
+    if len(sys.argv) > 1 and sys.argv[1] == "_restore":
+        sys.stdin.buffer.read(); restore(Path(sys.argv[2]), json.loads(sys.argv[3])); return
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
     p = sub.add_parser("prepare", help="compile/archive only; never launch or measure")
     p.add_argument("label"); p.add_argument("--plain", action="store_true")
     p.add_argument("--builds", type=Path, default=ROOT / "build.noindex/bench/builds")
-    p = sub.add_parser("register", help="one-time opt-in from the separate Standard test login")
-    p.add_argument("--test-user", required=True); p.add_argument("--daily-user", required=True)
-    p = sub.add_parser("run", help="LIVE: launches fixtures/PAW only in the registered test account")
-    p.add_argument("label"); p.add_argument("--against"); p.add_argument("--test-user", required=True)
+    p = sub.add_parser("grant", help="LIVE: opens paw Bench, managing no window, for its one-time privacy grants")
+    p.add_argument("label"); p.add_argument("--user", required=True)
+    p.add_argument("--builds", type=Path, default=ROOT / "build.noindex/bench/builds")
+    p = sub.add_parser("run", help="LIVE: quits your PAW, runs paw Bench with fixtures, then reopens your PAW")
+    p.add_argument("label"); p.add_argument("--against"); p.add_argument("--user", required=True)
     p.add_argument("--builds", type=Path, default=ROOT / "build.noindex/bench/builds")
     p.add_argument("--runs", type=Path, default=Path.home() / "Library/Logs/paw-bench")
     p.add_argument("--scene", choices=SCENES, default="switch"); p.add_argument("--trace", action="store_true")
@@ -710,7 +746,7 @@ def main():
             command("xcrun", "swiftc", "-parse-as-library", ROOT / "scripts/bench/BenchSupport.swift", ROOT / "Tests/Performance/BenchChecks.swift", "-o", directory / "checks")
             subprocess.run([str(directory / "checks")], check=True)
             subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "Tests/Performance", "-p", "test_*.py"], cwd=ROOT, check=True)
-    else: {"prepare": build, "register": register_test_user, "run": run, "compare": compare}[args.action](args)
+    else: {"prepare": build, "grant": grant, "run": run, "compare": compare}[args.action](args)
 
 
 if __name__ == "__main__":

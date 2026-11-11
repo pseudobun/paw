@@ -5,7 +5,8 @@
 # env: PAW_VERSION (default: from the VERSION file, plus the commit when not on its tag),
 #      PAW_BUILD (CFBundleVersion, which Sparkle compares; default: commit count), PAW_BUNDLE_ID, PAW_SIGN_IDENTITY,
 #      PAW_TIMESTAMP=1 (secure timestamp, needed for notarization),
-#      PAW_DEV=1 (a dev build: "paw Dev", com.pseudobun.paw.dev, no updates; see just dev)
+#      PAW_DEV=1 (a dev build: "paw Dev", com.pseudobun.paw.dev, no updates; see just dev),
+#      PAW_APP_NAME (dev only: the shown name, e.g. "paw Bench" for just bench's own grants)
 #      PAW_PROFILE=1 (dev only: timing recorder, debug information and matching dSYM),
 #      PAW_DSYM=1 (debug information and dSYM without the timing recorder)
 # Signing: PAW_SIGN_IDENTITY if set, else a "Developer ID Application" or "Apple Development"
@@ -17,7 +18,7 @@ out="${1:-build.noindex}"
 name=paw
 bundle_id="${PAW_BUNDLE_ID:-com.pseudobun.paw}"
 if [ "${PAW_DEV:-}" = 1 ]; then
-  name="paw Dev"
+  name="${PAW_APP_NAME:-paw Dev}"
   bundle_id="${PAW_BUNDLE_ID:-com.pseudobun.paw.dev}"
   # Dev builds never update themselves.
   PAW_SPARKLE_PUBLIC_KEY="" PAW_FEED_URL="-"
@@ -52,7 +53,8 @@ swift build -c release $arch_flags $profile_flags -q -Xlinker -dead_strip
 bin_dir="$(swift build -c release $arch_flags $profile_flags -Xlinker -dead_strip --show-bin-path)"
 bin="$bin_dir/paw"
 # Sparkle (updates): the framework SwiftPM built next to the binary.
-sparkle="$(find "$bin_dir" "$bin_dir/PackageFrameworks" -maxdepth 1 -name Sparkle.framework 2>/dev/null | head -1)"
+# A missing PackageFrameworks makes find fail; pipefail must not end the build before the check below.
+sparkle="$( (find "$bin_dir" "$bin_dir/PackageFrameworks" -maxdepth 1 -name Sparkle.framework 2>/dev/null || true) | head -1)"
 [ -n "$sparkle" ] || { echo "Sparkle.framework not found in $bin_dir" >&2; exit 1; }
 # EdDSA key that signs updates (private half: the SPARKLE_PRIVATE_KEY secret and olympus' keychain).
 sparkle_key="${PAW_SPARKLE_PUBLIC_KEY-c9vc9GKhX9zHEAUrLSWfN4soCN0vUAhl68AXWjD06Uc=}"
