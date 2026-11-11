@@ -46,10 +46,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Updater.shared.onResult = { [weak self] state in self?.showUpdateResult(state) }
         }
         setUpStatusItem()
-        // After an update that changed the Dock helper: offer to install the new one (a dev
-        // build leaves the installed helper to `sudo paw-dev dock install`).
+        // After an update that changed the Dock helper: say so once (a dev build leaves the
+        // installed helper to `sudo paw-dev dock install`).
         if !AppPaths.isDev {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { DockCLI.offerUpdateOnce() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                DockCLI.noteUpdateOnce { self?.showNote("Dock helper changed: \(DockCLI.installCommand)", duration: 8) }
+            }
         }
         Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
     }
@@ -181,13 +183,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Update answers as the workspace HUD, which doesn't block like an alert.
-    private func showUpdateResult(_ state: Updater.State) {
+    private func showUpdateResult(_ state: Updater.State) { showNote(state.text, duration: 2.5) }
+
+    private func showNote(_ text: String, duration: TimeInterval) {
         guard let wm, let display = wm.displays.first else { return }
-        wm.hud.show(label: state.text, apps: [], in: display.area, icons: settings.icons,
-                    config: settings.config, duration: 2.5)
+        wm.hud.show(label: text, apps: [], in: display.area, icons: settings.icons,
+                    config: settings.config, duration: duration)
     }
 
-    @objc private func updateDockHelper() { DockCLI.installAsAdmin() }
+    /// For a terminal: installing the helper needs root.
+    @objc private func copyDockInstall() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(DockCLI.installCommand, forType: .string)
+        showNote("Copied: \(DockCLI.installCommand)", duration: 2.5)
+    }
 
     @objc private func checkForUpdates() { MainActor.assumeIsolated { Updater.shared.installNow() } }
     @objc private func initiateCurrent() { wm.run([.initiate(nil)]) }
@@ -292,7 +301,7 @@ extension AppDelegate: NSMenuDelegate {
             menu.addItem(item)
         }
         if DockCLI.isOutdated {
-            let item = NSMenuItem(title: "Update Dock Helper…", action: #selector(updateDockHelper), keyEquivalent: "")
+            let item = NSMenuItem(title: "Dock Helper Outdated: Copy “\(DockCLI.installCommand)”", action: #selector(copyDockInstall), keyEquivalent: "")
             item.target = self
             menu.addItem(item)
         }
