@@ -6,6 +6,24 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.14</title>
+      <pubDate>Wed, 11 Nov 2026 19:48:15 +0000</pubDate>
+      <sparkle:version>106</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.14</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
+<ul>
+<li><b>dock:</b> install the changed Dock helper after an update (<a href="https://github.com/pseudobun/paw/commit/0ac7aa1270d00f9b5fdd7085451c6c46b7d2b37c">0ac7aa1</a>)</li>
+<li><b>dock:</b> version the Dock helper and restart Dock when it changes (<a href="https://github.com/pseudobun/paw/commit/884f4a1bc6f2281a78eafe0abbcfa1aaa3c01a54">884f4a1</a>)</li>
+</ul>
+<h3>Bug Fixes</h3>
+<ul>
+<li><b>focus:</b> prefer hovered window after closing focused window (<a href="https://github.com/pseudobun/paw/issues/51">#51</a>) (<a href="https://github.com/pseudobun/paw/commit/b67b6c5f4dd4905278eacdfad6251ffcd23b0eca">b67b6c5</a>)</li>
+<li>match focus borders to window corners and cache updates (<a href="https://github.com/pseudobun/paw/issues/49">#49</a>) (<a href="https://github.com/pseudobun/paw/commit/5738b736f235b1bd52991d383a03e559c0890e54">5738b73</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.14">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.14/paw-0.1.0-beta.14-macos.zip" type="application/octet-stream" sparkle:edSignature="5mqWUnF2N3TMEtD8Kb1fFYuXIlhHW44kAkqj141aBWlgNpVkbHe8QzvGKqltNDCH8JpXDYThttbtC8nZXA75AA==" length="3606521"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.13</title>
       <pubDate>Wed, 11 Nov 2026 16:44:11 +0000</pubDate>
       <sparkle:version>101</sparkle:version>
