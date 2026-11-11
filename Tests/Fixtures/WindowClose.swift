@@ -9,6 +9,22 @@ if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--move-pointer
             mouseButton: .left)?.post(tap: .cghidEventTap)
     exit(0)
 }
+// ⌘ plus a key straight to one process (paw), so it can never reach whatever app is in front.
+if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--command-key",
+   let pid = pid_t(CommandLine.arguments[2]), let key = CGKeyCode(CommandLine.arguments[3]) {
+    guard AXIsProcessTrusted() else { exit(1) }
+    for down in [true, false] {
+        let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down)
+        event?.flags = .maskCommand
+        event?.postToPid(pid)
+    }
+    exit(0)
+}
+
+final class BareWindow: NSWindow {
+    override var canBecomeMain: Bool { true }
+    override var canBecomeKey: Bool { true }
+}
 
 final class Fixture: NSObject, NSApplicationDelegate {
     var windows: [String: NSWindow] = [:]
@@ -25,8 +41,11 @@ final class Fixture: NSObject, NSApplicationDelegate {
                     let name = parts.count > 1 ? parts[1] : ""
                     switch command {
                     case "new":
-                        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 500, height: 400),
-                                              styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+                        // Without decorations (Alacritty's winit window): a standard window with no close button.
+                        let bare = CommandLine.arguments.contains("--no-close-button")
+                        let window = (bare ? BareWindow.self : NSWindow.self).init(
+                            contentRect: NSRect(x: 100, y: 100, width: 500, height: 400),
+                            styleMask: bare ? [.borderless, .resizable] : [.titled, .closable, .resizable], backing: .buffered, defer: false)
                         window.title = "PAW-close-" + name
                         window.minSize = NSSize(width: name == "placeholder" ? 10000 : 100, height: 100)
                         window.isReleasedWhenClosed = false

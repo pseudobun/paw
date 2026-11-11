@@ -172,13 +172,73 @@ def main():
             wait_for(lambda: any(w["id"] == ids["closing"] for w in windows()))
             check("hovered placeholder", "closing", ids["placeholder"], a, None)
 
-            fixture_reply(b, "new decoy")
+            decoy = int(fixture_reply(b, "new decoy"))
             for attempt in range(5):
                 c = launch("C", "--quit-on-close")
                 ids["closing"] = int(fixture_reply(c, "new closing"))
                 wait_for(lambda: any(w["id"] == ids["closing"] for w in windows()))
                 check(f"process exit {attempt + 1}", "closing", target, b, "target", owner=c, quit_app=attempt % 2 == 0)
                 c.wait(timeout=5)
+
+            def close_under_pointer(name, quit_app):
+                # Focus follows mouse leaves the pointer inside the window being closed: the
+                # window that retiles under it should get focus, not the workspace's first one.
+                c = launch("C", "--quit-on-close")
+                ids["closing"] = int(fixture_reply(c, "new closing"))
+                wait_for(lambda: any(w["id"] == ids["closing"] for w in windows()))
+                paw("find", "PAW-close-closing")
+                time.sleep(0.5)
+                f = settled_frame(ids["closing"], c, "closing")
+                wait_for(lambda: fixture_reply(c, "focused") == "closing")
+                events.clear()
+                # Off-centre: halves are where retiled seams land, and a seam is under no window.
+                x, y = f["x"] + f["w"] * 0.37, f["y"] + f["h"] * 0.37
+                fixture_reply(c, f"quit {x} {y}" if quit_app else f"close closing {x} {y}")
+                c.wait(timeout=5)
+                time.sleep(0.6)
+                shown = next(ws for ws in query() if ws["focused"])["windows"]
+                under = next(w["id"] for w in shown if not w["floating"]
+                             and w["frame"]["x"] <= x < w["frame"]["x"] + w["frame"]["w"]
+                             and w["frame"]["y"] <= y < w["frame"]["y"] + w["frame"]["h"])
+                focused = next((w["id"] for w in shown if w["focused"]), None)
+                names = {**{v: k for k, v in ids.items()}, target: "target", decoy: "decoy"}
+                assert focused == under, (f"{name}: expected {names[under]} under the pointer, got {names.get(focused)}; "
+                                          f"first tile {names[shown[0]['id']]}; events {events}")
+                if names[under] == "placeholder":
+                    assert fixture_reply(a, "front") == "com.pseudobun.paw.dev", name + ": placeholder left keys with another app"
+                else:
+                    owner = b if under in (target, decoy) else a
+                    assert fixture_reply(owner, "focused") == names[under], name + ": native keyboard focus is wrong"
+                assert all(id == under for id in events), f"{name}: intermediate focus targets {events}"
+                print("PASS:", name, "focuses the window that retiles under the pointer")
+
+            for attempt in range(4):
+                close_under_pointer(f"process exit under pointer {attempt + 1}", quit_app=attempt % 2 == 0)
+
+            # A selected placeholder leaves paw with the keyboard: ⌘W and ⌘Q go to its own app.
+            pid = next(line.split()[1] for line in status.splitlines() if line.startswith("pid:"))
+            def command_key(code):
+                paw("exec", f"{shlex.quote(str(binary))} --command-key {pid} {code}")
+            select_placeholder()
+            command_key(13)
+            wait_for(lambda: all(w["id"] != ids["placeholder"] for w in windows()))
+            assert a.poll() is None, "⌘W on a placeholder must close only its window"
+            print("PASS: ⌘W on a placeholder closes the window it stands in for")
+            for flags in [["--no-close-button"], []]:
+                c = launch("C", *flags)
+                ids["placeholder"] = int(fixture_reply(c, "new placeholder"))
+                wait_for(lambda: any(w["id"] == ids["placeholder"] and not w["onScreen"] for w in windows()))
+                select_placeholder()
+                if flags:
+                    command_key(13)
+                    time.sleep(0.5)
+                    assert c.poll() is None, "⌘W must not turn a missing close button into Quit for arbitrary apps"
+                    assert any(w["id"] == ids["placeholder"] for w in windows())
+                    print("PASS: a missing close button does not quit an unrelated app")
+                command_key(12)
+                c.wait(timeout=5)
+                assert a.poll() is None and b.poll() is None, "⌘Q on a placeholder must quit only its app"
+                print("PASS: ⌘Q on a placeholder quits its owner", "without a close button" if flags else "with a close button")
         finally:
             if subscriber is not None:
                 subscriber.terminate()

@@ -44,6 +44,37 @@ struct WindowHitTests {
         #expect(WindowManager.focusAfterRemoval(in: ws, hovered: nil, appFocused: nil, sameApp: { _ in false }) == nil)
     }
 
+    /// Focus follows mouse leaves the pointer inside the window being closed: nothing is under
+    /// it until the neighbours retile, so the hover must come from the layout to come.
+    @Test func closeFocusPicksTheTileThatRetilesUnderThePointer() throws {
+        let ws = Workspace(name: "1")
+        let area = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        for id: WindowID in [1, 2, 3] { ws.insert(id, area: area) }
+        let closing = try #require(TreeLayout.windowFrames(ws, in: area, gap: 8)[3])
+        let p = CGPoint(x: closing.midX, y: closing.midY)
+        ws.focused = 3
+        ws.remove(3)
+        let frames = TreeLayout.windowFrames(ws, in: area, gap: 8)
+        let retiled = try #require([WindowID(1), 2].first { frames[$0]?.contains(p) == true })
+        #expect(retiled != ws.focused, "The fallback alone must not already pass")
+
+        let underneath = WindowManager.windowUnder(p, after: ws, frames: frames, gap: 8)
+        #expect(underneath == retiled)
+        #expect(WindowManager.topWindow(at: p, in: [], fallback: underneath, isManaged: { _ in false }) == retiled)
+        // The pointer on the seam between two retiled tiles still picks one of them.
+        let seam = CGPoint(x: frames[1]!.maxX + 4, y: p.y)
+        #expect([1, 2].contains(WindowManager.windowUnder(seam, after: ws, frames: frames, gap: 8)))
+        // Actual hovered tiles, floating windows and other displays all beat future geometry.
+        for id: WindowID in [1, 4, 9] {
+            #expect(WindowManager.topWindow(at: p, in: [info(id, frame: area)], fallback: underneath,
+                                            isManaged: { $0 == id }) == id)
+        }
+        // A real overlay must block the future tile just as it blocks an existing one.
+        #expect(WindowManager.topWindow(at: p, in: [info(99, frame: area, layer: 25)], fallback: underneath,
+                                        isManaged: { _ in false }) == nil)
+        #expect(WindowManager.windowUnder(CGPoint(x: -100, y: -100), after: ws, frames: frames, gap: 8) == nil)
+    }
+
     @Test func screenshotOverlayBlocksFocusUntilCaptureCloses() {
         let left = info(1, frame: CGRect(x: -1440, y: 0, width: 1440, height: 900))
         let right = info(2, frame: CGRect(x: 0, y: 0, width: 1920, height: 1080))

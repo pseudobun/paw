@@ -62,6 +62,8 @@
 - [ ] Repeat with an undersized Discord-like placeholder in the top-left tile and the mouse over a Spotify-like real window → the real window wins; with no hovered window, the existing same-app/workspace fallback applies without jumping to a hidden workspace
 - [ ] Close a background window → the focused window stays focused
 - [ ] Close the last window of an Alacritty process (⌘W) and quit an app (⌘Q) with the pointer over a real window, then a placeholder → the hovered target wins; a selected placeholder keeps keyboard commands in paw rather than an unrelated parked window
+- [ ] With the pointer inside the focused window, close it without moving the mouse → focus goes to the tile that fills that position, including when the pointer lands on a seam; a different window already under the pointer keeps priority
+- [ ] Select a placeholder, then ⌘W → only its represented window closes; ⌘Q → only its owner quits normally. Repeat ⌘W with decorationless Alacritty. Settings and overview keep their own keys; an unrelated buttonless app must not quit on ⌘W
 - [ ] Minimise / ⌘H an app → its tile closes; restore → it comes back to the same tile and size
 - [ ] Quit an app whose windows were tiled, open it again → same tiles
 - [ ] With Alacritty already on the workspace, `open -n /Applications/Alacritty.app` → the new window tiles promptly after it appears, without sitting in the center until the four-second adoption retry
