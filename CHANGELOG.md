@@ -3,6 +3,14 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.15](https://github.com/pseudobun/paw/compare/v0.1.0-beta.14...v0.1.0-beta.15) (2026-11-11)
+
+
+### Bug Fixes
+
+* **cask:** keep the Dock helper out of upgrades ([aec235b](https://github.com/pseudobun/paw/commit/aec235b5c2b33294df523cd5f817d106798f0e74))
+* **dock:** note a changed Dock helper instead of asking for admin access ([261bfb1](https://github.com/pseudobun/paw/commit/261bfb1631f346285defd2c9fe64925cd5ced7a0))
+
 ## [0.1.0-beta.14](https://github.com/pseudobun/paw/compare/v0.1.0-beta.13...v0.1.0-beta.14) (2026-11-11)
 
 
