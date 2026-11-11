@@ -9,18 +9,6 @@ if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--move-pointer
             mouseButton: .left)?.post(tap: .cghidEventTap)
     exit(0)
 }
-// ⌘ plus a key straight to one process (paw), so it can never reach whatever app is in front.
-if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--command-key",
-   let pid = pid_t(CommandLine.arguments[2]), let key = CGKeyCode(CommandLine.arguments[3]) {
-    guard AXIsProcessTrusted() else { exit(1) }
-    for down in [true, false] {
-        let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down)
-        event?.flags = .maskCommand
-        event?.postToPid(pid)
-    }
-    exit(0)
-}
-
 final class BareWindow: NSWindow {
     override var canBecomeMain: Bool { true }
     override var canBecomeKey: Bool { true }

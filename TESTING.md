@@ -122,6 +122,11 @@ With Paw Dev running with Accessibility access and an empty hidden workspace, ru
 python3 scripts/test-window-close.py
 ```
 
+Add `--manual-keys` to verify placeholder ⌘W/⌘Q with real key input when prompted. These checks
+use disposable windows and verify that other fixture apps stay alive. Keyboard events posted
+between processes can be silently dropped by macOS, so the unattended run checks close focus
+and hover without claiming to verify keyboard routing.
+
 When focus-follows-mouse is enabled, this live AX regression first checks hover focus from a
 selected placeholder back to real windows, including windows in the same app.
 It checks same-app closes, background closes,

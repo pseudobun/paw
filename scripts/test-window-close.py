@@ -8,6 +8,7 @@ import select
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -215,30 +216,30 @@ def main():
             for attempt in range(4):
                 close_under_pointer(f"process exit under pointer {attempt + 1}", quit_app=attempt % 2 == 0)
 
-            # A selected placeholder leaves paw with the keyboard: ⌘W and ⌘Q go to its own app.
-            pid = next(line.split()[1] for line in status.splitlines() if line.startswith("pid:"))
-            def command_key(code):
-                paw("exec", f"{shlex.quote(str(binary))} --command-key {pid} {code}")
-            select_placeholder()
-            command_key(13)
-            wait_for(lambda: all(w["id"] != ids["placeholder"] for w in windows()))
-            assert a.poll() is None, "⌘W on a placeholder must close only its window"
-            print("PASS: ⌘W on a placeholder closes the window it stands in for")
-            for flags in [["--no-close-button"], []]:
-                c = launch("C", *flags)
-                ids["placeholder"] = int(fixture_reply(c, "new placeholder"))
-                wait_for(lambda: any(w["id"] == ids["placeholder"] and not w["onScreen"] for w in windows()))
-                select_placeholder()
-                if flags:
-                    command_key(13)
-                    time.sleep(0.5)
-                    assert c.poll() is None, "⌘W must not turn a missing close button into Quit for arbitrary apps"
-                    assert any(w["id"] == ids["placeholder"] for w in windows())
-                    print("PASS: a missing close button does not quit an unrelated app")
-                command_key(12)
-                c.wait(timeout=5)
-                assert a.poll() is None and b.poll() is None, "⌘Q on a placeholder must quit only its app"
-                print("PASS: ⌘Q on a placeholder quits its owner", "without a close button" if flags else "with a close button")
+            # Real key input: cross-process CGEvent.postToPid can silently drop keyboard events.
+            if "--manual-keys" in sys.argv:
+                # A selected placeholder leaves paw with the keyboard: ⌘W and ⌘Q go to its own app.
+                def command_key(key):
+                    select_placeholder()
+                    input(f"Press {key} on the selected disposable placeholder, then press Return here: ")
+                command_key("⌘W")
+                wait_for(lambda: all(w["id"] != ids["placeholder"] for w in windows()))
+                assert a.poll() is None, "⌘W on a placeholder must close only its window"
+                print("PASS: ⌘W on a placeholder closes the window it stands in for")
+                for flags in [["--no-close-button"], []]:
+                    c = launch("C", *flags)
+                    ids["placeholder"] = int(fixture_reply(c, "new placeholder"))
+                    wait_for(lambda: any(w["id"] == ids["placeholder"] and not w["onScreen"] for w in windows()))
+                    if flags:
+                        command_key("⌘W")
+                        time.sleep(0.5)
+                        assert c.poll() is None, "⌘W must not turn a missing close button into Quit for arbitrary apps"
+                        assert any(w["id"] == ids["placeholder"] for w in windows())
+                        print("PASS: a missing close button does not quit an unrelated app")
+                    command_key("⌘Q")
+                    c.wait(timeout=5)
+                    assert a.poll() is None and b.poll() is None, "⌘Q on a placeholder must quit only its app"
+                    print("PASS: ⌘Q on a placeholder quits its owner", "without a close button" if flags else "with a close button")
         finally:
             if subscriber is not None:
                 subscriber.terminate()
