@@ -842,7 +842,7 @@ final class WindowManager {
         let before = TreeLayout.cameraFrames(ws, in: area, gap: gap)
         guard inward ? ws.zoomIn(toward: id) : ws.zoomOut() else { return }
         recordUndo(ws, kind: "command")
-        animateCamera(ws, from: before, area: area)
+        animateCamera(ws, from: before, on: di)
         let d = ws.zoomDepth(of: id)
         hud.style = indicators.style
         var apps: [String] = []
@@ -854,9 +854,15 @@ final class WindowManager {
 
     /// The camera moved: windows glide from where the old camera had them to where the new one
     /// puts them, those coming in from off screen, those leaving out of it (then parked).
-    private func animateCamera(_ ws: Workspace, from before: [WindowID: CGRect], area: CGRect) {
+    /// Off screen past an edge another display shares, a glide would cross that display:
+    /// those windows are parked or put in place at once instead.
+    private func animateCamera(_ ws: Workspace, from before: [WindowID: CGRect], on di: Int) {
         guard config.animation.enabled else { layout(ws, animated: false); return }
+        let area = displays[di].area, home = displays[di].frame
         let after = TreeLayout.cameraFrames(ws, in: area, gap: config.layout.gap)
+        func crossesOther(_ r: CGRect) -> Bool {
+            displays.contains { $0.frame != home && $0.frame.intersects(r.insetBy(dx: 1, dy: 1)) }
+        }
         let shown = ws.shownWindows
         let until = Date().addingTimeInterval(config.animation.durationMs / 1000 + 0.4)
         var targets: [(Window, CGRect)] = []
@@ -868,7 +874,11 @@ final class WindowManager {
             if w.isHidden {
                 guard shown.contains(id), let from = before[id] else { continue }
                 w.isHidden = false
+                if crossesOther(from) { w.setFrame(to); continue }
                 w.setFrame(from)
+            } else if !shown.contains(id), crossesOther(to) {
+                hide(w, from: ws)
+                continue
             }
             targets.append((w, to))
         }
@@ -906,7 +916,7 @@ final class WindowManager {
             let before = TreeLayout.cameraFrames(ws, in: displays[di].area, gap: config.layout.gap)
             guard ws.setView(containing: inRegion) else { return }
             ws.focused = target
-            animateCamera(ws, from: before, area: displays[di].area)
+            animateCamera(ws, from: before, on: di)
             focusWindow(target, warp: true)
         } else {
             ws.focused = target
