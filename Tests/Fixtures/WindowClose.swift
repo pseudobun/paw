@@ -51,6 +51,13 @@ final class Fixture: NSObject, NSApplicationDelegate {
                         NSApp.terminate(nil)
                     case "front":
                         print(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "none")
+                    case "pointer":
+                        let p = NSEvent.mouseLocation
+                        print("\(p.x) \((NSScreen.screens.first?.frame.height ?? 0) - p.y)")
+                    case "frame":
+                        if let f = self.windows[name]?.frame {
+                            print("\(f.minX) \((NSScreen.screens.first?.frame.height ?? 0) - f.maxY) \(f.width) \(f.height)")
+                        } else { print("missing") }
                     case "focused":
                         print(NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid()
                               ? self.windows.first(where: { $0.value.isKeyWindow })?.key ?? "none" : "background")

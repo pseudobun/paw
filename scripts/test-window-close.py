@@ -96,47 +96,63 @@ def main():
             reader.start()
             assert ready.wait(5), "Focus event subscription did not start"
 
+            def settled_frame(id, owner, name):
+                def matches():
+                    window = next(w for w in windows() if w["id"] == id)
+                    f = window["frame"]
+                    actual = list(map(float, fixture_reply(owner, "frame " + name).split()))
+                    return f if window["onScreen"] and all(abs(a - f[k]) <= 4 for a, k in zip(actual, ["x", "y", "w", "h"])) else None
+                return wait_for(matches)
+
+            def select_placeholder():
+                paw("find", "PAW-close-placeholder")
+                wait_for(lambda: any(ws["focused"] and any(w["id"] == ids["placeholder"] and w["focused"] for w in ws["windows"])
+                                     for ws in query()) and fixture_reply(a, "front") == "com.pseudobun.paw.dev")
+                time.sleep(0.5)
+                return fixture_reply(a, "pointer")
+
             def hover(id, owner, native_name):
-                window = next(w for w in windows() if w["id"] == id)
-                assert window["onScreen"], "Hover target must be a real window"
-                f = window["frame"]
+                f = settled_frame(id, owner, native_name)
                 paw("exec", f"{shlex.quote(str(binary))} --move-pointer {f['x'] + f['w'] / 2} {f['y'] + f['h'] / 2}")
                 def has_focus():
                     selected = next((w["id"] for ws in query() if ws["focused"] for w in ws["windows"] if w["focused"]), None)
                     return selected == id and fixture_reply(owner, "focused") == native_name
                 wait_for(has_focus)
 
-            hover(target, b, "target")
-            print("PASS: real-window hover before selecting a placeholder")
-            for attempt in range(3):
-                paw("find", "PAW-close-placeholder")
-                time.sleep(0.5)
-                assert fixture_reply(a, "front") == "com.pseudobun.paw.dev"
+            if json.loads(paw("config", "show"))["focus"]["focusFollowsMouse"]:
                 hover(target, b, "target")
-                hover(ids["other"], a, "other")
-                hover(ids["survivor"], a, "survivor")
-                print("PASS: placeholder to real windows", attempt + 1)
+                print("PASS: real-window hover before selecting a placeholder")
+                for attempt in range(3):
+                    select_placeholder()
+                    hover(target, b, "target")
+                    hover(ids["other"], a, "other")
+                    hover(ids["survivor"], a, "survivor")
+                    print("PASS: placeholder to real windows", attempt + 1)
+            else:
+                print("SKIP: hover movement checks (focus-follows-mouse is disabled)")
 
             def check(name, closing, expected, native_process, native_name, owner=a, quit_app=False):
+                placeholder_position = select_placeholder() if native_name is None else None
                 focused_name = "other" if name == "background close" else "closing"
                 paw("find", "PAW-close-" + focused_name)
                 # Let the prior close's focus suppression and resize animation finish.
                 time.sleep(0.5)
                 hovered = next(w for w in windows() if w["id"] == (target if name == "background close" else expected))
                 assert hovered["onScreen"] == (native_name is not None), "Unexpected real-window/placeholder state"
-                f = hovered["frame"]
+                f = settled_frame(hovered["id"], b if name == "background close" else native_process,
+                                  "target" if name == "background close" else native_name) if native_name else None
                 selected = ids["other"] if name == "background close" else ids[closing]
                 wait_for(lambda: any(ws["focused"] and any(w["id"] == selected and w["focused"] for w in ws["windows"])
                                      for ws in query()))
                 assert fixture_reply(owner, "focused") == focused_name, "Close must start with native focus on the intended window"
                 events.clear()
                 # Warp and close in one app turn so focus-follows-mouse cannot mask close recovery.
-                position = f"{f['x'] + f['w'] / 4} {f['y'] + f['h'] / 4}"
+                position = placeholder_position or f"{f['x'] + f['w'] / 4} {f['y'] + f['h'] / 4}"
                 fixture_reply(owner, ("quit " if quit_app else "close " + closing + " ") + position)
                 wait_for(lambda: all(w["id"] != ids[closing] for w in windows()))
                 time.sleep(0.6)
                 focused = next((w for ws in query() if ws["focused"] for w in ws["windows"] if w["focused"]), None)
-                assert focused and focused["id"] == expected, f"{name}: expected {expected}, got {focused and focused['id']}"
+                assert focused and focused["id"] == expected, f"{name}: expected {expected}, got {focused and focused['id']}; events {events}; hover point {position}"
                 if native_name is None:
                     assert fixture_reply(native_process, "front") == "com.pseudobun.paw.dev", name + ": placeholder left keys with another app"
                 else:

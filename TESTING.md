@@ -114,12 +114,15 @@ With Paw Dev running with Accessibility access and an empty hidden workspace, ru
 python3 scripts/test-window-close.py
 ```
 
-This live AX regression first checks hover focus from a selected placeholder back to real
-windows, including windows in the same app. It checks same-app closes, background closes,
+When focus-follows-mouse is enabled, this live AX regression first checks hover focus from a
+selected placeholder back to real windows, including windows in the same app.
+It checks same-app closes, background closes,
 cross-app closes, and a hovered placeholder. It also repeats five single-window process exits, alternating explicit
 quit and last-window close. It verifies native keyboard focus (paw owns it for placeholders)
 and rejects intermediate focus events for other windows. Only disposable fixture windows are closed; the previous
 workspace and the empty workspace's layout are restored. Leave the keyboard and mouse alone.
+The driver waits for native frames to reach their target positions and uses the visible
+placeholder tile's pointer position rather than its parked window's frame.
 
 ## Changing a window's minimum size
 
