@@ -91,10 +91,18 @@ func rtt(_ cmd: String, _ n: Int) -> [Double] {
     }
 }
 
+/// The windows paw shows on a workspace (not those parked behind a placeholder, too big for
+/// their tile): switched to once to find out.
+func shown(_ ws: String) -> [CGWindowID] {
+    _ = send("run workspace \(ws)")
+    usleep(500_000)
+    return windows(ws).filter { $0["onScreen"] as? Bool ?? true }.compactMap { ($0["id"] as? Int).map(CGWindowID.init) }
+}
+
 func switches(_ n: Int) {
-    let a = ids("1"), b = ids("2")
+    let a = shown("1"), b = shown("2")
     guard !a.isEmpty, !b.isEmpty else { fputs("wmbench: put windows on workspaces 1 and 2 first\n", stderr); exit(1) }
-    print("workspace 1: \(a.count) windows, workspace 2: \(b.count) windows")
+    print("workspace 1: \(a.count) windows shown, workspace 2: \(b.count) windows shown")
     var r: [Double] = [], s: [Double] = [], miss = 0
     for i in 0..<n {
         let (to, wins) = i % 2 == 0 ? ("2", b) : ("1", a)
