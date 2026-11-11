@@ -4,6 +4,14 @@ import Testing
 @testable import paw
 
 struct WindowHitTests {
+    @Test func popUpMenusAreNotManaged() {
+        #expect(WindowManager.isMenuLayer(Int(CGWindowLevelForKey(.popUpMenuWindow))))
+        #expect(WindowManager.isMenuLayer(Int(CGWindowLevelForKey(.assistiveTechHighWindow))))
+        #expect(!WindowManager.isMenuLayer(Int(CGWindowLevelForKey(.normalWindow))))
+        #expect(!WindowManager.isMenuLayer(Int(CGWindowLevelForKey(.floatingWindow))))
+        #expect(!WindowManager.isMenuLayer(Int(CGWindowLevelForKey(.modalPanelWindow))))
+    }
+
     @Test func placeholderStandsInForItsParkedWindow() {
         let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
         let placeholder = info(100, frame: frame, layer: -1)

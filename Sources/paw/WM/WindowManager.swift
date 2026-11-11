@@ -457,6 +457,9 @@ final class WindowManager {
         guard el.string(kAXRoleAttribute) == kAXWindowRole else { return nil }
         let subrole = el.string(kAXSubroleAttribute) ?? ""
         guard ["AXStandardWindow", "AXDialog", "AXFloatingWindow"].contains(subrole) else { return nil }
+        // Qt draws its menus as floating windows at the menu level: managing one would focus it
+        // and, with mouseFollowsFocus, warp the pointer onto an item that opens the next submenu.
+        if let layer = Self.layer(of: id), Self.isMenuLayer(layer) { return nil }
         guard el.bool(kAXMinimizedAttribute) != true, el.bool("AXFullScreen") != true else { return nil }
         let appName = NSRunningApplication(processIdentifier: pid)?.localizedName ?? ""
         let title = el.string(kAXTitleAttribute) ?? ""
@@ -1276,6 +1279,17 @@ final class WindowManager {
         let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
         guard let id = topWindow(at: p), id != focusedWorkspace.focused else { return }
         focusWindow(id, warp: false)
+    }
+
+    /// The window's CoreGraphics layer (its window level).
+    static func layer(of id: WindowID) -> Int? {
+        let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]]
+        return list?.first?[kCGWindowLayer as String] as? Int
+    }
+
+    /// Menus, tooltips and other pop-ups sit at or above the pop-up menu level.
+    static func isMenuLayer(_ layer: Int) -> Bool {
+        layer >= Int(CGWindowLevelForKey(.popUpMenuWindow))
     }
 
     /// The front-most window under a point, only if paw manages it.
