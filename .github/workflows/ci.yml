@@ -33,6 +33,9 @@ jobs:
       - name: Test
         run: swift test
 
+      - name: Benchmark controller and pure helper checks (no desktop benchmark)
+        run: python3 scripts/bench/bench.py check
+
       - name: Bundle universal paw.app (ad-hoc)
         run: |
           PAW_ARCHS="arm64 x86_64" scripts/bundle.sh build.noindex

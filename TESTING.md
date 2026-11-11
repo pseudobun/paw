@@ -2,6 +2,10 @@
 
 `just test` covers the layout logic; a window manager also needs a real desktop. Keep `just log` open.
 
+`just bench check` checks the benchmark controller and pure helpers without running a desktop
+benchmark. Controlled profiling and comparisons have a separate [runbook](docs/benchmarking.md).
+Do not stream logs during an idle measurement.
+
 ## Switch over
 
 - [ ] Stop other window managers / hotkey daemons (`yabai --stop-service; skhd --stop-service`)

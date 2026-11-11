@@ -116,7 +116,6 @@ release tag=("v" + `tr -d '[:space:]' < VERSION`):
 
 # Window-management benchmark against the running dev build (see scripts/bench/wmbench.swift):
 # just bench switch 200 · just bench ops 200 · just bench hung TextEdit
+[positional-arguments]
 bench *args:
-    @mkdir -p .build/bench
-    @xcrun swiftc -O scripts/bench/wmbench.swift -o .build/bench/wmbench
-    .build/bench/wmbench {{args}}
+    python3 scripts/bench/bench.py "$@"

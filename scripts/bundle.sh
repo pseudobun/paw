@@ -6,6 +6,8 @@
 #      PAW_BUILD (CFBundleVersion, which Sparkle compares; default: commit count), PAW_BUNDLE_ID, PAW_SIGN_IDENTITY,
 #      PAW_TIMESTAMP=1 (secure timestamp, needed for notarization),
 #      PAW_DEV=1 (a dev build: "paw Dev", com.pseudobun.paw.dev, no updates; see just dev)
+#      PAW_PROFILE=1 (dev only: timing recorder, debug information and matching dSYM),
+#      PAW_DSYM=1 (debug information and dSYM without the timing recorder)
 # Signing: PAW_SIGN_IDENTITY if set, else a "Developer ID Application" or "Apple Development"
 # identity, else the self-signed "paw Local Signing" certificate (just local-cert), else ad-hoc.
 set -euo pipefail
@@ -39,8 +41,15 @@ build="${PAW_BUILD:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 
 # dead_strip + strip -x: about half the size (local symbols aren't needed to run)
 arch_flags=""; for a in ${PAW_ARCHS:-arm64}; do arch_flags="$arch_flags --arch $a"; done
-swift build -c release $arch_flags -q -Xlinker -dead_strip
-bin_dir="$(swift build -c release $arch_flags -Xlinker -dead_strip --show-bin-path)"
+profile_flags=""
+if [ "${PAW_PROFILE:-}" = 1 ]; then
+  [ "${PAW_DEV:-}" = 1 ] || { echo "PAW_PROFILE requires PAW_DEV=1" >&2; exit 1; }
+  profile_flags="-Xswiftc -DPAW_PROFILE -Xswiftc -g"
+elif [ "${PAW_DSYM:-}" = 1 ]; then
+  profile_flags="-Xswiftc -g"
+fi
+swift build -c release $arch_flags $profile_flags -q -Xlinker -dead_strip
+bin_dir="$(swift build -c release $arch_flags $profile_flags -Xlinker -dead_strip --show-bin-path)"
 bin="$bin_dir/paw"
 # Sparkle (updates): the framework SwiftPM built next to the binary.
 sparkle="$(find "$bin_dir" "$bin_dir/PackageFrameworks" -maxdepth 1 -name Sparkle.framework 2>/dev/null | head -1)"
@@ -56,6 +65,14 @@ app="$out/paw.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
 cp "$bin" "$app/Contents/MacOS/paw"
+if [ "${PAW_PROFILE:-}" = 1 ] || [ "${PAW_DSYM:-}" = 1 ]; then
+  xcrun dsymutil "$bin" -o "$out/paw.dSYM"
+  # Compare UUID and architecture, ignoring the different file paths.
+  xcrun dwarfdump --uuid "$bin" | awk '{print $2, $3}' > "$out/binary-uuids.txt"
+  xcrun dwarfdump --uuid "$out/paw.dSYM" | awk '{print $2, $3}' > "$out/dsym-uuids.txt"
+  cmp "$out/binary-uuids.txt" "$out/dsym-uuids.txt" || { echo "dSYM UUID mismatch" >&2; exit 1; }
+  [ -s "$out/binary-uuids.txt" ] || { echo "missing binary UUID" >&2; exit 1; }
+fi
 ditto "$sparkle" "$app/Contents/Frameworks/Sparkle.framework"
 # paw isn't sandboxed, so Sparkle needs no XPC services.
 rm -rf "$app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" "$app/Contents/Frameworks/Sparkle.framework/XPCServices"

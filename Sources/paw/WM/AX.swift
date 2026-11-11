@@ -28,7 +28,11 @@ extension AXUIElement {
 
     @discardableResult
     func set(_ attr: String, _ value: CFTypeRef) -> Bool {
-        AXHealth.call(self) { AXUIElementSetAttributeValue(self, attr as CFString, value) } == .success
+        AXHealth.call(self) {
+            let result = AXUIElementSetAttributeValue(self, attr as CFString, value)
+            Performance.axWrite(result)
+            return result
+        } == .success
     }
 
     func isSettable(_ attr: String) -> Bool {

@@ -71,6 +71,7 @@ final class Window {
     /// Same size as before: just the position (one call instead of three). `settle: false` sends
     /// the size once (animation frames, where the next frame follows anyway).
     func setFrame(_ r: CGRect, settle: Bool = true) {
+        Performance.count("frame_requests")
         let size = r.size == frame.size ? nil : r.size
         if size != nil { invalidateCornerRadius() }
         borderFrame = nil
@@ -92,6 +93,7 @@ final class Window {
     }
 
     func setPosition(_ p: CGPoint) {
+        Performance.count("position_requests")
         borderFrame = nil
         borderNeedsRefresh = true
         frame.origin = p
@@ -151,6 +153,8 @@ enum AXQueue {
     /// Held per app while its queue talks to it.
     private static var appLocks: [pid_t: NSLock] = [:]
 
+    static var isIdle: Bool { lock.withLock { busy.isEmpty && pending.values.allSatisfy(\.isEmpty) && sending.isEmpty } }
+
     /// Moves collected for the Dock payload during `run`, sent as one screen update at its end.
     private static var dockMoves: [(Window, CGPoint)]?
 
@@ -185,6 +189,8 @@ enum AXQueue {
         lock.lock()
         var m = pending[pid]?[w.id] ?? Move(window: w, size: nil, origin: origin)
         if pending[pid]?[w.id] == nil { order[pid, default: []].append(w.id) }
+        else { Performance.count("ax_coalesced") }
+        Performance.count("ax_enqueued")
         m.origin = origin
         if let size { m.size = size; m.settle = settle }
         pending[pid, default: [:]][w.id] = m
@@ -212,7 +218,11 @@ enum AXQueue {
             // Taken before letting go of `lock`: a flush either finds a move pending or waits.
             appLock.lock()
             lock.unlock()
-            for m in moves { send(m.window, m.size, m.origin, m.settle) }
+            for m in moves {
+                let measurement = Performance.begin("ax-move")
+                send(m.window, m.size, m.origin, m.settle)
+                Performance.end(measurement)
+            }
             lock.lock()
             sending.subtract(ids)
             lock.unlock()

@@ -3,3 +3,4 @@
 .swiftpm/
 build.noindex/
 *.dSYM
+__pycache__/

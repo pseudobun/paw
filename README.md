@@ -660,6 +660,11 @@ just bench ops 200        # focus, swap, resize, layout changes, query
 just bench hung TextEdit  # the same with TextEdit stopped, as a hung app would be
 ```
 
+For controlled comparisons, profiling builds, saved raw results and separate-user setup, see
+the [benchmark runbook](docs/benchmarking.md). `just bench prepare` only builds artifacts;
+`just bench run` launches the controlled scene. The workflow is prepared; its first live pilot
+and regression checks remain unexecuted pending explicit execution.
+
 ### Releasing
 
 Releases come from [Conventional Commits](https://www.conventionalcommits.org) on `main`.

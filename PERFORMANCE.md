@@ -19,14 +19,21 @@ just bench hung TextEdit  # the same commands with TextEdit stopped (SIGSTOP)
 
 `scripts/bench/wmbench.swift` talks to paw over its socket.
 
-- **Round trip:** the time from a command until paw answers. paw runs a command on its main
-  thread before it answers, so this is main-thread time.
-- **All on screen:** the time until the window server reports every window of the new workspace
-  on screen. It polls `CGWindowListCreateDescriptionFromArray` every millisecond. Windows paw
-  parks behind a placeholder don't count.
+- **Round trip:** elapsed time from sending a command until its reply, including IPC and
+  scheduling. It excludes asynchronous follow-up work and is not a measurement of main-thread CPU.
+- **Geometry (current driver):** time until WindowServer frames match PAW's intended frames
+  within 4 points, including the windows meant to be parked. This checks positions and sizes,
+  not presented pixels. A timeout invalidates the batch.
 - **Hung:** each command's round trip while one app with windows on both workspaces is stopped.
   This is the worst case of an app that stops answering Accessibility (beachballing, busy with
   indexing).
+
+The current driver alternates operations and rejects no-ops, missing windows, bad replies and
+timeouts. `ops` establishes columns on workspace 1 and leaves it in columns. `hung` has a separate
+resume watchdog, scoped to the current user's process identities. Quick commands still use
+the already-running dev app and desktop; they do not verify a candidate artifact or constitute
+a controlled A/B comparison. See [the runbook](docs/benchmarking.md) for archived builds, fixtures,
+CPU/idle/overview measurements, saved comparisons and optional Instruments traces.
 
 Other tools used for this report:
 
@@ -37,6 +44,11 @@ Other tools used for this report:
 | Idle CPU | `top -l 30 -pid <pid> -stats cpu` |
 
 ## Results
+
+These are the original manually collected results from the earlier workload. The current
+driver changes warm-up, pacing, geometry validation and operation ordering, and computes a true
+median. Collect a new unchanged-build calibration before comparing its results; these tables
+are historical evidence, not a baseline for the new driver. No new measurements are claimed.
 
 ### At rest
 

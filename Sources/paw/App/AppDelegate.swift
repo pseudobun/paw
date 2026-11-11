@@ -204,6 +204,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func command(_ text: String) -> [String: Any] {
         let (name, rest) = text.firstIndex(of: " ").map { (String(text[..<$0]), String(text[text.index(after: $0)...])) } ?? (text, "")
         switch name {
+        case "perf":
+            if (rest == "begin" || rest == "end"), !AXQueue.isIdle { return ["error": "AX moves still pending"] }
+            var reply = Performance.control(rest)
+            reply["axIdle"] = AXQueue.isIdle
+            return reply
         case "run":
             do { wm.run(try Command.parseAll(rest)) } catch {
                 Log.app.error("cli: \(error.localizedDescription, privacy: .public)")
