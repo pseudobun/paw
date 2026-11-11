@@ -24,6 +24,38 @@ enum SkyLight {
     private static let mainConnection: MainConnection? = sym("SLSMainConnectionID", in: handle)
     private static let copyManagedDisplays: CopyManagedDisplays? = sym("SLSCopyManagedDisplays", in: handle)
 
+    private typealias QueryWindows = @convention(c) (Int32, CFArray, UInt32) -> Unmanaged<CFTypeRef>?
+    private typealias CopyWindows = @convention(c) (CFTypeRef) -> Unmanaged<CFTypeRef>?
+    private typealias AdvanceWindow = @convention(c) (CFTypeRef) -> Bool
+    private typealias CornerRadii = @convention(c) (CFTypeRef) -> Unmanaged<CFArray>?
+    private typealias WindowBounds = @convention(c) (Int32, UInt32, UnsafeMutablePointer<CGRect>) -> CGError
+    private static let queryWindows: QueryWindows? = sym("SLSWindowQueryWindows", in: handle)
+    private static let copyWindows: CopyWindows? = sym("SLSWindowQueryResultCopyWindows", in: handle)
+    private static let advanceWindow: AdvanceWindow? = sym("SLSWindowIteratorAdvance", in: handle)
+    private static let cornerRadii: CornerRadii? = sym("SLSWindowIteratorGetCornerRadii", in: handle)
+    private static let windowBounds: WindowBounds? = sym("SLSGetWindowBounds", in: handle)
+
+    /// macOS 26+: missing symbols or invalid results leave the configured radius in use.
+    static func cornerRadius(_ id: UInt32) -> CGFloat? {
+        guard let mainConnection, let queryWindows, let copyWindows, let advanceWindow, let cornerRadii,
+              let query = queryWindows(mainConnection(), [id] as CFArray, 0)?.takeRetainedValue(),
+              let iterator = copyWindows(query)?.takeRetainedValue(), advanceWindow(iterator),
+              let radii = cornerRadii(iterator)?.takeRetainedValue() as? [NSNumber],
+              let radius = radii.first?.doubleValue, radius.isFinite, radius >= 0 else { return nil }
+        // shortcut: one radius for all corners, use a per-corner path if asymmetric windows need it.
+        return CGFloat(radius)
+    }
+
+    /// WindowServer bounds are in points and don't wait for the app to answer AX.
+    static func frame(_ id: UInt32) -> CGRect? {
+        guard let mainConnection, let windowBounds else { return nil }
+        var frame = CGRect.zero
+        guard windowBounds(mainConnection(), id, &frame) == .success,
+              frame.origin.x.isFinite, frame.origin.y.isFinite,
+              frame.width.isFinite, frame.height.isFinite, frame.width > 0, frame.height > 0 else { return nil }
+        return frame
+    }
+
     /// Display UUIDs in the window server's order, the order sketchybar numbers displays in
     /// (its arrangement-id is the 1-based position here).
     static func managedDisplayUUIDs() -> [String] {

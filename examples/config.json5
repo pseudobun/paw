@@ -207,6 +207,7 @@
     enabled: false,
     color: "0xccead186", // 0xAARRGGBB or "#RRGGBB"
     width: 2,
+    autoRadius: true, // Match the window's corners when available (macOS 26+)
     radius: 12,
     offset: 2,
   },

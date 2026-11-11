@@ -33,7 +33,7 @@ final class Placeholders {
         })
     }
 
-    func apply(_ items: [Item], style: Style, focusFollowsMouse: Bool, actions: Actions) {
+    func apply(_ items: [Item], style: Style, focusFollowsMouse: Bool, focusBorder: FocusBorder, actions: Actions) {
         let ids = Set(items.map(\.id))
         for (id, p) in panels where !ids.contains(id) {
             p.panel.orderOut(nil)
@@ -43,15 +43,22 @@ final class Placeholders {
             let p = panels[item.id] ?? make()
             panels[item.id] = p
             // Redrawn only when what it shows changed: this runs on every indicator update.
+            let focusBorderVisible = focusBorder.windowID == item.id
             let changed = p.view.item != item || p.view.style.a != style.a
+                || p.view.focusBorderVisible != focusBorderVisible
             p.view.item = item
             p.view.style = style
             p.view.actions = actions
             p.view.focusFollowsMouse = focusFollowsMouse
+            p.view.focusBorderVisible = focusBorderVisible
             let f = ScreenGeometry.cocoa(fromAX: item.frame, primaryHeight: primaryHeight)
             if p.panel.frame != f { p.panel.setFrame(f, display: false) }
             if changed { p.view.needsDisplay = true }
             if !p.panel.isVisible { p.panel.orderFrontRegardless() }
+            if p.view.focusBorderVisible, focusBorder.panel.parent !== p.panel {
+                focusBorder.panel.parent?.removeChildWindow(focusBorder.panel)
+                p.panel.addChildWindow(focusBorder.panel, ordered: .above)
+            }
         }
     }
 
@@ -76,6 +83,7 @@ final class PlaceholderView: NSView {
     var style = Style(PawConfig.Appearance())
     var actions: Placeholders.Actions?
     var focusFollowsMouse = false
+    var focusBorderVisible = false
     private var downAt: CGPoint?
     private var dragging = false
     private var area: NSTrackingArea?
@@ -110,9 +118,11 @@ final class PlaceholderView: NSView {
         dash.setLineDash([6, 5], count: 2, phase: 0)
         dash.lineWidth = 1
         if item.focused {
-            c.accent.ns.setStroke()
-            path.lineWidth = 2
-            path.stroke()
+            if !focusBorderVisible {
+                c.accent.ns.setStroke()
+                path.lineWidth = 2
+                path.stroke()
+            }
         } else {
             c.muted.withAlpha(0.5).ns.setStroke()
             dash.stroke()
