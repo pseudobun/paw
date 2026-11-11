@@ -8,7 +8,7 @@ import Foundation
 /// never has to ask separately (and can't race an event).
 final class EventBus {
     static let shared = EventBus()
-    static let names = ["snapshot", "workspaceChanged", "windowFocused", "windowsChanged", "layoutChanged",
+    static let names = ["snapshot", "workspaceChanged", "windowFocused", "windowsChanged", "layoutChanged", "zoomChanged",
                         "modeChanged", "displaysChanged", "setupChanged", "configReloaded"]
 
     private final class Subscriber {

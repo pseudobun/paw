@@ -68,7 +68,7 @@ enum CLI {
           query [--json]      workspaces and their windows (for sketchybar)
           subscribe [events…] [--reconnect] [--exec <command>]
                               events as JSON lines, a snapshot first; events: workspaceChanged
-                              windowFocused windowsChanged layoutChanged modeChanged displaysChanged
+                              windowFocused windowsChanged layoutChanged zoomChanged modeChanged displaysChanged
                               setupChanged configReloaded (default: all). --reconnect waits for paw
                               and starts over when it restarts; --exec runs a command per event
                               ($PAW_EVENT, $PAW_SEQ, $PAW_DATA) instead of printing it

@@ -443,7 +443,7 @@ public final class Workspace {
     }
 
     /// Whether `t` is on screen: under the shown branch, and in its range.
-    func isShown(_ t: Node) -> Bool {
+    public func isShown(_ t: Node) -> Bool {
         guard let s = shownRoot else { return false }
         var n: Node = t
         while n !== s {
@@ -485,6 +485,20 @@ public final class Workspace {
     }
 
     public func clearZoom() { view = nil; range = nil; pinned = false }
+
+    /// How far in the shown branch is (0: the whole tree), and how deep the deepest tile sits.
+    public var zoomLevel: (level: Int, levels: Int) {
+        func depth(_ n: Node?) -> Int {
+            var d = 0, x = n
+            while let p = x?.parent { d += 1; x = p }
+            return d
+        }
+        let level = depth(shownRoot) + (shownRange == nil ? 0 : 1)
+        return (level, tiles.map(depth).max() ?? 0)
+    }
+
+    /// Zoomed in by hand (zoom in/out, a region from the overview): focus stays inside.
+    public var isZoomedByHand: Bool { pinned && (view != nil || range != nil) }
 
     /// Shows the smallest branch holding all of `ids` (a region picked in the overview).
     @discardableResult
