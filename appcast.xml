@@ -6,6 +6,18 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.25</title>
+      <pubDate>Thu, 12 Nov 2026 18:35:47 +0000</pubDate>
+      <sparkle:version>142</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.25</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
+<ul>
+<li><b>indicator:</b> draw app icons in edge markers without the app font (<a href="https://github.com/pseudobun/paw/issues/85">#85</a>) (<a href="https://github.com/pseudobun/paw/commit/76becdcb61ae06d2a3626641bdcd740ef77d6c0b">76becdc</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.25">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.25/paw-0.1.0-beta.25-macos.zip" type="application/octet-stream" sparkle:edSignature="tTLoRJHkNLPp8RLlBPEaiSAC45BC8HdXZrxOwcWVdzdiNZlML9MwuPAJ64cy+mxDlDNylX9glhLcWaCC2DraDQ==" length="3671225"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.24</title>
       <pubDate>Thu, 12 Nov 2026 18:22:06 +0000</pubDate>
       <sparkle:version>139</sparkle:version>
@@ -268,18 +280,6 @@
 <li>raise restored placeholders after toggling full screen (<a href="https://github.com/pseudobun/paw/issues/31">#31</a>) (<a href="https://github.com/pseudobun/paw/commit/e0438911d82b730d3b8f274efbb20ac0af7418bf">e043891</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.6">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.6/paw-0.1.0-beta.6-macos.zip" type="application/octet-stream" sparkle:edSignature="6N/cCXoR/MND1z+wnl7sW9MZ/XBqGILLTlehzythoRItvvfoyxY0m+Qab4o6NGpgTj0KzcoLWhWnvkoh66iyAw==" length="3243962"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.5</title>
-      <pubDate>Tue, 10 Nov 2026 19:32:52 +0000</pubDate>
-      <sparkle:version>73</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.5</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
-<ul>
-<li><b>cask:</b> mark paw as self-updating with auto_updates (<a href="https://github.com/pseudobun/paw/issues/25">#25</a>) (<a href="https://github.com/pseudobun/paw/commit/aa39cc92b7b90026047ce995247360f14997064f">aa39cc9</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.5">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.5/paw-0.1.0-beta.5-macos.zip" type="application/octet-stream" sparkle:edSignature="MnEab12tP0+nrMFy0rBY50aMzQgc7c8RUMhRNeze9+w4BC48JIourh0Y9p970dfade1LylKE4Ak51L+WqBxCAg==" length="3210656"/>
     </item>
   </channel>
 </rss>
