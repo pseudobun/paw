@@ -177,6 +177,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated { SettingsWindowController.shared.show(settings: settings) }
     }
 
+    @objc private func toggleAutoSwitch() {
+        settings.save { $0.autoSwitchSetups.toggle() }
+    }
+
     @objc private func pickSetup(_ sender: NSMenuItem) {
         guard let name = sender.representedObject as? String else { return }
         wm.run([.initiate(name)])
@@ -277,13 +281,20 @@ extension AppDelegate: NSMenuDelegate {
         let setups = settings.config.setups.keys.sorted()
         if !setups.isEmpty {
             menu.addItem(NSMenuItem(title: "Set Workspace", action: nil, keyEquivalent: ""))
+            let matching = Set(wm.map { settings.config.matchingSetups(for: $0.connected) } ?? [])
             for name in setups {
                 let item = NSMenuItem(title: "  " + name.capitalized, action: #selector(pickSetup(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = name
                 item.state = wm?.activeSetup == name ? .on : .off
+                if matching.contains(name) { item.toolTip = "Matches the connected displays" }
                 menu.addItem(item)
             }
+            let auto = NSMenuItem(title: "  Switch Automatically", action: #selector(toggleAutoSwitch), keyEquivalent: "")
+            auto.target = self
+            auto.state = settings.config.autoSwitchSetups ? .on : .off
+            auto.toolTip = "Switch to the setup that matches the displays when they come and go"
+            menu.addItem(auto)
             menu.addItem(.separator())
         }
         for (title, action, key) in [("Arrange Apps", #selector(initiateCurrent), ""), ("Settings…", #selector(openSettings), ","),

@@ -47,6 +47,20 @@ final class Settings {
         if notify { onChange?() }
     }
 
+    /// Changes the config and writes the file (the watcher loads it). Not while it's broken.
+    func save(_ change: (inout PawConfig) -> Void) {
+        guard error == nil else { return }
+        var c = config
+        change(&c)
+        guard c != config else { return }
+        do {
+            try ConfigTemplate.render(c).write(to: url, atomically: true, encoding: .utf8)
+            load()
+        } catch {
+            Log.app.error("config: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func loadIcons() {
         let path = config.icons.map.expandingTilde
         var map = AppIconMap.bundled
