@@ -280,7 +280,18 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var check = true
         /// Install as soon as it is downloaded (paw restarts by itself).
         public var automatic = false
+        /// "stable", "beta" (stable versions and betas) or "auto": beta when the running paw is one.
+        public var channel = "auto"
         public init() {}
+
+        /// Whether betas are offered, for a running paw of `version`.
+        public func wantsBeta(running version: String) -> Bool {
+            switch channel {
+            case "beta": return true
+            case "stable": return false
+            default: return version.split(separator: "+")[0].contains("-")
+            }
+        }
     }
 
     public struct HUD: Codable, Equatable, Sendable {
@@ -451,10 +462,10 @@ extension PawConfig.Overview {
 }
 
 extension PawConfig.Updates {
-    enum CodingKeys: String, CodingKey, CaseIterable { case check, automatic }
+    enum CodingKeys: String, CodingKey, CaseIterable { case check, automatic, channel }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.check, &check); try f(.automatic, &automatic)
+        try f(.check, &check); try f(.automatic, &automatic); try f(.channel, &channel)
     }
 }
 

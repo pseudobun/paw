@@ -226,6 +226,7 @@
   updates: {
     check: true, // look once a day, download in the background, install when paw quits
     automatic: false, // install as soon as it is downloaded; paw restarts
+    channel: "auto", // "stable", "beta" (betas too), "auto" (beta when this paw is one)
   },
 
   // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.

@@ -142,6 +142,11 @@ final class Updater: NSObject {
 
 // Sparkle calls its delegate and user driver on the main thread.
 extension Updater: SPUUpdaterDelegate {
+    /// Betas sit in the appcast's `beta` channel; stable versions in the default one.
+    func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+        config.wantsBeta(running: AppPaths.version) ? ["beta"] : []
+    }
+
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         if probing { found = item.displayVersionString }
     }

@@ -34,6 +34,15 @@ struct ConfigTests {
         #expect(ConfigLoader.unknownKeys(Data("{ updates: { auto: true } }".utf8)) == ["updates.auto"])
     }
 
+    @Test func updateChannelFollowsTheRunningVersionUnlessSet() throws {
+        let auto = PawConfig.Updates()
+        #expect(auto.wantsBeta(running: "0.2.0-beta.3"))
+        #expect(!auto.wantsBeta(running: "0.2.0"))
+        #expect(!auto.wantsBeta(running: "0.2.0+abc1234.dirty"))
+        #expect(try load("{ updates: { channel: \"beta\" } }").updates.wantsBeta(running: "0.2.0"))
+        #expect(try !load("{ updates: { channel: \"stable\" } }").updates.wantsBeta(running: "0.2.0-beta.3"))
+    }
+
     @Test func errorsNameThePath() {
         do {
             _ = try load("{ appearance: { colors: { fg: 'purple' } } }")
