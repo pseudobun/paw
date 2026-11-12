@@ -767,8 +767,7 @@ final class WindowManager {
             if let w = windows[id] {
                 retryMinimum(w, focus: true)
                 // A click on a tile: macOS raised it over the floats it overlaps.
-                let floats = floatsAbove(w, onlyBehind: true)
-                if !floats.isEmpty { focusQueue.async { for f in floats { f.perform(kAXRaiseAction) } } }
+                raiseFloats(floatsAbove(w, onlyBehind: true), over: w)
             }
             if ws.frameCamera(on: id, area: displays[di].area, gap: config.layout.gap) { layout(ws, animated: true) }
             updateIndicators()
@@ -1361,12 +1360,12 @@ final class WindowManager {
         }
         let (pid, element) = (w.pid, w.element)
         let floats = raise ? floatsAbove(w) : []
+        if !floats.isEmpty { ignoreFocus(0.3) }
         // Requests pile up behind a slow app: only the newest one still goes.
         focusQueue.async {
             guard FocusTicket.shared.isLatest(ticket) else { return }
             SkyLight.focus(pid: pid, windowID: id, element: element, raise: raise)
-            // Floating windows stay in front of tiles. AXRaise doesn't activate their apps.
-            for f in floats { f.perform(kAXRaiseAction) }
+            Self.bringForward(floats, thenFocus: (pid, id, element))
         }
         pawFocus = (id, Date())
         if warp && config.focus.mouseFollowsFocus {
@@ -1386,7 +1385,7 @@ final class WindowManager {
     /// them. `onlyBehind`: the tile is already in front (a click), so only the floats now behind
     /// it. Same-app floats are left alone (raising one could make it key). None when the window
     /// server keeps floats above (layered) or floatsOnTop is off.
-    private func floatsAbove(_ w: Window, onlyBehind: Bool = false) -> [AXUIElement] {
+    private func floatsAbove(_ w: Window, onlyBehind: Bool = false) -> [Window] {
         guard config.focus.floatsOnTop, let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil else { return [] }
         let floats = ws.floating.filter { id in
             !layeredFloats.contains(id) && windows[id].map { !$0.isHidden && $0.pid != w.pid && $0.frame.intersects(w.frame) } ?? false
@@ -1395,7 +1394,27 @@ final class WindowManager {
         let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
         let order = list.compactMap { $0[kCGWindowNumber as String] as? UInt32 } // front to back
         let behind = onlyBehind ? Self.behind(floats, window: w.id, stacking: order) : floats
-        return Self.backToFront(behind, stacking: order).compactMap { windows[$0]?.element }
+        return Self.backToFront(behind, stacking: order).compactMap { windows[$0] }
+    }
+
+    /// Puts `floats` back in front of `w`, which keeps the keyboard.
+    private func raiseFloats(_ floats: [Window], over w: Window) {
+        guard !floats.isEmpty else { return }
+        Log.app.info("floatsOnTop: \(floats.count) float(s) back over \(w.app, privacy: .public)")
+        // The float's app comes forward on the way: not a focus change to follow.
+        ignoreFocus(0.3)
+        let (pid, id, element) = (w.pid, w.id, w.element)
+        focusQueue.async { Self.bringForward(floats, thenFocus: (pid, id, element)) }
+    }
+
+    /// AXRaise only orders a window among its own app's windows: a float of an app in the
+    /// background stays behind the active app's tile. So each comes forward with its app, back
+    /// to front, and the tile's app then takes the keyboard back without raising (yabai's way).
+    /// On the focus queue.
+    private static func bringForward(_ floats: [Window], thenFocus target: (pid_t, WindowID, AXUIElement)) {
+        guard !floats.isEmpty else { return }
+        for f in floats { SkyLight.focus(pid: f.pid, windowID: f.id, element: f.element) }
+        SkyLight.focus(pid: target.0, windowID: target.1, element: target.2, raise: false)
     }
 
     /// Of `ids`, those after `window` in `stacking` (front to back): behind it.
@@ -1462,8 +1481,7 @@ final class WindowManager {
         let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self, let id = self.topWindow(at: p), let w = self.windows[id] else { return }
-            let floats = self.floatsAbove(w, onlyBehind: true)
-            if !floats.isEmpty { self.focusQueue.async { for f in floats { f.perform(kAXRaiseAction) } } }
+            self.raiseFloats(self.floatsAbove(w, onlyBehind: true), over: w)
         }
     }
 
