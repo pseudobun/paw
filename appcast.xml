@@ -6,6 +6,20 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.16</title>
+      <pubDate>Thu, 12 Nov 2026 08:52:23 +0000</pubDate>
+      <sparkle:version>115</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.16</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
+<ul>
+<li><b>cask:</b> only quit paw on upgrade (<a href="https://github.com/pseudobun/paw/commit/9141c0eb426411eee50a072f73f9d916ab30ee0d">9141c0e</a>)</li>
+<li><b>focus:</b> select revealed tiles and restore placeholder shortcuts (<a href="https://github.com/pseudobun/paw/issues/57">#57</a>) (<a href="https://github.com/pseudobun/paw/commit/e2c6d35732146e6bedc6589a0627dd116eced260">e2c6d35</a>)</li>
+<li><b>wm:</b> ignore pop-up menu windows such as Qt context menus (<a href="https://github.com/pseudobun/paw/issues/59">#59</a>) (<a href="https://github.com/pseudobun/paw/commit/6e9434f93d5e0d0b7d7538c94c1a7675e5c86ac8">6e9434f</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.16">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.16/paw-0.1.0-beta.16-macos.zip" type="application/octet-stream" sparkle:edSignature="pcySMEuiEFWDbvQMHWnWXcjVvIFnZZAq5u62950q0mSjk5WD7K7VSGWzixYLiyYroB4Jr+8DI1T83YHSIgDNBg==" length="3617034"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.15</title>
       <pubDate>Wed, 11 Nov 2026 20:04:34 +0000</pubDate>
       <sparkle:version>109</sparkle:version>
