@@ -38,6 +38,8 @@
     wrapStacks: false,
     // workspace next on the last workspace goes back to the first (false: it stays)
     wrapWorkspaces: false,
+    // floating windows stay in front of tiled ones (false: a focused tile can cover them)
+    floatsOnTop: true,
   },
 
   animation: {
@@ -66,13 +68,20 @@
     // },
   },
 
+  // Switch setups by themselves when displays come and go (a setup's autoSwitch wins). Off: the
+  // setup in use stays until you pick one in the menu bar or with `paw initiate <setup>`.
+  autoSwitchSetups: true,
+
   // Presets per display arrangement. When the connected displays match a setup's `displays`
   // (one entry each: "builtin", "external" or part of a name), its workspaces replace the ones
   // above, every display shows its pinned workspace and windows move where the presets say.
+  // Several setups for the same displays: paw takes the one you picked last for them, else the
+  // first by name; autoSwitch: false keeps one for picking by hand.
   setups: {
     // home: {
     //   displays: ["builtin", "DELL", "Gigabyte"],
     //   focus: "9",
+    //   autoSwitch: true,               // switch here by itself when these displays connect
     //   workspaces: {
     //     "1": { display: "builtin" },
     //     "8": { display: "DELL", layout: "stack", tiles: [ { apps: ["Discord", "Spotify"] } ] },
@@ -226,6 +235,7 @@
   updates: {
     check: true, // look once a day, download in the background, install when paw quits
     automatic: false, // install as soon as it is downloaded; paw restarts
+    channel: "auto", // "stable", "beta" (betas too), "auto" (beta when this paw is one)
   },
 
   // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.

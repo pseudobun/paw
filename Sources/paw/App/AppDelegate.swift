@@ -46,6 +46,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Updater.shared.onResult = { [weak self] state in self?.showUpdateResult(state) }
         }
         setUpStatusItem()
+        // After an update that changed the Dock helper: say so once (a dev build leaves the
+        // installed helper to `sudo paw-dev dock install`).
+        if !AppPaths.isDev {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                DockCLI.noteUpdateOnce { self?.showNote("Dock helper changed: \(DockCLI.installCommand)", duration: 8) }
+            }
+        }
         Log.app.info("paw \(AppPaths.version, privacy: .public) ready, trusted: \(AX.isTrusted)")
     }
 
@@ -170,16 +177,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated { SettingsWindowController.shared.show(settings: settings) }
     }
 
+    @objc private func toggleAutoSwitch() {
+        settings.save { $0.autoSwitchSetups.toggle() }
+    }
+
     @objc private func pickSetup(_ sender: NSMenuItem) {
         guard let name = sender.representedObject as? String else { return }
         wm.run([.initiate(name)])
     }
 
     /// Update answers as the workspace HUD, which doesn't block like an alert.
-    private func showUpdateResult(_ state: Updater.State) {
+    private func showUpdateResult(_ state: Updater.State) { showNote(state.text, duration: 2.5) }
+
+    private func showNote(_ text: String, duration: TimeInterval) {
         guard let wm, let display = wm.displays.first else { return }
-        wm.hud.show(label: state.text, apps: [], in: display.area, icons: settings.icons,
-                    config: settings.config, duration: 2.5)
+        wm.hud.show(label: text, apps: [], in: display.area, icons: settings.icons,
+                    config: settings.config, duration: duration)
+    }
+
+    /// For a terminal: installing the helper needs root.
+    @objc private func copyDockInstall() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(DockCLI.installCommand, forType: .string)
+        showNote("Copied: \(DockCLI.installCommand)", duration: 2.5)
     }
 
     @objc private func checkForUpdates() { MainActor.assumeIsolated { Updater.shared.installNow() } }
@@ -247,7 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "config": settings.url.path, "error": settings.error ?? "",
                     "bindings": wm.hotkeys.problems.isEmpty ? "ok" : wm.hotkeys.problems.joined(separator: "; "),
                     "iconFont": wm.indicators.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok",
-                    "windowMoves": DockBridge.shared.statusLine]
+                    "windowMoves": DockBridge.shared.statusLine, "floatsOnTop": wm.floatsOnTopStatus, "nativeSpaces": SkyLight.nativeSpacesStatus]
         case "query":
             // Encoded by the IPC thread (IPC.Server.serve), not here on the main thread.
             return [IPC.jsonObjectKey: wm.query()]
@@ -266,13 +286,20 @@ extension AppDelegate: NSMenuDelegate {
         let setups = settings.config.setups.keys.sorted()
         if !setups.isEmpty {
             menu.addItem(NSMenuItem(title: "Set Workspace", action: nil, keyEquivalent: ""))
+            let matching = Set(wm.map { settings.config.matchingSetups(for: $0.connected) } ?? [])
             for name in setups {
                 let item = NSMenuItem(title: "  " + name.capitalized, action: #selector(pickSetup(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = name
                 item.state = wm?.activeSetup == name ? .on : .off
+                if matching.contains(name) { item.toolTip = "Matches the connected displays" }
                 menu.addItem(item)
             }
+            let auto = NSMenuItem(title: "  Switch Automatically", action: #selector(toggleAutoSwitch), keyEquivalent: "")
+            auto.target = self
+            auto.state = settings.config.autoSwitchSetups ? .on : .off
+            auto.toolTip = "Switch to the setup that matches the displays when they come and go"
+            menu.addItem(auto)
             menu.addItem(.separator())
         }
         for (title, action, key) in [("Arrange Apps", #selector(initiateCurrent), ""), ("Settings…", #selector(openSettings), ","),
@@ -287,6 +314,11 @@ extension AppDelegate: NSMenuDelegate {
                                   action: #selector(checkForUpdates), keyEquivalent: "")
             item.target = self
             item.isEnabled = MainActor.assumeIsolated { Updater.shared.state != .checking }
+            menu.addItem(item)
+        }
+        if DockCLI.isOutdated {
+            let item = NSMenuItem(title: "Dock Helper Outdated: Copy “\(DockCLI.installCommand)”", action: #selector(copyDockInstall), keyEquivalent: "")
+            item.target = self
             menu.addItem(item)
         }
         menu.addItem(.separator())

@@ -135,6 +135,30 @@ A paw started while the screen was locked (a login item, a restart over SSH) use
    - Hooks start off the main thread.
    - `query` is encoded on the IPC thread.
 
+## Release build at rest
+
+Measured on 2026-11-12 on olympus: Mac mini, Apple M4 Pro, 24 GB, macOS 27.2, one display
+(3320 × 2040, Screen Sharing). The installed release builds from the beta casks ran together:
+paw 0.1.0-beta.21, hop 0.1.0-beta.13 and tip 0.1.0-beta.1.
+
+Idle counters come from `proc_pid_rusage` (CPU time, `ri_pkg_idle_wkups` + `ri_interrupt_wkups`,
+`ri_phys_footprint`) over 120 s with nobody at the keyboard. CLI round trips are the median and
+p90 of 50 runs after 10 warm-up runs, process start included; starting `/usr/bin/true` costs
+1.4 ms on this machine.
+
+| | |
+|---|---|
+| Idle CPU | 0.02 % |
+| Wakeups | 5.5 per 10 s |
+| Footprint | 15.7 MB (peak 15.9 MB) |
+| Threads | 5 |
+| App bundle / binary | 8.0 MB / 4.3 MB |
+| `paw status` | 8.9 ms p50, 11.5 ms p90 |
+| `paw query --json` (7 workspaces) | 8.5 ms p50, 9.4 ms p90 |
+
+paw managed 7 workspaces with one window during the run, so these are the floor. The window
+management numbers above need `just bench` against paw Dev with windows on two workspaces.
+
 ## Known costs
 
 - Reading from an app (titles, frames, its windows) is still synchronous. A slow app costs up

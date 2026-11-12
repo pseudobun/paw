@@ -129,6 +129,11 @@ extension SettingsController {
                 write { $0.setups[name]?.focus = v }
             }
             card.add(rowStack([textColumn("Then show", "Workspace to focus after switching; empty keeps initiate's."), focus]))
+            let auto = popup([("", "Default"), ("on", "On"), ("off", "Off")],
+                             selected: setup.autoSwitch.map { $0 ? "on" : "off" } ?? "", width: 140) { [unowned self] v in
+                write { $0.setups[name]?.autoSwitch = v.isEmpty ? nil : v == "on" }
+            }
+            card.add(rowStack([textColumn("Switch automatically", "When these displays connect. Default follows the switch above."), auto]))
             card.add(rowStack([textColumn("Remove this setup", nil), button("Remove") { [unowned self] in
                 endEditing()
                 write(rebuild: true) { $0.setups[name] = nil }

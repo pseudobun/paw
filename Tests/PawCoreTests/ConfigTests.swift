@@ -34,6 +34,15 @@ struct ConfigTests {
         #expect(ConfigLoader.unknownKeys(Data("{ updates: { auto: true } }".utf8)) == ["updates.auto"])
     }
 
+    @Test func updateChannelFollowsTheRunningVersionUnlessSet() throws {
+        let auto = PawConfig.Updates()
+        #expect(auto.wantsBeta(running: "0.2.0-beta.3"))
+        #expect(!auto.wantsBeta(running: "0.2.0"))
+        #expect(!auto.wantsBeta(running: "0.2.0+abc1234.dirty"))
+        #expect(try load("{ updates: { channel: \"beta\" } }").updates.wantsBeta(running: "0.2.0"))
+        #expect(try !load("{ updates: { channel: \"stable\" } }").updates.wantsBeta(running: "0.2.0-beta.3"))
+    }
+
     @Test func errorsNameThePath() {
         do {
             _ = try load("{ appearance: { colors: { fg: 'purple' } } }")
@@ -118,7 +127,8 @@ struct PresetConfigTests {
         let c = try ConfigLoader.decode(Data("""
         { layout: { unassignedWorkspace: "4", barTop: 41 },
           workspaces: { "1": { layout: "stack", tiles: [ { apps: ["Brave Browser"] } ] } },
-          setups: { home: { displays: ["builtin", "DELL"], focus: "9",
+          autoSwitchSetups: false,
+          setups: { home: { displays: ["builtin", "DELL"], focus: "9", autoSwitch: true,
             workspaces: { "1": { display: "builtin" },
                           "8": { display: "DELL", layout: "stack", tiles: [ { apps: ["Discord", "Spotify"] } ] },
                           "9": { layout: "bsp", axis: "vertical", tiles: [ { apps: ["Brave Browser"], size: 2 }, { apps: ["/^T3/"] } ] } } } },
@@ -163,5 +173,36 @@ struct PresetConfigTests {
         #expect(s.matches([("Built-in Retina Display", true), ("Gigabyte M32U", false), ("DELL U2717D", false)]))
         #expect(!s.matches([("Built-in Retina Display", true), ("DELL U2717D", false)]))
         #expect(!s.matches([("Built-in Retina Display", true), ("LG", false), ("Gigabyte", false)]))
+    }
+
+    @Test func autoSwitchPicksASetup() throws {
+        let home: [(name: String, builtin: Bool)] = [("Built-in Retina Display", true), ("DELL U2717D", false)]
+        let laptop: [(name: String, builtin: Bool)] = [("Built-in Retina Display", true)]
+        let other: [(name: String, builtin: Bool)] = [("Built-in Retina Display", true), ("LG", false)]
+        var c = PawConfig()
+        c.setups = ["home": .init(displays: ["builtin", "DELL"]), "focus": .init(displays: ["builtin", "DELL"]),
+                    "laptop": .init(displays: ["builtin"])]
+        // Several setups for the same displays: the one picked last, else the first by name.
+        #expect(c.matchingSetups(for: home) == ["focus", "home"])
+        #expect(c.autoSetup(for: home) == "focus")
+        #expect(c.autoSetup(for: home, preferred: "home") == "home")
+        #expect(c.autoSetup(for: home, preferred: "laptop") == "focus")
+        #expect(c.setupAfterDisplayChange(laptop, preferred: nil, current: "home") == "laptop")
+        // No setup for these displays: the default workspaces.
+        #expect(c.setupAfterDisplayChange(other, preferred: nil, current: "home") == nil)
+        // A setup that doesn't switch by itself is left out; with none left the setup stays.
+        c.setups["focus"]?.autoSwitch = false
+        #expect(c.autoSetup(for: home) == "home")
+        c.setups["home"]?.autoSwitch = false
+        #expect(c.setupAfterDisplayChange(home, preferred: nil, current: "laptop") == "laptop")
+        #expect(c.setupAfterDisplayChange(home, preferred: nil, current: "gone") == nil)
+        // Off for every setup: nothing changes, unless a setup opts in.
+        c = PawConfig()
+        c.autoSwitchSetups = false
+        c.setups = ["home": .init(displays: ["builtin", "DELL"]), "laptop": .init(displays: ["builtin"], autoSwitch: true)]
+        #expect(c.setupAfterDisplayChange(home, preferred: nil, current: "laptop") == "laptop")
+        #expect(c.setupAfterDisplayChange(other, preferred: nil, current: "home") == "home")
+        #expect(c.setupAfterDisplayChange(laptop, preferred: nil, current: "home") == "laptop")
+        #expect(PawConfig.arrangementKey(home) == PawConfig.arrangementKey(home.reversed()))
     }
 }

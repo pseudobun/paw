@@ -73,7 +73,7 @@ enum SettingsEditor {
     var haystack: String {
         switch self {
         case .presets: "workspace preset tiles apps size title launch display layout axis"
-        case .setups: "setups displays arrangement focus workspace presets"
+        case .setups: "setups displays arrangement focus workspace presets automatic switch monitor"
         case .rules: "rules app title unless float ignore manage workspace"
         case .map(_, let key, let value, _): "\(key) \(value)"
         case .modes: "modes mode keys"
@@ -247,6 +247,8 @@ enum SettingsCatalog {
                      symbol: "gearshape.fill", color: Theme.neutral, sections: [
             SettingsSection("Startup", [
                 f(\.openAtLogin, "openAtLogin", "Open at login", .toggle, "Only for the installed paw.app."),
+                .info(SettingsInfo(label: "macOS desktops", help: SkyLight.nativeSpacesStatus,
+                                   button: "Mission Control", action: .open("file:///System/Applications/Mission%20Control.app"))),
             ]),
             SettingsSection("Permissions", [
                 .info(SettingsInfo(label: "Accessibility",
@@ -262,6 +264,10 @@ enum SettingsCatalog {
                 f(\.updates.check, "updates.check", "Check for updates", .toggle,
                   "Once a day, downloaded in the background; installs when paw quits, or from hop or paw update."),
                 f(\.updates.automatic, "updates.automatic", "Install right away", .toggle, "As soon as it is downloaded; paw restarts."),
+                // Only betas until 0.1.0; then: ("auto", "Automatic"), ("stable", "Stable"), ("beta", "Beta")
+                // with "Beta also gets betas, ahead of stable versions. Automatic follows the paw you run."
+                f(\.updates.channel, "updates.channel", "Channel", .choice([("auto", "Beta")]),
+                  "Every version is a beta until 0.1.0; then you can pick Stable here."),
             ]),
             SettingsSection("Config file", [
                 .info(SettingsInfo(label: "Open in editor", help: "Everything here is saved to config.json5 at once; edits there apply here too.",
@@ -325,6 +331,8 @@ enum SettingsCatalog {
                   "focus stack.next/prev go from the last window to the first; off: they stop."),
                 f(\.focus.wrapWorkspaces, "focus.wrapWorkspaces", "Workspaces wrap around", .toggle,
                   "workspace next/prev go from the last workspace to the first; off: they stop at either end."),
+                f(\.focus.floatsOnTop, "focus.floatsOnTop", "Floating windows on top", .toggle,
+                  "Floating windows stay in front of tiled ones. With the Dock helper loaded the window server keeps them there; otherwise paw raises them again when a tile takes focus."),
             ]),
         ])
     }
@@ -359,7 +367,9 @@ enum SettingsCatalog {
         SettingsPage(id: "setups", title: "Setups", subtitle: "Presets per display arrangement.",
                      symbol: "display.2", color: Theme.chart2, sections: [
             SettingsSection([
-                .note("The first setup whose displays match the connected ones replaces the default workspaces; paw switches by itself when displays come and go. Displays: builtin, external, main, secondary, or part of a name (DELL)."),
+                .note("A setup whose displays match the connected ones replaces the default workspaces. Displays: builtin, external, main, secondary, or part of a name (DELL). Several setups for the same displays: paw takes the one you picked last for them (menu bar or `paw initiate <setup>`), else the first by name."),
+                f(\.autoSwitchSetups, "autoSwitchSetups", "Switch automatically", .toggle,
+                  "When displays come and go, switch to the setup that matches them. Off: the setup in use stays until you pick another. Each setup can override this."),
             ]),
             SettingsSection(editor: .setups),
         ])

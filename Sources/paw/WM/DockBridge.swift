@@ -20,6 +20,8 @@ final class DockBridge {
     }
 
     private var fd: Int32 = -1
+    /// What the payload in Dock said it is, on the last hello.
+    private(set) var loadedVersion: String?
     private var lastTry = Date.distantPast
     /// From config: "auto" uses the payload when it's there, "accessibility" never does.
     var enabled = true
@@ -70,8 +72,43 @@ final class DockBridge {
         case .off: return "off: windows move over accessibility"
         case .sipEnabled: return "SIP is on: windows move over accessibility (README, Faster workspace switching)"
         case .notLoaded: return "Dock helper not loaded: sudo paw dock install"
-        case .ready: return "through the Dock helper"
+        case .ready:
+            guard let advice = Self.advice(bundled: Self.bundledVersion, installed: Self.installedVersion, loaded: loadedVersion)
+            else { return "through the Dock helper" }
+            return "through the Dock helper (\(advice))"
         }
+    }
+
+    // MARK: Versions
+
+    /// The helper's version is a hash of its source (scripts/bundle.sh): the one in this paw.app,
+    /// the one `paw dock install` copied out, and the one Dock runs can each differ.
+    static var bundledVersion: String? {
+        readVersion(AppPaths.appBundle.bundleURL.appending(path: "Contents/Resources/dock/VERSION").path)
+    }
+
+    static var installedVersion: String? { readVersion(DockCLI.dir + "/VERSION") }
+
+    static func readVersion(_ path: String) -> String? {
+        guard let s = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        let v = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return v.isEmpty ? nil : v
+    }
+
+    /// "paw-dock <version>\n" → the version.
+    static func helloVersion(_ reply: String) -> String? {
+        guard reply.hasPrefix("paw-dock ") else { return nil }
+        let v = reply.dropFirst("paw-dock ".count).prefix { $0 != "\n" && $0 != "\0" }
+        return v.isEmpty ? nil : String(v)
+    }
+
+    /// What to do when the helper in Dock isn't this paw's, or nil when it is (or this build has
+    /// no version to compare: a build without scripts/bundle.sh).
+    static func advice(bundled: String?, installed: String?, loaded: String?) -> String? {
+        guard let bundled else { return nil }
+        if installed != bundled { return "outdated: sudo paw dock install" }
+        if let loaded, loaded != bundled { return "Dock still runs the old one: killall Dock" }
+        return nil
     }
 
     /// Whether the payload answers (for `paw dock status`, from the CLI).
@@ -97,6 +134,22 @@ final class DockBridge {
         guard !ids.isEmpty else { return true }
         var body = Data([0x03])
         append(&body, UInt32(ids.count))
+        for id in ids { append(&body, UInt32(id)) }
+        return send(body)
+    }
+
+    /// Puts exactly these windows at a window level, as a sub-level
+    /// that keeps them above windows of the normal level whichever app is in front. False when
+    /// the payload isn't there or is one from before it could (it would ignore the message).
+    var canSetLevel: Bool { isReady && (Self.bundledVersion == nil || loadedVersion == Self.bundledVersion) }
+
+    @discardableResult
+    func setLevel(_ ids: [WindowID], _ level: Int32) -> Bool {
+        guard !ids.isEmpty else { return true }
+        guard canSetLevel else { return false }
+        var body = Data([0x04])
+        append(&body, UInt32(ids.count))
+        append(&body, level)
         for id in ids { append(&body, UInt32(id)) }
         return send(body)
     }
@@ -145,8 +198,9 @@ final class DockBridge {
         hello.append(0x01)
         var reply = [UInt8](repeating: 0, count: 64)
         guard IPC.writeAll(s, hello), read(s, &reply, reply.count) > 0,
-              String(decoding: reply, as: UTF8.self).hasPrefix("paw-dock ") else { close(s); return false }
+              let version = Self.helloVersion(String(decoding: reply, as: UTF8.self)) else { close(s); return false }
         fd = s
+        loadedVersion = version
         Log.app.notice("dock: payload connected")
         return true
     }

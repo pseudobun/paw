@@ -18,7 +18,7 @@ enum Preview {
         }
         let settings = Settings(url: Settings.defaultURL)
         let style = Style(settings.config.appearance)
-        if style.appFont == nil { fputs("note: \(settings.config.appearance.appFont) is not installed; cells show initials\n", stderr) }
+        if style.appFont == nil { fputs("note: \(settings.config.appearance.appFont) is not installed; cells show app icons (initials for apps not found)\n", stderr) }
         let root = scene(style: style, config: settings.config, icons: settings.icons, scale: scale)
         guard let png = render(root, scale: scale) else { fputs("render failed\n", stderr); return 1 }
         do { try png.write(to: URL(fileURLWithPath: out.expandingTilde)) } catch {

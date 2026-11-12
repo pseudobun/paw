@@ -19,15 +19,9 @@ No yabai, no skhd, no Hammerspoon, no SIP changes. Pure Swift and AppKit.
 
 <br>
 
-<img src="docs/assets/preview.png" width="820" alt="paw tiling two windows, with stack indicators beside each stack">
-
-<sub>Two tiles in bsp, each a stack. The islands beside them show every window in the stack.</sub>
-
-<br><br>
-
 <img src="docs/assets/paw-demo.gif" width="820" alt="paw switching layouts, moving windows between stacks and opening the overview">
 
-<sub>Layouts, stacks and the overview (<code>hyper+tab</code>). <a href="docs/assets/paw-demo.mp4">Watch the full demo (1:49)</a>.</sub>
+<sub>Layouts, stacks and the overview (<code>hyper+tab</code>).</sub>
 
 </div>
 
@@ -75,6 +69,9 @@ In **System Settings → Desktop & Dock**:
   windows to tile*
 
 Keep one native Space per display; paw's workspaces replace Spaces.
+Extra macOS desktops can make tiles appear empty or switch desktops when an app takes focus.
+Check `paw status` → `nativeSpaces` or Settings → General → macOS desktops. In Mission Control,
+close extra desktop thumbnails to merge their windows into the remaining desktop, then run `paw recover`.
 
 ### 5. Check it works
 
@@ -105,7 +102,8 @@ paw keeps itself current, without windows or prompts:
 | Just look | `paw update --check` (exit 10 when there is a new version) |
 | Install right after downloading | `updates.automatic: true` |
 | No checks at all | `updates.check: false` |
-| Homebrew instead | `brew upgrade --cask pseudobun/tap/paw` (the full name: `paw` alone is RapidAPI's app) |
+| Betas too | `updates.channel: "beta"` (a beta build follows betas by itself; `"stable"` leaves them) |
+| Homebrew instead | `brew upgrade --cask pseudobun/tap/paw` (the full name: `paw` alone is RapidAPI's app); betas: `pseudobun/tap/paw@beta` |
 
 Updates are signed (EdDSA) and keep the Accessibility grant.
 
@@ -116,8 +114,8 @@ sudo paw dock uninstall                          # only if you installed the Doc
 brew uninstall --cask pseudobun/tap/paw          # add --zap to remove the config and state too
 ```
 
-The Dock helper is a root launch daemon, so remove it first; Homebrew tries to as well, but
-needs your password for it.
+The Dock helper is a root launch daemon, so remove it first; Homebrew does only with `--zap`,
+and asks for your password for it.
 
 Quitting paw (`paw quit`) brings every hidden window back on screen. After a crash, start paw
 again (it remembers which workspace each window was on) or run `paw recover`.
@@ -204,8 +202,14 @@ Everything else works the same with SIP on; without the helper paw simply uses A
    It copies the helper (from paw.app) to `/Library/Application Support/paw`, owned by root, and
    adds a launch daemon (`com.pseudobun.paw.dock`) that loads it into Dock now, after every
    restart and whenever Dock restarts. paw picks it up within a couple of seconds; `paw status`
-   shows `windowMoves: through the Dock helper`. Updating paw? Run `sudo paw dock install` again
-   so the helper matches.
+   shows `windowMoves: through the Dock helper`. When the helper is new or changed, install
+   restarts Dock so it runs the new one.
+
+   When an update of paw changes the helper, paw says so once after the update and the menu bar
+   shows *Dock Helper Outdated* (it copies the command): run `sudo paw dock install` again. Until
+   then the old helper keeps working, and `paw status` says
+   `through the Dock helper (outdated: sudo paw dock install)`. `paw dock status` shows the
+   versions in this paw, installed and in Dock.
 5. **Undo:** `sudo paw dock uninstall` (then `killall Dock`), and to turn SIP fully back on, in
    Recovery: `csrutil enable`; `sudo nvram -d boot-args` removes the boot argument.
 
@@ -353,6 +357,12 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Mouse gestures**: hold the middle (or back/forward) button and drag: left/right for the
   previous/next workspace, up for the overview
 - **Mouse follows focus** (and optional focus follows mouse)
+- **Focus after closing the focused window**: the window under the mouse takes focus; otherwise paw
+  prefers another window from the same app on that workspace, then the workspace's next window
+- If the pointer was inside the closed window, focus follows the tile that fills that position.
+  With a placeholder selected, ⌘Q quits its app and ⌘W presses its window's close control. A
+  decorationless, single-window Alacritty instance quits on ⌘W; other apps without a close control
+  must first be enlarged to close normally.
 - **Virtual workspaces** (like AeroSpace): `layout.workspaces` exist from the start,
   `workspace new|close|next|prev|last`, `move-to <n> [--follow]`. A hidden workspace's windows
   wait in a screen corner, so switching is instant and needs no Mission Control or SIP. ⌘Tab to a
@@ -364,7 +374,10 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Setups** per display arrangement (laptop only, home, work…): paw picks the one matching the
   connected displays by itself, pins each workspace to its display and numbers them display by
   display like yabai (`workspace new` on a display numbers it after that display's others).
-  `paw initiate <setup>` (or the menu bar icon, or hop's "Set Workspace") forces one
+  `paw initiate <setup>` (or the menu bar icon, or hop's "Set Workspace") forces one.
+  Automatic switching is optional: `autoSwitchSetups: false` (menu bar → Switch Automatically)
+  keeps the setup in use until you pick one, and a setup's `autoSwitch` overrides it. Several
+  setups for the same displays: paw takes the one you picked last for them, else the first by name
 - **Settings window** (menu bar icon → Settings…, or `paw settings`) for every key, laid out like
   System Settings; it writes the same commented JSON5 file, so people and agents can keep editing
   the file too. On the pages about the indicators' look, every indicator shows around the window
@@ -380,6 +393,13 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Modes**: `hyper+r` turns on resize mode (arrows or hjkl grow, with shift shrink, `esc`
   leaves) with an island at the top of the screen; define your own key modes in `modes`
 - **Rules**: float or ignore apps and windows by name/title, send apps to workspaces
+- **Floating windows**: fixed-size windows (a greyed-out green button, like System Settings) float
+  on their own (a rule with `float: false` tiles them) and open centred. Floats stay in front of
+  tiles (`focus.floatsOnTop`): with the Dock helper loaded the window server keeps them above, as
+  in Hyprland; otherwise paw brings them forward again whenever a tile takes focus, clicks included (a
+  brief flicker).
+  `focusFollowsMouse` focuses without raising, and a float dragged to another display joins the
+  workspace shown there
 - **Key bindings** in the config (left/right modifiers like `ralt` work, `hyper` = ⌘⌃⌥⇧), and
   the same commands on the CLI: `paw focus west`, `paw workspace 3`
 - **Events** for status bars and scripts: `paw subscribe` streams JSON lines (a snapshot first,
@@ -421,7 +441,10 @@ A typical setup: presets for the apps you always use, a status bar, and a key to
     "9": { tiles: [ { apps: ["Slack"] } ], display: "secondary" },
   },
 
-  // Per display arrangement; the first whose displays match replaces `workspaces` above.
+  // Switch setups by themselves when displays come and go (a setup's autoSwitch wins).
+  autoSwitchSetups: true,
+
+  // Per display arrangement; the one whose displays match replaces `workspaces` above.
   setups: {
     home: {
       displays: ["builtin", "DELL", "Gigabyte"], // "builtin", "external" or part of a display's name
@@ -457,12 +480,13 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | Section | Keys |
 |---|---|
 | `layout` | `default` (`stack`; also `bsp columns master float`), `minTileWidth` (0: off), `minTileHeight` (0), `placeholders` (true: a placeholder for windows that won't shrink to their tile; false: they stick out), `placeholderMinWidth` (160), `placeholderMinHeight` (120), `windowServer` (true: move windows through the Dock helper when it's loaded, see Faster workspace switching), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10), `unassignedWorkspace` ("": windows of apps no preset places stay put; or a workspace) |
-| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends), `wrapWorkspaces` (false: workspace next/prev stop at the first and last) |
+| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends), `wrapWorkspaces` (false: workspace next/prev stop at the first and last), `floatsOnTop` (true: floating windows stay in front of tiled ones) |
 | `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
 | `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |
 | `modes` | `"name": { "key": "command" }`; while `mode <name>` is on its keys come first. Default: `resize` |
 | `workspaces` | `"name": { layout, axis, tiles: [{ apps: ["Discord", "Spotify"], size: 1, title?, launch? }, …], display: "builtin" }` |
-| `setups` | `"name": { displays: ["builtin", "DELL"], focus, workspaces: { … } }` |
+| `setups` | `"name": { displays: ["builtin", "DELL"], focus, autoSwitch?, workspaces: { … } }` |
+| `autoSwitchSetups` | `true`: switch to the setup matching the displays when they change; `false`: keep the one in use until you pick another |
 | `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
 | `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
 | `indicator` | `enabled` (true), `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
@@ -473,7 +497,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `overview` | `thumbnails` (`auto`: when Screen Recording is allowed; `on` asks for it; `off`) |
 | `hud` | `workspace` (true), `durationMs` (600), `edges` (true) |
 | `border` | `enabled` (false), `color` (`0xccead186`), `width` (2), `autoRadius` (true), `radius` (12), `offset` (2) |
-| `updates` | `check` (true: look once a day and offer new versions), `automatic` (false: install without asking) |
+| `updates` | `check` (true: look once a day and offer new versions), `automatic` (false: install without asking), `channel` (`auto`: betas when running one; `stable`, `beta`) |
 | `openAtLogin` | |
 
 App names are what macOS shows in the menu bar (`paw query` lists the open ones); `/regex/`
@@ -524,8 +548,8 @@ there.
 Each display shows one workspace. Without setups the workspaces are shared: switching shows one on
 the focused display, or focuses the display that already shows it. With a setup, its presets pin
 workspaces to displays (`display: "DELL"`), every bar shows only its display's workspaces, and
-numbers run display by display. Plugging displays in or out switches setups and retiles
-everything. `focus`/`swap` past the screen edge go to the next display, `display <dir>` and
+numbers run display by display. Plugging displays in or out switches setups (unless
+`autoSwitchSetups` or the setup's `autoSwitch` is off) and retiles everything. `focus`/`swap` past the screen edge go to the next display, `display <dir>` and
 `move-to-display` move between them.
 
 ### Status bar
@@ -660,7 +684,7 @@ just bench ops 200        # focus, swap, resize, layout changes, query
 just bench hung TextEdit  # the same with TextEdit stopped, as a hung app would be
 ```
 
-For controlled comparisons, profiling builds, saved raw results and separate-user setup, see
+For controlled comparisons, profiling builds, saved raw results and current-user setup, see
 the [benchmark runbook](docs/benchmarking.md). `just bench prepare` only builds artifacts;
 `just bench run` launches the controlled scene. The workflow is prepared; its first live pilot
 and regression checks remain unexecuted pending explicit execution.

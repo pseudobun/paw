@@ -11,6 +11,7 @@ final class FocusBorder {
         let id: WindowID
         let frame: CGRect
         let above: Bool
+        let floating: Bool
         let screen: CGRect
         let primaryHeight: CGFloat
         let config: PawConfig.Border
@@ -26,7 +27,7 @@ final class FocusBorder {
         panel.hasShadow = false
         panel.level = .normal
         panel.ignoresMouseEvents = true
-        panel.collectionBehavior = [.ignoresCycle, .fullScreenAuxiliary, .stationary]
+        panel.collectionBehavior = [.ignoresCycle, .fullScreenAuxiliary, .stationary, .canJoinAllSpaces]
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
         let v = NSView()
@@ -39,12 +40,14 @@ final class FocusBorder {
 
     /// `frame` in AX coordinates; nil hides it.
     /// At a screen edge the stroke moves inward just enough to remain visible.
-    func show(_ frame: CGRect?, window id: WindowID, above: Bool, screen: CGRect, config: PawConfig.Border, radius: CGFloat? = nil) {
+    /// `floating`: the window sits at the floating level (floatsOnTop with the Dock helper), so
+    /// the border goes there too or it would stay behind it.
+    func show(_ frame: CGRect?, window id: WindowID, above: Bool, floating: Bool = false, screen: CGRect, config: PawConfig.Border, radius: CGFloat? = nil) {
         guard config.enabled, config.width > 0, let frame else { hide(); return }
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         let o = config.offset + config.width / 2
         let radius = max(0, (radius ?? CGFloat(config.radius)) + CGFloat(o))
-        let state = State(id: id, frame: frame, above: above, screen: screen, primaryHeight: primaryHeight, config: config, radius: radius)
+        let state = State(id: id, frame: frame, above: above, floating: floating, screen: screen, primaryHeight: primaryHeight, config: config, radius: radius)
         if shownFor == state, panel.isVisible { return }
         // Moving a parent also moves its children; position the border independently first.
         panel.parent?.removeChildWindow(panel)
@@ -65,9 +68,9 @@ final class FocusBorder {
         if shape.lineWidth != config.width { shape.lineWidth = config.width }
         if shownFor?.config.color != config.color { shape.strokeColor = config.color.cg }
         CATransaction.commit()
-        let moved = shownFor?.id != id || shownFor?.frame != frame || shownFor?.above != above || !panel.isVisible
+        let moved = shownFor?.id != id || shownFor?.frame != frame || shownFor?.above != above || shownFor?.floating != floating || !panel.isVisible
         if moved {
-            panel.level = above ? .normal : NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
+            panel.level = !above ? NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1) : floating ? .floating : .normal
             if above { panel.order(.above, relativeTo: Int(id)) }
             else { panel.orderFrontRegardless() }
         }

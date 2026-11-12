@@ -60,7 +60,7 @@ enum CLI {
           mode <name>|exit    turn a key mode on/off (config `modes`, e.g. resize)
           initiate [setup]    open the preset apps and arrange every workspace (also: reset);
                               with a setup name, use that setup whatever displays are connected
-          setups [--json]     the setups in the config, * marks the one for the connected displays
+          setups [--json]     the setups in the config, * marks those for the connected displays
           undo | redo         the focused workspace's last layout change
           focus back|forward  windows focused before, across workspaces
           find <text>         go to the window whose app or title matches best
@@ -155,7 +155,7 @@ enum CLI {
 
     static func status(_ args: [String]) -> Int32 {
         guard let r = request("status", timeout: 3) else { return 1 }
-        for k in ["version", "pid", "trusted", "windows", "workspaces", "stacks", "bindings", "iconFont", "windowMoves", "config", "error"] {
+        for k in ["version", "pid", "trusted", "windows", "workspaces", "stacks", "bindings", "iconFont", "windowMoves", "floatsOnTop", "nativeSpaces", "config", "error"] {
             if let v = r[k] as? String, !v.isEmpty { print("\(k): \(v)") }
         }
         return 0
@@ -330,9 +330,10 @@ enum CLI {
             let id = (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
             return (s.localizedName, CGDisplayIsBuiltin(id) != 0)
         }
-        let current = config.setup(for: screens)?.name
+        let matching = Set(config.matchingSetups(for: screens))
         let list = config.setups.sorted { $0.key < $1.key }.map { name, s -> [String: Any] in
-            ["name": name, "displays": s.displays, "matches": name == current,
+            ["name": name, "displays": s.displays, "matches": matching.contains(name),
+             "autoSwitch": config.switchesAutomatically(name),
              "workspaces": s.workspaces.keys.sorted(by: WindowManager.nameOrder)]
         }
         if args.contains("--json") {

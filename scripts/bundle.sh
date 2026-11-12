@@ -85,7 +85,12 @@ cp -R Resources/Fonts "$app/Contents/Resources/"
 # "Faster workspace switching"): `sudo paw dock install` copies these out of the app.
 dock="$app/Contents/Resources/dock"
 mkdir -p "$dock"
+# Its version is a hash of its source: paw compares it with what's installed and what's in Dock
+# (`paw status`), and `paw dock install` restarts Dock when it changes.
+dock_version=$(cat Sources/PawDock/payload.m Sources/PawDock/loader.m | shasum -a 256 | cut -c1-12)
+printf '%s\n' "$dock_version" > "$dock/VERSION"
 xcrun clang Sources/PawDock/payload.m -shared -fPIC -O2 -fobjc-arc -arch arm64e -mmacosx-version-min=14.0 \
+  -DPAW_DOCK_VERSION="\"$dock_version\"" \
   -framework Foundation -framework CoreGraphics -Wl,-undefined,dynamic_lookup -o "$dock/PawDock.dylib"
 xcrun clang Sources/PawDock/loader.m -O2 -fobjc-arc -arch arm64e -mmacosx-version-min=14.0 -framework Foundation \
   -o "$dock/paw-dock-loader"
