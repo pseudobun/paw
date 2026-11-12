@@ -787,6 +787,10 @@ final class WindowManager {
     private func userMoved(_ w: Window) {
         if let until = suppressMoves[w.id], until > Date() {
             if w.id == focusedID { scheduleBorderRefresh() }
+            // The app may be moving it itself: check once it stops.
+            if let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil {
+                scheduleOverflowCheck(ws.name, after: 0.15)
+            }
             return
         }
         if w.isHidden || animator.isRunning { return }
@@ -963,7 +967,18 @@ final class WindowManager {
             guard let id = t.activeWindow, let w = windows[id], !w.isHidden, let r = frames[id], ws.zoomed != id,
                   let actual = w.element.frame else { continue }
             let over = CGSize(width: actual.width > r.width + 4 ? actual.width : 0, height: actual.height > r.height + 4 ? actual.height : 0)
-            guard over.width > 0 || over.height > 0 else { overflowSuspects[id] = nil; continue }
+            guard over.width > 0 || over.height > 0 else {
+                overflowSuspects[id] = nil
+                // Moved or shrunk by its app after paw placed it: put it back, once per check.
+                // Position from the window server, which sees Dock helper moves first.
+                let at = SkyLight.frame(id)?.origin ?? actual.origin
+                let off = abs(at.x - r.minX) > 2 || abs(at.y - r.minY) > 2
+                if actual.width < r.width - 4 || actual.height < r.height - 4 || off, !w.isMoving {
+                    w.frame = actual
+                    w.setFrame(r)
+                }
+                continue
+            }
             // After an animation the app has had its frames; a second look only when it's still resizing.
             if overflowSuspects[id] == nil || abs(overflowSuspects[id]!.width - over.width) < 4 && abs(overflowSuspects[id]!.height - over.height) < 4 {
                 let old = windowMins[id] ?? .zero
