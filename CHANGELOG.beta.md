@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.25](https://github.com/pseudobun/paw/compare/v0.1.0-beta.24...v0.1.0-beta.25) (2026-11-12)
+
+
+### Bug Fixes
+
+* **indicator:** draw app icons in edge markers without the app font ([#85](https://github.com/pseudobun/paw/issues/85)) ([76becdc](https://github.com/pseudobun/paw/commit/76becdcb61ae06d2a3626641bdcd740ef77d6c0b))
+
 ## [0.1.0-beta.24](https://github.com/pseudobun/paw/compare/v0.1.0-beta.23...v0.1.0-beta.24) (2026-11-12)
 
 
