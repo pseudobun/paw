@@ -393,7 +393,8 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Floating windows**: fixed-size windows (a greyed-out green button, like System Settings) float
   on their own (a rule with `float: false` tiles them) and open centred. Floats stay in front of
   tiles (`focus.floatsOnTop`): with the Dock helper loaded the window server keeps them above, as
-  in Hyprland; otherwise paw raises them again whenever a tile takes focus, clicks included.
+  in Hyprland; otherwise paw brings them forward again whenever a tile takes focus, clicks included (a
+  brief flicker).
   `focusFollowsMouse` focuses without raising, and a float dragged to another display joins the
   workspace shown there
 - **Key bindings** in the config (left/right modifiers like `ralt` work, `hyper` = ⌘⌃⌥⇧), and

@@ -1381,10 +1381,10 @@ final class WindowManager {
     }
 
     /// Visible floating windows of other apps on a tiled window's workspace that overlap it,
-    /// back to front: raised again after it is, so focusing a tile doesn't bury them or reorder
-    /// them. `onlyBehind`: the tile is already in front (a click), so only the floats now behind
-    /// it. Same-app floats are left alone (raising one could make it key). None when the window
-    /// server keeps floats above (layered) or floatsOnTop is off.
+    /// back to front: brought forward again after it is, so focusing a tile doesn't bury them or
+    /// reorder them. `onlyBehind`: the tile is already in front (a click), so only the floats now
+    /// behind it. Same-app floats are left alone. None when the window server keeps floats above
+    /// (layered) or floatsOnTop is off.
     private func floatsAbove(_ w: Window, onlyBehind: Bool = false) -> [Window] {
         guard config.focus.floatsOnTop, let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil else { return [] }
         let floats = ws.floating.filter { id in
@@ -1405,16 +1405,6 @@ final class WindowManager {
         ignoreFocus(0.5)
         let (pid, id, element) = (w.pid, w.id, w.element)
         focusQueue.async { Self.bringForward(floats, thenFocus: (pid, id, element)) }
-        // Whether it worked, for the log (macOS gives no answer to any of these calls).
-        let floatIDs = floats.map(\.id)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            guard let self, let w = self.windows[id] else { return }
-            let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
-            let order = list.compactMap { $0[kCGWindowNumber as String] as? UInt32 }
-            let buried = Self.behind(floatIDs, window: id, stacking: order).count
-            let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "-"
-            Log.app.info("floatsOnTop: \(buried) still behind \(w.app, privacy: .public), \(front, privacy: .public) in front")
-        }
     }
 
     /// AXRaise only orders a window among its own app's windows: a float of an app in the
@@ -1444,13 +1434,13 @@ final class WindowManager {
     private var layeredFloats: Set<WindowID> = []
 
     /// Puts floating windows at the floating level and windows no longer floating back, when the
-    /// Dock helper can; without it floatsAbove raises them over AX instead.
+    /// Dock helper can; without it they are brought forward again after each focus instead.
     private func syncFloatLayers() {
         let all = Set(workspaces.values.flatMap(\.floating)).filter { windows[$0] != nil }
         let want = config.focus.floatsOnTop && config.layout.windowServer ? all : []
         let up = want.subtracting(layeredFloats), down = layeredFloats.subtracting(want).filter { windows[$0] != nil }
         guard !up.isEmpty || !down.isEmpty else { layeredFloats.formIntersection(windows.keys); return }
-        // No helper (SIP on, not loaded, an older one): nothing changes, AX raising takes over.
+        // No helper (SIP on, not loaded, an older one): nothing changes, bringForward takes over.
         guard DockBridge.shared.setLevel(Array(up), Self.floatingLevel) else { return }
         DockBridge.shared.setLevel(Array(down), Self.normalLevel)
         layeredFloats = want
@@ -1460,7 +1450,7 @@ final class WindowManager {
     var floatsOnTopStatus: String {
         guard config.focus.floatsOnTop else { return "off" }
         if config.layout.windowServer, DockBridge.shared.canSetLevel { return "window server (Dock helper)" }
-        return "raised over accessibility when a tile takes focus (window server needs the Dock helper: sudo paw dock install)"
+        return "brought back forward when a tile takes focus (no flicker with the Dock helper: sudo paw dock install)"
     }
 
     /// `ids` in `stacking` (front-to-back) order reversed; ones missing from it go first.
