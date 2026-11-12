@@ -787,6 +787,11 @@ final class WindowManager {
     private func userMoved(_ w: Window) {
         if let until = suppressMoves[w.id], until > Date() {
             if w.id == focusedID { scheduleBorderRefresh() }
+            // The app may be resizing it itself (Arc sizes a new window a moment after it opens):
+            // look once things settle, or it stays smaller than its tile.
+            if let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil {
+                scheduleOverflowCheck(ws.name, after: until.timeIntervalSinceNow + 0.1)
+            }
             return
         }
         if w.isHidden || animator.isRunning { return }
@@ -963,7 +968,17 @@ final class WindowManager {
             guard let id = t.activeWindow, let w = windows[id], !w.isHidden, let r = frames[id], ws.zoomed != id,
                   let actual = w.element.frame else { continue }
             let over = CGSize(width: actual.width > r.width + 4 ? actual.width : 0, height: actual.height > r.height + 4 ? actual.height : 0)
-            guard over.width > 0 || over.height > 0 else { overflowSuspects[id] = nil; continue }
+            guard over.width > 0 || over.height > 0 else {
+                overflowSuspects[id] = nil
+                // Smaller than its tile: the app resized it after paw did. Back on the tile, with
+                // the size sent again (paw's own frame still says it has it). Once per check, so
+                // an app with a maximum size doesn't loop.
+                if actual.width < r.width - 4 || actual.height < r.height - 4, !w.isMoving {
+                    w.frame = actual
+                    w.setFrame(r)
+                }
+                continue
+            }
             // After an animation the app has had its frames; a second look only when it's still resizing.
             if overflowSuspects[id] == nil || abs(overflowSuspects[id]!.width - over.width) < 4 && abs(overflowSuspects[id]!.height - over.height) < 4 {
                 let old = windowMins[id] ?? .zero
