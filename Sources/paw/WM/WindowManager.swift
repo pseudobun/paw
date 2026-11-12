@@ -88,6 +88,9 @@ final class WindowManager {
     let placeholders = Placeholders()
     let border = FocusBorder()
     private var borderRefreshWork: DispatchWorkItem?
+    /// The focused window the user is dragging or resizing: its border waits for the mouse button
+    /// to come up, since AX move notifications arrive too late for it to keep up.
+    private var borderHeldFor: WindowID?
     let edges = EdgeMarkers()
     /// Inside a workspace switch: indicators, border and edges wait until switching settles.
     private var settling = false
@@ -765,6 +768,11 @@ final class WindowManager {
         }
         if w.isHidden || animator.isRunning { return }
         guard let ws = workspaceOf(w.id), displayShowing(ws.name) != nil else { return }
+        if w.id == focusedID, NSEvent.pressedMouseButtons != 0, borderHeldFor != w.id {
+            borderHeldFor = w.id
+            border.hide()
+            scheduleBorderRefresh()
+        }
         if ws.isFloating(w.id) {
             _ = w.readFrame()
             w.floatFrame = w.frame
@@ -1028,6 +1036,10 @@ final class WindowManager {
         let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let justFocused = pawFocus.map { $0.id == id && Date().timeIntervalSince($0.at) < 1 } ?? false
         guard placeholder || justFocused || frontPid == w.pid else { border.hide(); return }
+        if borderHeldFor == id {
+            if NSEvent.pressedMouseButtons != 0 { border.hide(); scheduleBorderRefresh(); return }
+            borderHeldFor = nil
+        }
         if border.windowID != id {
             w.invalidateCornerRadius()
             w.borderNeedsRefresh = true
