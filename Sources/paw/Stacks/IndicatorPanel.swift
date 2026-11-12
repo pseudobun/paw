@@ -50,12 +50,22 @@ final class IndicatorView: NSView {
     // turned the bottom-up rendered island (and its icons) upside down. Points are flipped by hand.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    func redraw() {
+    /// Draws the stack again; `animated`, the old cells cross-fade into the new ones like the
+    /// bar's spaces on a workspace change: sketchybar's `animate("tanh", 12)`, 12 frames at 60 Hz.
+    func redraw(animated: Bool = false) {
         guard let render else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let l = render(hovered)
         l.frame = bounds
+        if animated, layer?.sublayers?.isEmpty == false {
+            let t = CATransition()
+            t.type = .fade
+            t.duration = 0.2
+            // tanh: fast out of the old state, easing into the new one.
+            t.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.75, 0.4, 1)
+            layer?.add(t, forKey: "redraw")
+        }
         layer?.sublayers = [l]
         CATransaction.commit()
     }
