@@ -54,6 +54,21 @@ class MeasurementTests(unittest.TestCase):
         self.assertEqual(result[bench.primary("overview-off")], 0.0001)
         self.assertEqual(result["command.overview.close.median_ms"], 0.0009)
 
+    def test_scene_check_accepts_clamped_parking_only_for_hidden_windows(self):
+        screen = {"x": 0, "y": 0, "w": 1800, "h": 1169}
+        shown = {"x": 36, "y": 40, "w": 425, "h": 1127}
+        spot = {"x": 1799, "y": 1168, "w": 400, "h": 332}
+        clamped = {"x": 1799, "y": 1137, "w": 424, "h": 440}
+        expected = {1: {"frame": shown, "focused": True, "onScreen": True}, 2: {"frame": spot, "focused": False, "onScreen": False}}
+        def state(one, two):
+            return {"screens": [screen], "windows": [{"id": 1, "frame": one, "focused": True, "minimized": False},
+                                                     {"id": 2, "frame": two, "focused": False, "minimized": False}]}
+        bench.check_scene(state(shown, clamped), expected)
+        with self.assertRaisesRegex(RuntimeError, "window 2 has wrong actual geometry"):
+            bench.check_scene(state(shown, shown), expected)
+        with self.assertRaisesRegex(RuntimeError, "window 1 has wrong actual geometry"):
+            bench.check_scene(state(clamped, clamped), expected)
+
     def test_failed_incomplete_or_partial_work_rejected(self):
         for field, value in (("resources_valid", False), ("cpu_seconds", float("nan")), ("thermal_end", 2),
                              ("incomplete_intervals", 1), ("dropped_records", 1), ("schema", 99)):

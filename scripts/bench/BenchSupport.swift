@@ -37,10 +37,27 @@ func frame(_ object: [String: Any]) throws -> CGRect {
     return CGRect(x: x, y: y, width: w, height: h)
 }
 
-func framesMatch(_ actual: [Int: CGRect], _ expected: [Int: CGRect], tolerance: Double = 4) -> Bool {
+/// PAW parks a hidden window with one point on screen, but macOS clamps it to about a title bar
+/// and may keep its own size there: a target off the display only needs the window off it too.
+func parked(_ r: CGRect, on screen: CGRect, tolerance: Double = 4) -> Bool {
+    let shown = r.intersection(screen)
+    return shown.isNull || min(shown.width, shown.height) <= tolerance
+}
+
+func framesMatch(_ actual: [Int: CGRect], _ expected: [Int: CGRect], screen: CGRect, tolerance: Double = 4) -> Bool {
     Set(actual.keys) == Set(expected.keys) && expected.allSatisfy { id, wanted in
         guard let got = actual[id] else { return false }
+        if parked(wanted, on: screen, tolerance: tolerance) { return parked(got, on: screen, tolerance: tolerance) }
         return abs(got.minX - wanted.minX) <= tolerance && abs(got.minY - wanted.minY) <= tolerance
             && abs(got.width - wanted.width) <= tolerance && abs(got.height - wanted.height) <= tolerance
     }
+}
+
+/// One line per window: PAW's target, WindowServer's actual frame, and whether it matched.
+func geometryReport(_ actual: [Int: CGRect], _ expected: [Int: CGRect], screen: CGRect) -> String {
+    func text(_ r: CGRect?) -> String { r.map { "(\($0.minX), \($0.minY), \($0.width), \($0.height))" } ?? "missing" }
+    return expected.keys.sorted().map { id in
+        let ok = actual[id].map { framesMatch([id: $0], [id: expected[id]!], screen: screen) } ?? false
+        return "window \(id) target \(text(expected[id])) actual \(text(actual[id]))\(ok ? "" : " MISMATCH")"
+    }.joined(separator: "\n") + "\nscreen \(text(screen))"
 }

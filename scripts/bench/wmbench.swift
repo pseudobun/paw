@@ -88,13 +88,18 @@ private func actualFrames(_ ids: Set<Int>) -> [Int: CGRect] {
     return frames
 }
 
+/// WindowServer coordinates of the one display the scenes require.
+private let screen = CGDisplayBounds(CGMainDisplayID())
+
 private func waitGeometry(_ target: [Int: CGRect]) throws {
     let deadline = now() + 3000
+    var actual: [Int: CGRect] = [:]
     repeat {
-        if framesMatch(actualFrames(Set(target.keys)), target) { return }
+        actual = actualFrames(Set(target.keys))
+        if framesMatch(actual, target, screen: screen) { return }
         usleep(1000)
     } while now() < deadline
-    throw BenchError("actual window geometry did not reach the target; batch invalid")
+    throw BenchError("actual window geometry did not reach the target; batch invalid\n" + geometryReport(actual, target, screen: screen))
 }
 
 private struct Driver {
@@ -169,7 +174,7 @@ private struct Driver {
             let rows = try checkedQuery()
             try require(rows.first { $0["id"] as? String == workspace }?["visible"] as? Bool == true, "wrong visible workspace")
             let target = try intended(rows)
-            try require(framesMatch(target, targets[workspace]!), "workspace target geometry changed")
+            try require(framesMatch(target, targets[workspace]!, screen: screen), "workspace target geometry changed")
             try waitGeometry(target)
             samples.append(["metric": "switch.geometry", "elapsed_ms": now() - start])
             Thread.sleep(forTimeInterval: pace)

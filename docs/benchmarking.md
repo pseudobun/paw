@@ -29,8 +29,11 @@ watchdog too, or losing the GUI session can still require manual recovery (`kill
 Use disposable test documents. Hung diagnostics are not part of automated A/B classification.
 
 Round trips include IPC/scheduling and exclude asynchronous completion. `switch.geometry`
-polls WindowServer every millisecond until actual positions/sizes match within 4 points,
-including hidden windows. It is not presented-frame latency. Every reply must parse and have
+polls WindowServer every millisecond until visible windows' actual positions/sizes match within
+4 points and hidden windows are off the display. PAW parks a hidden window with one point
+showing, but macOS clamps it to about a title bar and may keep another size there, so a parked
+target only requires the window to show at most 4 points in one dimension. On timeout the driver
+logs every target and actual frame. It is not presented-frame latency. Every reply must parse and have
 no application error; missing windows, timeouts and changed membership fail the run. The new
 workload is version 2 and cannot use the historical `PERFORMANCE.md` tables as calibration.
 

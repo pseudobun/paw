@@ -299,13 +299,23 @@ class Trace:
             self.lib.notify_cancel(self.token)
 
 
+def parked(frame, screen, tolerance=4):
+    """As in BenchSupport.swift: macOS clamps a parked window to about a title bar and may keep its size."""
+    width = min(frame["x"] + frame["w"], screen["x"] + screen["w"]) - max(frame["x"], screen["x"])
+    height = min(frame["y"] + frame["h"], screen["y"] + screen["h"]) - max(frame["y"], screen["y"])
+    return min(width, height) <= tolerance
+
+
 def check_scene(state, expected, focused=True):
     actual = {w["id"]: w for w in state["windows"]}
     require(set(actual) == set(expected), "fixture window membership changed")
+    screen = state["screens"][0]  # Scenes require one display, at the origin in both coordinate spaces.
     for wid, target in expected.items():
         require(not actual[wid]["minimized"], "a fixture window was minimized")
-        require(all(abs(actual[wid]["frame"][key] - value) <= 4 for key, value in target["frame"].items()),
-                f"window {wid} has wrong actual geometry")
+        got = actual[wid]["frame"]
+        require(parked(got, screen) if parked(target["frame"], screen) else
+                all(abs(got[key] - value) <= 4 for key, value in target["frame"].items()),
+                f"window {wid} has wrong actual geometry: target {target['frame']}, actual {got}")
     if focused:
         wanted = {wid for wid, w in expected.items() if w["focused"] and w["onScreen"]}
         observed = {wid for wid, w in actual.items() if w["focused"]}
