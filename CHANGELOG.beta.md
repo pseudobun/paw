@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.0-beta.23](https://github.com/pseudobun/paw/compare/v0.1.0-beta.22...v0.1.0-beta.23) (2026-11-12)
+
+
+### Features
+
+* **indicator:** cross-fade stack cells on change like the bar's spaces ([b47c758](https://github.com/pseudobun/paw/commit/b47c758ed430e21c5e99e93ce6333b1d6d8c798e))
+* **indicator:** show app icons without the app font and cross-fade stack cells ([#79](https://github.com/pseudobun/paw/issues/79)) ([4dbb653](https://github.com/pseudobun/paw/commit/4dbb653d8ab79375921b054394837ad05217610d))
+
+
+### Bug Fixes
+
+* **indicator:** show app icons instead of initials without the app font ([63656aa](https://github.com/pseudobun/paw/commit/63656aaee3c979d7a1401cf551a2fdb5f5b04ecd))
+
 ## [0.1.0-beta.22](https://github.com/pseudobun/paw/compare/v0.1.0-beta.21...v0.1.0-beta.22) (2026-11-12)
 
 
