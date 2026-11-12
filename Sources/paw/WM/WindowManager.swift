@@ -91,6 +91,7 @@ final class WindowManager {
     /// The focused window the user is dragging or resizing: its border waits for the mouse button
     /// to come up, since AX move notifications arrive too late for it to keep up.
     private var borderHeldFor: WindowID?
+    private var dragMonitor: Any?
     let edges = EdgeMarkers()
     /// Inside a workspace switch: indicators, border and edges wait until switching settles.
     private var settling = false
@@ -141,6 +142,7 @@ final class WindowManager {
             self?.scheduleBorderRefresh()
         }
         tracker.onEvent = { [weak self] in self?.handle($0) }
+        dragMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged) { [weak self] _ in self?.mouseDragged() }
         hotkeys.run = { [weak self] in self?.run($0) }
         indicators.onFocus = { [weak self] id in self?.focusWindow(id, warp: false) }
         edges.onClick = { [weak self] name in self?.show(name) }
@@ -768,11 +770,7 @@ final class WindowManager {
         }
         if w.isHidden || animator.isRunning { return }
         guard let ws = workspaceOf(w.id), displayShowing(ws.name) != nil else { return }
-        if w.id == focusedID, NSEvent.pressedMouseButtons != 0, borderHeldFor != w.id {
-            borderHeldFor = w.id
-            border.hide()
-            scheduleBorderRefresh()
-        }
+        if w.id == focusedID, NSEvent.pressedMouseButtons != 0 { holdBorder(w.id) }
         if ws.isFloating(w.id) {
             _ = w.readFrame()
             w.floatFrame = w.frame
@@ -1026,6 +1024,25 @@ final class WindowManager {
         }
         borderRefreshWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+    }
+
+    /// Hides the border of a window the mouse is moving until the button comes up.
+    private func holdBorder(_ id: WindowID) {
+        guard borderHeldFor != id else { return }
+        borderHeldFor = id
+        border.hide()
+        scheduleBorderRefresh()
+    }
+
+    /// The first drag step that moves or resizes the focused window hides its border, before the
+    /// app's move notification arrives. Drags that leave the window where it is (selecting text,
+    /// say) change nothing.
+    private func mouseDragged() {
+        guard config.border.enabled, let id = focusedID, border.windowID == id,
+              let drawn = windows[id]?.borderFrame, let now = SkyLight.frame(id) else { return }
+        let moved = abs(now.minX - drawn.minX) > 1 || abs(now.minY - drawn.minY) > 1
+            || abs(now.width - drawn.width) > 1 || abs(now.height - drawn.height) > 1
+        if moved { holdBorder(id) }
     }
 
     /// The focus border follows the window's observed bounds, or the placeholder's tile.
