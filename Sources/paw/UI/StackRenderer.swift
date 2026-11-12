@@ -6,8 +6,10 @@ import QuartzCore
 /// sketchybar's spaces. The window on top gets the island_hi cell; the focused window's icon
 /// is gold, the top one fg, the others muted (dim when the stack isn't focused).
 enum StackRenderer {
+    /// `glide`: leave out the top window's cell; the caller draws it as a layer that glides
+    /// between cells (`highlight`).
     static func layer(_ stack: Stack, size: CGSize, style: Style, config: PawConfig, icons: AppIconMap, scale: CGFloat,
-                      hovered: Int? = nil) -> CALayer {
+                      hovered: Int? = nil, glide: Bool = false) -> CALayer {
         let m = config.indicator.metrics
         let c = style.colors
         let root = CALayer()
@@ -19,7 +21,7 @@ enum StackRenderer {
             let cellTL = IndicatorLayout.cell(i, metrics: m)
             // Layer space is bottom-left; cells are laid out from the top.
             let frame = CGRect(x: cellTL.minX, y: size.height - cellTL.maxY, width: cellTL.width, height: cellTL.height)
-            if item.isActive || hovered == i {
+            if glide ? (hovered == i && !item.isActive) : (item.isActive || hovered == i) {
                 let bg = CALayer()
                 bg.frame = frame
                 bg.cornerRadius = min(style.a.cellRadius, frame.height / 2)
@@ -56,6 +58,15 @@ enum StackRenderer {
             root.addSublayer(t)
         }
         return root
+    }
+
+    /// The top window's cell as its own layer: island_hi, the cells' corner radius.
+    static func highlight(style: Style, metrics: IndicatorLayout.Metrics) -> CALayer {
+        let l = CALayer()
+        l.backgroundColor = style.colors.islandHi.cg
+        l.cornerRadius = min(style.a.cellRadius, IndicatorLayout.cell(0, metrics: metrics).height / 2)
+        l.cornerCurve = .continuous
+        return l
     }
 
     /// The hover island: icon, app and window title.
