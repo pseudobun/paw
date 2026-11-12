@@ -48,6 +48,16 @@ enum SkyLight {
         return CGFloat(radius)
     }
 
+    private typealias AssociatedWindows = @convention(c) (Int32, UInt32) -> Unmanaged<CFArray>?
+    private static let associatedWindows: AssociatedWindows? = sym("SLSCopyAssociatedWindows", in: handle)
+
+    /// The window's group (parent, sheets, panels, itself included).
+    static func associated(_ id: UInt32) -> [UInt32] {
+        guard let mainConnection, let associatedWindows,
+              let list = associatedWindows(mainConnection(), id)?.takeRetainedValue() as? [NSNumber] else { return [] }
+        return list.map(\.uint32Value)
+    }
+
     /// WindowServer bounds are in points and don't wait for the app to answer AX.
     static func frame(_ id: UInt32) -> CGRect? {
         guard let mainConnection, let windowBounds else { return nil }

@@ -278,7 +278,7 @@ final class WindowManager {
 
     /// Puts every hidden window back on screen (paw quitting must not lose windows).
     func restoreAll() {
-        DockBridge.shared.setLevel(Array(layeredFloats), Self.normalLevel)
+        setLevel(layeredFloats, Self.normalLevel)
         layeredFloats = []
         guard let d = displays.first else { return }
         var offset: CGFloat = 0
@@ -566,7 +566,8 @@ final class WindowManager {
     private func remove(_ id: WindowID, relayout: Bool = true, closed: Bool = false) {
         guard let w = windows[id] else { return }
         // Let go but still open (a manage: false rule): back to the normal level.
-        if layeredFloats.remove(id) != nil, !closed { DockBridge.shared.setLevel([id], Self.normalLevel) }
+        if layeredFloats.remove(id) != nil, !closed { setLevel([id], Self.normalLevel) }
+        levelChecked.remove(id)
         let ws = workspaceOf(id)
         let wasFocused = ws?.focused == id && (!closed || ws === focusedWorkspace)
         let closingFrame = w.isHidden && closed && wasFocused
@@ -1456,18 +1457,49 @@ final class WindowManager {
     /// Floating windows the window server keeps above the normal level (floatsOnTop with the
     /// Dock helper loaded and current).
     private var layeredFloats: Set<WindowID> = []
+    /// Windows paw has put at the normal level once (see `levelChanges`).
+    private var levelChecked: Set<WindowID> = []
 
     /// Puts floating windows at the floating level and windows no longer floating back, when the
     /// Dock helper can; without it they are brought forward again after each focus instead.
     private func syncFloatLayers() {
         let all = Set(workspaces.values.flatMap(\.floating)).filter { windows[$0] != nil }
         let want = config.focus.floatsOnTop && config.layout.windowServer ? all : []
-        let up = want.subtracting(layeredFloats), down = layeredFloats.subtracting(want).filter { windows[$0] != nil }
-        guard !up.isEmpty || !down.isEmpty else { layeredFloats.formIntersection(windows.keys); return }
+        let managed = Set(windows.keys)
+        let helper = DockBridge.shared.canSetLevel
+        let (down, up) = Self.levelChanges(managed: managed, checked: helper ? levelChecked : managed,
+                                           floats: want, layered: layeredFloats)
+        guard !up.isEmpty || !down.isEmpty else { layeredFloats.formIntersection(managed); return }
+        // Down first: an unmanaged sheet shared by both ends up with the float.
+        guard setLevel(down, Self.normalLevel) else { return }
+        if helper { levelChecked = managed }
         // No helper (SIP on, not loaded, an older one): nothing changes, bringForward takes over.
-        guard DockBridge.shared.setLevel(Array(up), Self.floatingLevel) else { return }
-        DockBridge.shared.setLevel(Array(down), Self.normalLevel)
+        guard setLevel(up, Self.floatingLevel) else { return }
         layeredFloats = want
+    }
+
+    /// What `syncFloatLayers` sends: windows for the normal level, then floats for the floating one.
+    /// A window paw sees for the first time goes to the normal level whatever it is at: a paw that
+    /// didn't quit cleanly, or an older helper that raised a float's whole group (a popup's tiled
+    /// parent with it), can have left it floating. Its level can't be read instead: without Screen
+    /// Recording the window server says 0 for other apps' windows. Every float goes up again after
+    /// that, in case the reset took a sheet it shares.
+    static func levelChanges(managed: Set<WindowID>, checked: Set<WindowID>, floats: Set<WindowID>,
+                             layered: Set<WindowID>) -> (down: Set<WindowID>, up: Set<WindowID>) {
+        let fresh = managed.subtracting(checked).subtracting(floats)
+        let down = layered.subtracting(floats).intersection(managed).union(fresh)
+        return (down, fresh.isEmpty ? floats.subtracting(layered) : floats)
+    }
+
+    @discardableResult
+    private func setLevel(_ ids: Set<WindowID>, _ level: Int32) -> Bool {
+        DockBridge.shared.setLevel(Self.withAttached(ids, managed: Set(windows.keys), attached: SkyLight.associated), level)
+    }
+
+    /// `ids` and the windows attached to them (sheets, panels) that paw doesn't manage. Managed
+    /// ones keep their own level: a popup's group includes its tiled parent.
+    static func withAttached(_ ids: Set<WindowID>, managed: Set<WindowID>, attached: (WindowID) -> [WindowID]) -> [WindowID] {
+        Array(ids.union(ids.flatMap { attached($0).filter { !managed.contains($0) } }))
     }
 
     /// For `paw status`.
