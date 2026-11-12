@@ -787,10 +787,10 @@ final class WindowManager {
     private func userMoved(_ w: Window) {
         if let until = suppressMoves[w.id], until > Date() {
             if w.id == focusedID { scheduleBorderRefresh() }
-            // The app may be resizing it itself (Arc sizes a new window a moment after it opens):
-            // look once things settle, or it stays smaller than its tile.
+            // The app may be moving or resizing it itself (Arc cascades and sizes a new window a
+            // moment after it opens): look once it stops, or it stays off its tile.
             if let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil {
-                scheduleOverflowCheck(ws.name, after: until.timeIntervalSinceNow + 0.1)
+                scheduleOverflowCheck(ws.name, after: 0.15)
             }
             return
         }
@@ -970,10 +970,14 @@ final class WindowManager {
             let over = CGSize(width: actual.width > r.width + 4 ? actual.width : 0, height: actual.height > r.height + 4 ? actual.height : 0)
             guard over.width > 0 || over.height > 0 else {
                 overflowSuspects[id] = nil
-                // Smaller than its tile: the app resized it after paw did. Back on the tile, with
-                // the size sent again (paw's own frame still says it has it). Once per check, so
-                // an app with a maximum size doesn't loop.
-                if actual.width < r.width - 4 || actual.height < r.height - 4, !w.isMoving {
+                // Smaller than its tile or off it: the app resized or moved it after paw did. Back
+                // on the tile, with the frame sent again (paw's own still says it's there). Once
+                // per check, so an app with a maximum size doesn't loop.
+                // Where the window server has it: the app may not know yet about a move through the
+                // Dock helper.
+                let at = SkyLight.frame(id)?.origin ?? actual.origin
+                let off = abs(at.x - r.minX) > 2 || abs(at.y - r.minY) > 2
+                if actual.width < r.width - 4 || actual.height < r.height - 4 || off, !w.isMoving {
                     w.frame = actual
                     w.setFrame(r)
                 }
