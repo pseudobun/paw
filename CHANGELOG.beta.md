@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.27](https://github.com/pseudobun/paw/compare/v0.1.0-beta.26...v0.1.0-beta.27) (2026-11-12)
+
+
+### Features
+
+* **hud:** glide the edge markers to a new neighbour like the tip bar's islands ([#91](https://github.com/pseudobun/paw/issues/91)) ([38fd059](https://github.com/pseudobun/paw/commit/38fd059aaa2dd9efe959a667be22cfa794654c7c))
+
 ## [0.1.0-beta.26](https://github.com/pseudobun/paw/compare/v0.1.0-beta.25...v0.1.0-beta.26) (2026-11-12)
 
 
