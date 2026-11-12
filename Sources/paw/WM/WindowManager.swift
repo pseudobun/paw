@@ -1441,6 +1441,11 @@ final class WindowManager {
     private func updateFocusFollowsMouse() {
         mouseMonitors.forEach(NSEvent.removeMonitor)
         mouseMonitors = []
+        // A click on a tile of the app already in front (focus follows mouse got there first)
+        // changes no focus, but macOS still raises it over the floats it overlaps.
+        if config.focus.floatsOnTop, let m = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: { [weak self] _ in
+            self?.clicked()
+        }) { mouseMonitors.append(m) }
         guard config.focus.focusFollowsMouse else { return }
         // Global monitoring excludes events sent to paw while a placeholder owns focus.
         mouseMonitors = [
@@ -1450,6 +1455,16 @@ final class WindowManager {
                 return event
             },
         ].compactMap { $0 }
+    }
+
+    /// After a click: the tile under the pointer, now raised, goes back under the floats it covers.
+    private func clicked() {
+        let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            guard let self, let id = self.topWindow(at: p), let w = self.windows[id] else { return }
+            let floats = self.floatsAbove(w, onlyBehind: true)
+            if !floats.isEmpty { self.focusQueue.async { for f in floats { f.perform(kAXRaiseAction) } } }
+        }
     }
 
     /// At most one look every 80 ms while the pointer moves, and one more once it stops: the
