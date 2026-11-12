@@ -512,7 +512,9 @@ final class WindowManager {
 
         // A greyed-out green button: the app fixes the window's size (System Settings), so no tile fits it.
         let fixedSize = el.element(kAXZoomButtonAttribute)?.bool(kAXEnabledAttribute) == false
-        let float = rules.contains { $0.float == true } || subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute) || fixedSize
+        // Only a hint (an app can grey it out on a resizable window): a rule with float: false tiles it.
+        let float = rules.contains { $0.float == true } || subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute)
+            || fixedSize && !rules.contains { $0.float == false }
         var presetName = presets.first { $0.value.slot(for: appName, title: title) != nil }?.key
         // A new window of an app you already use on this workspace (a second Finder window moved
         // here, then ⌘K) stays with it instead of jumping to the app's preset workspace.
@@ -535,9 +537,11 @@ final class WindowManager {
                       slot: presets[ws.name]?.slot(for: appName, title: title))
         }
         // A new floating window opened off its workspace's area (another display, under the menu
-        // bar, a stale position): centred there instead. Ones already open when paw starts stay.
-        if float, !initial, ghost == nil, frame.width > 0, frame.height > 0, ws.isFloating(id), !area(of: ws).contains(frame) {
-            let r = Self.centered(frame.size, in: area(of: ws))
+        // bar, a stale position): centred there instead. Ones already open when paw starts, and
+        // ones on hidden workspaces (no display to centre on yet), stay.
+        if float, !initial, ghost == nil, frame.width > 0, frame.height > 0, ws.isFloating(id),
+           let di = displayShowing(ws.name), !displays[di].area.contains(frame) {
+            let r = Self.centered(frame.size, in: displays[di].area)
             w.setFrame(r)
             w.floatFrame = r
         }
@@ -1305,7 +1309,6 @@ final class WindowManager {
     /// so a floating window the pointer left stays in front of the tile it covers.
     func focusWindow(_ id: WindowID?, warp: Bool, raise: Bool = true) {
         guard let id, let w = windows[id] else { return }
-        let previous = focusedID.flatMap { windows[$0] }
         focusWork?.cancel()
         focusRevision += 1
         let ticket = FocusTicket.shared.issue()
@@ -1336,16 +1339,11 @@ final class WindowManager {
             return
         }
         let (pid, element) = (w.pid, w.element)
-        // Without raising needs the window that has key now; anything else (an app paw doesn't
-        // manage in front) and it raises as usual.
-        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        let from = raise ? nil : previous.flatMap { $0.id != id && $0.pid == frontmost ? (pid: $0.pid, windowID: $0.id) : nil }
-        let floats = floatsAbove(w)
+        let floats = raise ? floatsAbove(w) : []
         // Requests pile up behind a slow app: only the newest one still goes.
         focusQueue.async {
             guard FocusTicket.shared.isLatest(ticket) else { return }
-            if let from, SkyLight.focusWithoutRaise(pid: pid, windowID: id, from: from) { return }
-            SkyLight.focus(pid: pid, windowID: id, element: element)
+            SkyLight.focus(pid: pid, windowID: id, element: element, raise: raise)
             // Floating windows stay in front of tiles. AXRaise doesn't activate their apps.
             for f in floats { f.perform(kAXRaiseAction) }
         }
@@ -1362,14 +1360,24 @@ final class WindowManager {
         focusChanged(id)
     }
 
-    /// Visible floating windows of other apps on a tiled window's workspace that overlap it:
-    /// raised again after it is, so focusing a tile doesn't bury them. Same-app floats are left
-    /// alone (raising one could make it key).
+    /// Visible floating windows of other apps on a tiled window's workspace that overlap it,
+    /// back to front: raised again after it is, so focusing a tile doesn't bury them or reorder
+    /// them. Same-app floats are left alone (raising one could make it key).
     private func floatsAbove(_ w: Window) -> [AXUIElement] {
         guard let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil else { return [] }
-        return ws.floating.compactMap { windows[$0] }
-            .filter { !$0.isHidden && $0.pid != w.pid && $0.frame.intersects(w.frame) }
-            .map(\.element)
+        let floats = ws.floating.filter { id in
+            windows[id].map { !$0.isHidden && $0.pid != w.pid && $0.frame.intersects(w.frame) } ?? false
+        }
+        guard !floats.isEmpty else { return [] }
+        let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+        let order = list.compactMap { $0[kCGWindowNumber as String] as? UInt32 } // front to back
+        return Self.backToFront(floats, stacking: order).compactMap { windows[$0]?.element }
+    }
+
+    /// `ids` in `stacking` (front-to-back) order reversed; ones missing from it go first.
+    static func backToFront(_ ids: [WindowID], stacking: [WindowID]) -> [WindowID] {
+        let rank = Dictionary(stacking.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        return ids.sorted { (rank[$0] ?? .max) > (rank[$1] ?? .max) }
     }
 
     private func updateFocusFollowsMouse() {

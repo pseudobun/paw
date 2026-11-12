@@ -154,10 +154,16 @@ struct FloatPlacementTests {
         #expect(WindowManager.centered(CGSize(width: 1200, height: 900), in: area).origin == CGPoint(x: 0, y: 25))
     }
 
-    @Test func keyRecordsCarryWindowAndDirection() {
-        let gain = SkyLight.keyRecord(0x01020304, gained: true)
-        #expect(gain.count == 0xf8 && gain[0x08] == 0x0d && gain[0x8a] == 0x01)
+    @Test func keyRecordsCarryWindowAndState() {
+        let gain = SkyLight.keyRecord(0x01020304, kind: 0x0d, state: 0x01)
+        #expect(gain.count == 0xf8 && gain[0x08] == 0x0d && gain[0x8a] == 0x01 && gain[0x3a] == 0)
         #expect(Array(gain[0x3c..<0x40]) == [0x04, 0x03, 0x02, 0x01])
-        #expect(SkyLight.keyRecord(1, gained: false)[0x8a] == 0x02)
+        let key = SkyLight.keyRecord(7, kind: 0x01)
+        #expect(key[0x3a] == 0x10 && key[0x20] == 0xff && key[0x2f] == 0xff && key[0x8a] == 0)
+    }
+
+    @Test func floatsRaiseBackToFrontKeepingTheirOrder() {
+        // 3 is in front of 1; 2 isn't on screen.
+        #expect(WindowManager.backToFront([1, 2, 3], stacking: [9, 3, 1]) == [2, 1, 3])
     }
 }

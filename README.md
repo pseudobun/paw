@@ -391,7 +391,7 @@ config. The Settings window writes the same file, so people and agents can both 
   leaves) with an island at the top of the screen; define your own key modes in `modes`
 - **Rules**: float or ignore apps and windows by name/title, send apps to workspaces
 - **Floating windows**: fixed-size windows (a greyed-out green button, like System Settings) float
-  on their own and open centred; floats stay in front of the tiles you focus, and
+  on their own (a rule with `float: false` tiles them) and open centred; floats stay in front of the tiles you focus, and
   `focusFollowsMouse` gives focus without raising, so hovering a tile doesn't bury them
 - **Key bindings** in the config (left/right modifiers like `ralt` work, `hyper` = ⌘⌃⌥⇧), and
   the same commands on the CLI: `paw focus west`, `paw workspace 3`

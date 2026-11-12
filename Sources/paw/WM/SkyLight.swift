@@ -98,8 +98,9 @@ enum SkyLight {
 
     static var available: Bool { setFront != nil && post != nil && getPSN != nil }
 
-    /// Focuses and raises one window. Falls back to activating the app.
-    static func focus(pid: pid_t, windowID: UInt32, element: AXUIElement) {
+    /// Focuses one window, raising it unless `raise` is false (focus follows mouse; yabai's
+    /// autofocus). Falls back to activating the app.
+    static func focus(pid: pid_t, windowID: UInt32, element: AXUIElement, raise: Bool = true) {
         guard let setFront, let post, let getPSN else {
             NSRunningApplication(processIdentifier: pid)?.activate()
             element.perform(kAXRaiseAction)
@@ -107,45 +108,36 @@ enum SkyLight {
         }
         var psn = ProcessSerialNumber()
         guard getPSN(pid, &psn) == noErr else { return }
+        // Another window of the app in front: it loses key first. Read here, when the request
+        // runs, so it is the window that has focus now. Some apps get confused when both
+        // records arrive at once (yabai waits 40 ms).
+        if !raise, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+           let current = AXUIElementCreateApplication(pid).element(kAXFocusedWindowAttribute)?.windowID, current != windowID {
+            var lose = keyRecord(current, kind: 0x0d, state: 0x02), gain = keyRecord(windowID, kind: 0x0d, state: 0x01)
+            _ = post(&psn, &lose)
+            usleep(40000)
+            _ = post(&psn, &gain)
+        }
         _ = setFront(&psn, windowID, 0x200) // kCPSUserGenerated
         for kind: UInt8 in [0x01, 0x02] {
-            var bytes = [UInt8](repeating: 0, count: 0xf8)
-            bytes[0x04] = 0xf8
-            bytes[0x08] = kind
-            bytes[0x3a] = 0x10
-            withUnsafeBytes(of: windowID.littleEndian) { for (i, b) in $0.enumerated() { bytes[0x3c + i] = b } }
-            for i in 0x20..<0x30 { bytes[i] = 0xff }
+            var bytes = keyRecord(windowID, kind: kind)
             _ = post(&psn, &bytes)
         }
-        element.perform(kAXRaiseAction)
+        if raise { element.perform(kAXRaiseAction) }
     }
 
-    /// Gives one window key focus without changing the stacking order (yabai's autofocus):
-    /// `from` loses key, `windowID` gains it, and its app comes forward with none of its windows
-    /// (kCPSNoWindows). `from` must be the window that has focus now. False when SkyLight is missing.
-    static func focusWithoutRaise(pid: pid_t, windowID: UInt32, from: (pid: pid_t, windowID: UInt32)) -> Bool {
-        guard let setFront, let post, let getPSN else { return false }
-        var psn = ProcessSerialNumber(), fromPSN = ProcessSerialNumber()
-        guard getPSN(pid, &psn) == noErr, getPSN(from.pid, &fromPSN) == noErr else { return false }
-        var lose = keyRecord(from.windowID, gained: false), gain = keyRecord(windowID, gained: true)
-        if pid == from.pid {
-            _ = post(&psn, &lose)
-            _ = post(&psn, &gain)
-            return true
-        }
-        let noWindows: UInt32 = 0x400 // kCPSNoWindows
-        _ = setFront(&fromPSN, from.windowID, noWindows)
-        _ = post(&fromPSN, &lose)
-        _ = setFront(&psn, windowID, noWindows)
-        _ = post(&psn, &gain)
-        return true
-    }
-
-    static func keyRecord(_ windowID: UInt32, gained: Bool) -> [UInt8] {
+    /// One SkyLight event record for `windowID`: kind 0x01/0x02 make it key (with the 0xff
+    /// block), 0x0d with `state` 0x02/0x01 has it lose or gain key.
+    static func keyRecord(_ windowID: UInt32, kind: UInt8, state: UInt8? = nil) -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: 0xf8)
         bytes[0x04] = 0xf8
-        bytes[0x08] = 0x0d
-        bytes[0x8a] = gained ? 0x01 : 0x02
+        bytes[0x08] = kind
+        if let state {
+            bytes[0x8a] = state
+        } else {
+            bytes[0x3a] = 0x10
+            for i in 0x20..<0x30 { bytes[i] = 0xff }
+        }
         withUnsafeBytes(of: windowID.littleEndian) { for (i, b) in $0.enumerated() { bytes[0x3c + i] = b } }
         return bytes
     }
