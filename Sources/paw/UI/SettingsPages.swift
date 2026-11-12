@@ -476,6 +476,8 @@ enum SettingsCatalog {
                 f(\.appearance.appIconSize, "appearance.appIconSize", "Icon size", .number(min: 6, max: 48, unit: "pt")),
             ]),
             SettingsSection("Shape", [
+                f(\.appearance.glass, "appearance.glass", "Liquid Glass", .toggle,
+                  "macOS 26 and later: islands on glass, tinted with the island colour; border and shadow come from the glass. Off: the theme's flat fill. Themes keep it."),
                 f(\.appearance.radius, "appearance.radius", "Island radius", .number(min: 0, max: 40, unit: "pt")),
                 f(\.appearance.cellRadius, "appearance.cellRadius", "Cell radius", .number(min: 0, max: 40, unit: "pt"),
                   "The highlighted window in a stack."),

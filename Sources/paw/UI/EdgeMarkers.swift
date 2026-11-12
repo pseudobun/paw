@@ -97,6 +97,8 @@ final class EdgeMarkers {
 
 private final class EdgePanel: NSPanel {
     var onClick: (() -> Void)?
+    private let view = EdgeView()
+    private lazy var host = GlassHost(content: view)
     var idleAlpha: CGFloat = 0.8 {
         didSet { if oldValue != idleAlpha { alphaValue = idleAlpha } }
     }
@@ -111,9 +113,10 @@ private final class EdgePanel: NSPanel {
         collectionBehavior = [.ignoresCycle, .fullScreenAuxiliary, .canJoinAllSpaces]
         isReleasedWhenClosed = false
         animationBehavior = .none
-        let v = EdgeView()
+        let v = view
         v.layer = CALayer()
         v.wantsLayer = true
+        host.interactive = true
         v.onClick = { [weak self] in self?.onClick?() }
         v.onHover = { [weak self] inside in
             NSAnimationContext.runAnimationGroup { ctx in
@@ -121,7 +124,7 @@ private final class EdgePanel: NSPanel {
                 self?.animator().alphaValue = inside ? 1 : self?.idleAlpha ?? 0.8
             }
         }
-        contentView = v
+        contentView = host
         alphaValue = idleAlpha
     }
 
@@ -140,7 +143,7 @@ private final class EdgePanel: NSPanel {
     /// Shows the island `l` at `cocoaFrame`. `animated`, the old island's background glides to
     /// the new size and place while its rows cross-fade into the new ones.
     func show(_ l: CALayer, at cocoaFrame: CGRect, animated: Bool = false) {
-        guard let root = contentView?.layer else { return }
+        guard let root = host.content.layer else { return }
         generation += 1
         let gen = generation
         // The rows move into their own layer; `l` keeps only the island's chrome.
@@ -148,8 +151,9 @@ private final class EdgePanel: NSPanel {
         content.contentsScale = l.contentsScale
         for row in l.sublayers ?? [] { content.addSublayer(row) }
         let from = frame
+        // A glass island doesn't glide: the glass fills the panel, which grows for the glide.
         let motion = animated && isVisible && from != cocoaFrame && island != nil
-            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && Glass.tint(of: l) == nil
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         guard motion else {
@@ -159,6 +163,7 @@ private final class EdgePanel: NSPanel {
             root.sublayers = [l, content]
             island = l
             rows = content
+            host.adopt(l)
             CATransaction.commit()
             orderFrontRegardless()
             return
@@ -173,6 +178,7 @@ private final class EdgePanel: NSPanel {
         l.frame = t
         content.frame = t
         root.sublayers = [l, oldRows, content].compactMap { $0 }
+        host.adopt(l)
         island = l
         rows = content
         let ease = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
