@@ -39,7 +39,6 @@ extern CGError SLSDisableUpdate(int cid);
 extern CGError SLSReenableUpdate(int cid);
 extern CGError SLSOrderWindow(int cid, uint32_t wid, int order, uint32_t relative);
 extern CGError SLSSetWindowSubLevel(int cid, uint32_t wid, int level);
-extern CFArrayRef SLSCopyAssociatedWindows(int cid, uint32_t wid);
 
 static int listen_fd = -1;
 static _Atomic int live = 0;
@@ -101,8 +100,9 @@ static void do_order(const uint8_t *p, size_t len)
     }
 }
 
-// Floating windows above tiled ones (yabai's sub-layer). Sheets and other windows attached to
-// one go with it; left behind at the normal level they would open behind it.
+// Floating windows above tiled ones (yabai's sub-layer). Exactly the windows given: paw adds the
+// sheets and panels attached to a float itself. SLSCopyAssociatedWindows returns the whole group,
+// parent included, so spreading here lifted a popup's tiled parent over every float.
 static void do_level(const uint8_t *p, size_t len)
 {
     if (len < 8) return;
@@ -117,15 +117,6 @@ static void do_level(const uint8_t *p, size_t len)
         uint32_t wid;
         memcpy(&wid, p, 4);
         SLSSetWindowSubLevel(cid, wid, level);
-        CFArrayRef attached = SLSCopyAssociatedWindows(cid, wid);
-        if (!attached) continue;
-        for (CFIndex j = 0; j < CFArrayGetCount(attached); ++j) {
-            CFNumberRef n = CFArrayGetValueAtIndex(attached, j);
-            uint32_t child;
-            if (n && CFGetTypeID(n) == CFNumberGetTypeID() && CFNumberGetValue(n, kCFNumberSInt32Type, &child) && child != wid)
-                SLSSetWindowSubLevel(cid, child, level);
-        }
-        CFRelease(attached);
     }
 }
 

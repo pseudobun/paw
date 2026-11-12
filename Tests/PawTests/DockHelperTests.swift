@@ -1,10 +1,35 @@
 import Foundation
+import PawCore
 import Testing
 @testable import paw
 
 /// The Dock helper's version: what `paw status` says when the one in Dock or the installed one
 /// isn't this paw's, and when `paw dock install` restarts Dock.
 struct DockHelperTests {
+    /// Live: a floating Arc popup's group was its tiled parent and six panels; raising the popup's
+    /// group put the tiled parent over System Settings.
+    @Test func raisingAFloatLeavesItsTiledParentDown() {
+        let group: [WindowID] = [7975, 13269, 13270, 13300]
+        let raised = WindowManager.withAttached([13300], managed: [7975, 13300], attached: { _ in group })
+        #expect(Set(raised) == [13300, 13269, 13270])
+        #expect(Set(WindowManager.withAttached([1], managed: [1], attached: { _ in [] })) == [1])
+    }
+
+    /// Live: an older helper left tiled Arc at the floating level, over floating System Settings.
+    /// paw can't read that level (0 without Screen Recording), so each new window goes down once.
+    @Test func aWindowSeenForTheFirstTimeGoesBackDown() {
+        // Arc (7975) adopted after the first sync, Settings (13972) floating and already up.
+        var (down, up) = WindowManager.levelChanges(managed: [1, 7975, 13972], checked: [1, 13972],
+                                                    floats: [13972], layered: [13972])
+        #expect(down == [7975])
+        #expect(up == [13972], "floats go up again after a reset")
+        (down, up) = WindowManager.levelChanges(managed: [1, 7975, 13972], checked: [1, 7975, 13972],
+                                                floats: [13972], layered: [13972])
+        #expect(down.isEmpty && up.isEmpty, "once each")
+        (down, up) = WindowManager.levelChanges(managed: [1, 13972], checked: [1, 13972], floats: [1], layered: [13972])
+        #expect(down == [13972] && up == [1])
+    }
+
     @Test func theHelloCarriesTheVersion() {
         #expect(DockBridge.helloVersion("paw-dock 1\n") == "1")
         #expect(DockBridge.helloVersion("paw-dock 3f2a9c01be7d\n\0\0\0") == "3f2a9c01be7d")

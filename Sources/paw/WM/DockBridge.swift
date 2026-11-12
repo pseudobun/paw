@@ -138,7 +138,7 @@ final class DockBridge {
         return send(body)
     }
 
-    /// Puts windows (and the sheets and panels attached to them) at a window level, as a sub-level
+    /// Puts exactly these windows at a window level, as a sub-level
     /// that keeps them above windows of the normal level whichever app is in front. False when
     /// the payload isn't there or is one from before it could (it would ignore the message).
     var canSetLevel: Bool { isReady && (Self.bundledVersion == nil || loadedVersion == Self.bundledVersion) }
