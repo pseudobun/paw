@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.20](https://github.com/pseudobun/paw/compare/v0.1.0-beta.19...v0.1.0-beta.20) (2026-11-12)
+
+
+### Bug Fixes
+
+* **float:** keep fixed-size and floating windows usable ([#63](https://github.com/pseudobun/paw/issues/63)) ([1795563](https://github.com/pseudobun/paw/commit/179556398dfefb7743e2035b5c76beb46e122741))
+
 ## [0.1.0-beta.19](https://github.com/pseudobun/paw/compare/v0.1.0-beta.18...v0.1.0-beta.19) (2026-11-12)
 
 
