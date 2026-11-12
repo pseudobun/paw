@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.26](https://github.com/pseudobun/paw/compare/v0.1.0-beta.25...v0.1.0-beta.26) (2026-11-12)
+
+
+### Features
+
+* **indicator:** glide the stack highlight to the window on top like the tip bar ([#88](https://github.com/pseudobun/paw/issues/88)) ([3229156](https://github.com/pseudobun/paw/commit/3229156284fd113f986758ca6ffb5cfadc82b9ec))
+
 ## [0.1.0-beta.25](https://github.com/pseudobun/paw/compare/v0.1.0-beta.24...v0.1.0-beta.25) (2026-11-12)
 
 
