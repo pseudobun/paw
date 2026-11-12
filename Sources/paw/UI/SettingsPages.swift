@@ -73,7 +73,7 @@ enum SettingsEditor {
     var haystack: String {
         switch self {
         case .presets: "workspace preset tiles apps size title launch display layout axis"
-        case .setups: "setups displays arrangement focus workspace presets"
+        case .setups: "setups displays arrangement focus workspace presets automatic switch monitor"
         case .rules: "rules app title unless float ignore manage workspace"
         case .map(_, let key, let value, _): "\(key) \(value)"
         case .modes: "modes mode keys"
@@ -365,7 +365,9 @@ enum SettingsCatalog {
         SettingsPage(id: "setups", title: "Setups", subtitle: "Presets per display arrangement.",
                      symbol: "display.2", color: Theme.chart2, sections: [
             SettingsSection([
-                .note("The first setup whose displays match the connected ones replaces the default workspaces; paw switches by itself when displays come and go. Displays: builtin, external, main, secondary, or part of a name (DELL)."),
+                .note("A setup whose displays match the connected ones replaces the default workspaces. Displays: builtin, external, main, secondary, or part of a name (DELL). Several setups for the same displays: paw takes the one you picked last for them (menu bar or `paw initiate <setup>`), else the first by name."),
+                f(\.autoSwitchSetups, "autoSwitchSetups", "Switch automatically", .toggle,
+                  "When displays come and go, switch to the setup that matches them. Off: the setup in use stays until you pick another. Each setup can override this."),
             ]),
             SettingsSection(editor: .setups),
         ])

@@ -374,7 +374,10 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Setups** per display arrangement (laptop only, home, work…): paw picks the one matching the
   connected displays by itself, pins each workspace to its display and numbers them display by
   display like yabai (`workspace new` on a display numbers it after that display's others).
-  `paw initiate <setup>` (or the menu bar icon, or hop's "Set Workspace") forces one
+  `paw initiate <setup>` (or the menu bar icon, or hop's "Set Workspace") forces one.
+  Automatic switching is optional: `autoSwitchSetups: false` (menu bar → Switch Automatically)
+  keeps the setup in use until you pick one, and a setup's `autoSwitch` overrides it. Several
+  setups for the same displays: paw takes the one you picked last for them, else the first by name
 - **Settings window** (menu bar icon → Settings…, or `paw settings`) for every key, laid out like
   System Settings; it writes the same commented JSON5 file, so people and agents can keep editing
   the file too. On the pages about the indicators' look, every indicator shows around the window
@@ -431,7 +434,10 @@ A typical setup: presets for the apps you always use, a status bar, and a key to
     "9": { tiles: [ { apps: ["Slack"] } ], display: "secondary" },
   },
 
-  // Per display arrangement; the first whose displays match replaces `workspaces` above.
+  // Switch setups by themselves when displays come and go (a setup's autoSwitch wins).
+  autoSwitchSetups: true,
+
+  // Per display arrangement; the one whose displays match replaces `workspaces` above.
   setups: {
     home: {
       displays: ["builtin", "DELL", "Gigabyte"], // "builtin", "external" or part of a display's name
@@ -472,7 +478,8 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |
 | `modes` | `"name": { "key": "command" }`; while `mode <name>` is on its keys come first. Default: `resize` |
 | `workspaces` | `"name": { layout, axis, tiles: [{ apps: ["Discord", "Spotify"], size: 1, title?, launch? }, …], display: "builtin" }` |
-| `setups` | `"name": { displays: ["builtin", "DELL"], focus, workspaces: { … } }` |
+| `setups` | `"name": { displays: ["builtin", "DELL"], focus, autoSwitch?, workspaces: { … } }` |
+| `autoSwitchSetups` | `true`: switch to the setup matching the displays when they change; `false`: keep the one in use until you pick another |
 | `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
 | `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
 | `indicator` | `enabled` (true), `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
@@ -534,8 +541,8 @@ there.
 Each display shows one workspace. Without setups the workspaces are shared: switching shows one on
 the focused display, or focuses the display that already shows it. With a setup, its presets pin
 workspaces to displays (`display: "DELL"`), every bar shows only its display's workspaces, and
-numbers run display by display. Plugging displays in or out switches setups and retiles
-everything. `focus`/`swap` past the screen edge go to the next display, `display <dir>` and
+numbers run display by display. Plugging displays in or out switches setups (unless
+`autoSwitchSetups` or the setup's `autoSwitch` is off) and retiles everything. `focus`/`swap` past the screen edge go to the next display, `display <dir>` and
 `move-to-display` move between them.
 
 ### Status bar
