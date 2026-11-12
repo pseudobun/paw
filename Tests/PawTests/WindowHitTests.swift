@@ -145,3 +145,31 @@ struct WindowHitTests {
          kCGWindowBounds as String: frame.dictionaryRepresentation]
     }
 }
+
+struct FloatPlacementTests {
+    @Test func newFloatsCentreInTheirArea() {
+        let area = CGRect(x: 0, y: 25, width: 1000, height: 800)
+        #expect(WindowManager.centered(CGSize(width: 400, height: 200), in: area) == CGRect(x: 300, y: 325, width: 400, height: 200))
+        // Larger than the area: top-left stays inside it.
+        #expect(WindowManager.centered(CGSize(width: 1200, height: 900), in: area).origin == CGPoint(x: 0, y: 25))
+    }
+
+    @Test func keyRecordsCarryWindowAndState() {
+        let gain = SkyLight.keyRecord(0x01020304, kind: 0x0d, state: 0x01)
+        #expect(gain.count == 0xf8 && gain[0x08] == 0x0d && gain[0x8a] == 0x01 && gain[0x3a] == 0)
+        #expect(Array(gain[0x3c..<0x40]) == [0x04, 0x03, 0x02, 0x01])
+        let key = SkyLight.keyRecord(7, kind: 0x01)
+        #expect(key[0x3a] == 0x10 && key[0x20] == 0xff && key[0x2f] == 0xff && key[0x8a] == 0)
+    }
+
+    @Test func onlyFloatsBehindTheClickedTileAreRaised() {
+        // Front to back: 5 (float), 9 (the tile), 3 and 1 (floats it now covers).
+        #expect(WindowManager.behind([1, 3, 5], window: 9, stacking: [5, 9, 3, 1]) == [1, 3])
+        #expect(WindowManager.behind([1], window: 9, stacking: [1]).isEmpty)
+    }
+
+    @Test func floatsRaiseBackToFrontKeepingTheirOrder() {
+        // 3 is in front of 1; 2 isn't on screen.
+        #expect(WindowManager.backToFront([1, 2, 3], stacking: [9, 3, 1]) == [2, 1, 3])
+    }
+}

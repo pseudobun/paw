@@ -49,6 +49,8 @@ public enum ConfigTemplate {
             wrapStacks: \(f.wrapStacks),
             // workspace next on the last workspace goes back to the first (false: it stays)
             wrapWorkspaces: \(f.wrapWorkspaces),
+            // floating windows stay in front of tiled ones (false: a focused tile can cover them)
+            floatsOnTop: \(f.floatsOnTop),
           },
 
           animation: {

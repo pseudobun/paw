@@ -9,6 +9,7 @@
 //   0x01 hello                         -> replies "paw-dock <version>\n"
 //   0x02 move  u32 count, count x (u32 window, f64 x, f64 y)   (AX coordinates, no reply)
 //   0x03 order u32 count, count x u32 window                   (bring to front, no reply)
+//   0x04 level u32 count, i32 level, count x u32 window        (window sub-level, no reply)
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <errno.h>
@@ -37,6 +38,8 @@ extern CGError SLSReassociateWindowsSpacesByGeometry(int cid, CFArrayRef windows
 extern CGError SLSDisableUpdate(int cid);
 extern CGError SLSReenableUpdate(int cid);
 extern CGError SLSOrderWindow(int cid, uint32_t wid, int order, uint32_t relative);
+extern CGError SLSSetWindowSubLevel(int cid, uint32_t wid, int level);
+extern CFArrayRef SLSCopyAssociatedWindows(int cid, uint32_t wid);
 
 static int listen_fd = -1;
 static _Atomic int live = 0;
@@ -98,6 +101,34 @@ static void do_order(const uint8_t *p, size_t len)
     }
 }
 
+// Floating windows above tiled ones (yabai's sub-layer). Sheets and other windows attached to
+// one go with it; left behind at the normal level they would open behind it.
+static void do_level(const uint8_t *p, size_t len)
+{
+    if (len < 8) return;
+    uint32_t count;
+    int32_t level;
+    memcpy(&count, p, 4);
+    memcpy(&level, p + 4, 4);
+    p += 8; len -= 8;
+    if ((size_t)count * 4 > len) return;
+    int cid = SLSMainConnectionID();
+    for (uint32_t i = 0; i < count; ++i, p += 4) {
+        uint32_t wid;
+        memcpy(&wid, p, 4);
+        SLSSetWindowSubLevel(cid, wid, level);
+        CFArrayRef attached = SLSCopyAssociatedWindows(cid, wid);
+        if (!attached) continue;
+        for (CFIndex j = 0; j < CFArrayGetCount(attached); ++j) {
+            CFNumberRef n = CFArrayGetValueAtIndex(attached, j);
+            uint32_t child;
+            if (n && CFGetTypeID(n) == CFNumberGetTypeID() && CFNumberGetValue(n, kCFNumberSInt32Type, &child) && child != wid)
+                SLSSetWindowSubLevel(cid, child, level);
+        }
+        CFRelease(attached);
+    }
+}
+
 static void *serve(void *arg)
 {
     int fd = (int)(intptr_t)arg;
@@ -114,6 +145,7 @@ static void *serve(void *arg)
             } break;
             case 0x02: do_move(buf + 1, len - 1); break;
             case 0x03: do_order(buf + 1, len - 1); break;
+            case 0x04: do_level(buf + 1, len - 1); break;
             default: break;
             }
         }

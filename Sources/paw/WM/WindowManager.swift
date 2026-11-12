@@ -278,6 +278,8 @@ final class WindowManager {
 
     /// Puts every hidden window back on screen (paw quitting must not lose windows).
     func restoreAll() {
+        DockBridge.shared.setLevel(Array(layeredFloats), Self.normalLevel)
+        layeredFloats = []
         guard let d = displays.first else { return }
         var offset: CGFloat = 0
         for w in windows.values where w.isHidden {
@@ -510,7 +512,11 @@ final class WindowManager {
         windows[id] = w
         tracker.watch(window: el, pid: pid)
 
+        // A greyed-out green button: the app fixes the window's size (System Settings), so no tile fits it.
+        let fixedSize = el.element(kAXZoomButtonAttribute)?.bool(kAXEnabledAttribute) == false
+        // Only a hint (an app can grey it out on a resizable window): a rule with float: false tiles it.
         let float = rules.contains { $0.float == true } || subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute)
+            || fixedSize && !rules.contains { $0.float == false }
         var presetName = presets.first { $0.value.slot(for: appName, title: title) != nil }?.key
         // A new window of an app you already use on this workspace (a second Finder window moved
         // here, then ⌘K) stays with it instead of jumping to the app's preset workspace.
@@ -532,6 +538,15 @@ final class WindowManager {
             ws.insert(id, area: area(of: ws), floating: float || ghost?.floating == true,
                       slot: presets[ws.name]?.slot(for: appName, title: title))
         }
+        // A new floating window opened off its workspace's area (another display, under the menu
+        // bar, a stale position): centred there instead. Ones already open when paw starts, and
+        // ones on hidden workspaces (no display to centre on yet), stay.
+        if float, !initial, frame.width > 0, frame.height > 0, ws.isFloating(id),
+           let di = displayShowing(ws.name), !displays[di].area.contains(frame) {
+            let r = Self.centered(frame.size, in: displays[di].area)
+            w.setFrame(r)
+            w.floatFrame = r
+        }
         if !initial || ws.focused == nil { ws.focused = id }
         if displayShowing(ws.name) == nil { hide(w, from: ws) }
         if !initial { layout(ws, animated: true) }
@@ -541,6 +556,8 @@ final class WindowManager {
 
     private func remove(_ id: WindowID, relayout: Bool = true, closed: Bool = false) {
         guard let w = windows[id] else { return }
+        // Let go but still open (a manage: false rule): back to the normal level.
+        if layeredFloats.remove(id) != nil, !closed { DockBridge.shared.setLevel([id], Self.normalLevel) }
         let ws = workspaceOf(id)
         let wasFocused = ws?.focused == id && (!closed || ws === focusedWorkspace)
         let closingFrame = w.isHidden && closed && wasFocused
@@ -747,7 +764,11 @@ final class WindowManager {
             focusedDisplay = di
             ws.focused = id
             ws.activate(id)
-            if let w = windows[id] { retryMinimum(w, focus: true) }
+            if let w = windows[id] {
+                retryMinimum(w, focus: true)
+                // A click on a tile: macOS raised it over the floats it overlaps.
+                raiseFloats(floatsAbove(w, onlyBehind: true), over: w)
+            }
             if ws.frameCamera(on: id, area: displays[di].area, gap: config.layout.gap) { layout(ws, animated: true) }
             updateIndicators()
             focusChanged(id)
@@ -774,6 +795,17 @@ final class WindowManager {
         if ws.isFloating(w.id) {
             _ = w.readFrame()
             w.floatFrame = w.frame
+            // Dragged onto another display: it belongs to the workspace shown there now, or it
+            // would stay on screen when that display switches workspace.
+            let c = CGPoint(x: w.frame.midX, y: w.frame.midY)
+            if let d = displays.first(where: { $0.frame.contains(c) }), d.workspace != ws.name {
+                let to = workspace(d.workspace)
+                let wasFocused = ws.focused == w.id
+                moveQuietly(w.id, from: ws, to: to)
+                if wasFocused { to.focused = w.id }
+                updateIndicators()
+                scheduleSave()
+            }
             if w.id == focusedID { updateBorder(cramped: []) }
             return
         }
@@ -855,6 +887,7 @@ final class WindowManager {
     }
 
     func layout(_ ws: Workspace, animated: Bool) {
+        syncFloatLayers()
         guard let di = displayShowing(ws.name) else { return }
         let area = displays[di].area
         // A canvas keeps the focused window on screen with its tiles at their minimum size.
@@ -1071,7 +1104,7 @@ final class WindowManager {
             ? TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] : nil
         let frame = w.frameForBorder(tile: tile, placeholder: placeholder)
         let radius = !placeholder && config.border.autoRadius ? w.radiusForBorder() : nil
-        border.show(frame, window: id, above: !placeholder, screen: displays[di].frame, config: config.border, radius: radius)
+        border.show(frame, window: id, above: !placeholder, floating: layeredFloats.contains(id), screen: displays[di].frame, config: config.border, radius: radius)
     }
 
     private var placeholderMin: CGSize {
@@ -1292,7 +1325,9 @@ final class WindowManager {
         ws.tiles.compactMap(\.activeWindow).first { frames[$0]?.insetBy(dx: -max(0, gap / 2), dy: -max(0, gap / 2)).contains(p) == true }
     }
 
-    func focusWindow(_ id: WindowID?, warp: Bool) {
+    /// `raise: false` (focus follows mouse) gives key focus without changing the stacking order,
+    /// so a floating window the pointer left stays in front of the tile it covers.
+    func focusWindow(_ id: WindowID?, warp: Bool, raise: Bool = true) {
         guard let id, let w = windows[id] else { return }
         focusWork?.cancel()
         focusRevision += 1
@@ -1324,10 +1359,13 @@ final class WindowManager {
             return
         }
         let (pid, element) = (w.pid, w.element)
+        let floats = raise ? floatsAbove(w) : []
+        if !floats.isEmpty { ignoreFocus(0.3) }
         // Requests pile up behind a slow app: only the newest one still goes.
         focusQueue.async {
             guard FocusTicket.shared.isLatest(ticket) else { return }
-            SkyLight.focus(pid: pid, windowID: id, element: element)
+            SkyLight.focus(pid: pid, windowID: id, element: element, raise: raise)
+            Self.bringForward(floats, thenFocus: (pid, id, element))
         }
         pawFocus = (id, Date())
         if warp && config.focus.mouseFollowsFocus {
@@ -1342,9 +1380,93 @@ final class WindowManager {
         focusChanged(id)
     }
 
+    /// Visible floating windows of other apps on a tiled window's workspace that overlap it,
+    /// back to front: brought forward again after it is, so focusing a tile doesn't bury them or
+    /// reorder them. `onlyBehind`: the tile is already in front (a click), so only the floats now
+    /// behind it. Same-app floats are left alone. None when the window server keeps floats above
+    /// (layered) or floatsOnTop is off.
+    private func floatsAbove(_ w: Window, onlyBehind: Bool = false) -> [Window] {
+        guard config.focus.floatsOnTop, let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil else { return [] }
+        let floats = ws.floating.filter { id in
+            !layeredFloats.contains(id) && windows[id].map { !$0.isHidden && $0.pid != w.pid && $0.frame.intersects(w.frame) } ?? false
+        }
+        guard !floats.isEmpty else { return [] }
+        let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+        let order = list.compactMap { $0[kCGWindowNumber as String] as? UInt32 } // front to back
+        let behind = onlyBehind ? Self.behind(floats, window: w.id, stacking: order) : floats
+        return Self.backToFront(behind, stacking: order).compactMap { windows[$0] }
+    }
+
+    /// Puts `floats` back in front of `w`, which keeps the keyboard.
+    private func raiseFloats(_ floats: [Window], over w: Window) {
+        guard !floats.isEmpty else { return }
+        Log.app.info("floatsOnTop: \(floats.count) float(s) back over \(w.app, privacy: .public)")
+        // The float's app comes forward on the way: not a focus change to follow.
+        ignoreFocus(0.5)
+        let (pid, id, element) = (w.pid, w.id, w.element)
+        focusQueue.async { Self.bringForward(floats, thenFocus: (pid, id, element)) }
+    }
+
+    /// AXRaise only orders a window among its own app's windows: a float of an app in the
+    /// background stays behind the active app's tile. So each comes forward with its app, back
+    /// to front, and the tile's app then takes the keyboard back without raising (yabai's way).
+    /// On the focus queue.
+    private static func bringForward(_ floats: [Window], thenFocus target: (pid_t, WindowID, AXUIElement)) {
+        guard !floats.isEmpty else { return }
+        for f in floats { SkyLight.focus(pid: f.pid, windowID: f.id, element: f.element) }
+        // Its app takes a moment to come forward; taking focus back at once beats it to it.
+        usleep(60_000)
+        SkyLight.focus(pid: target.0, windowID: target.1, element: target.2, raise: false)
+    }
+
+    /// Of `ids`, those after `window` in `stacking` (front to back): behind it.
+    static func behind(_ ids: [WindowID], window: WindowID, stacking: [WindowID]) -> [WindowID] {
+        guard let at = stacking.firstIndex(of: window) else { return [] }
+        let back = Set(stacking[(at + 1)...])
+        return ids.filter(back.contains)
+    }
+
+    static let normalLevel = Int32(CGWindowLevelForKey(.normalWindow))
+    static let floatingLevel = Int32(CGWindowLevelForKey(.floatingWindow))
+
+    /// Floating windows the window server keeps above the normal level (floatsOnTop with the
+    /// Dock helper loaded and current).
+    private var layeredFloats: Set<WindowID> = []
+
+    /// Puts floating windows at the floating level and windows no longer floating back, when the
+    /// Dock helper can; without it they are brought forward again after each focus instead.
+    private func syncFloatLayers() {
+        let all = Set(workspaces.values.flatMap(\.floating)).filter { windows[$0] != nil }
+        let want = config.focus.floatsOnTop && config.layout.windowServer ? all : []
+        let up = want.subtracting(layeredFloats), down = layeredFloats.subtracting(want).filter { windows[$0] != nil }
+        guard !up.isEmpty || !down.isEmpty else { layeredFloats.formIntersection(windows.keys); return }
+        // No helper (SIP on, not loaded, an older one): nothing changes, bringForward takes over.
+        guard DockBridge.shared.setLevel(Array(up), Self.floatingLevel) else { return }
+        DockBridge.shared.setLevel(Array(down), Self.normalLevel)
+        layeredFloats = want
+    }
+
+    /// For `paw status`.
+    var floatsOnTopStatus: String {
+        guard config.focus.floatsOnTop else { return "off" }
+        if config.layout.windowServer, DockBridge.shared.canSetLevel { return "window server (Dock helper)" }
+        return "brought back forward when a tile takes focus (no flicker with the Dock helper: sudo paw dock install)"
+    }
+
+    /// `ids` in `stacking` (front-to-back) order reversed; ones missing from it go first.
+    static func backToFront(_ ids: [WindowID], stacking: [WindowID]) -> [WindowID] {
+        let rank = Dictionary(stacking.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        return ids.sorted { (rank[$0] ?? .max) > (rank[$1] ?? .max) }
+    }
+
     private func updateFocusFollowsMouse() {
         mouseMonitors.forEach(NSEvent.removeMonitor)
         mouseMonitors = []
+        // A click on a tile of the app already in front (focus follows mouse got there first)
+        // changes no focus, but macOS still raises it over the floats it overlaps.
+        if config.focus.floatsOnTop, let m = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp, handler: { [weak self] _ in
+            self?.clicked()
+        }) { mouseMonitors.append(m) }
         guard config.focus.focusFollowsMouse else { return }
         // Global monitoring excludes events sent to paw while a placeholder owns focus.
         mouseMonitors = [
@@ -1354,6 +1476,15 @@ final class WindowManager {
                 return event
             },
         ].compactMap { $0 }
+    }
+
+    /// After a click: the tile under the pointer, now raised, goes back under the floats it covers.
+    private func clicked() {
+        let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            guard let self, let id = self.topWindow(at: p), let w = self.windows[id] else { return }
+            self.raiseFloats(self.floatsAbove(w, onlyBehind: true), over: w)
+        }
     }
 
     /// At most one look every 80 ms while the pointer moves, and one more once it stops: the
@@ -1373,7 +1504,13 @@ final class WindowManager {
         lastHover = Date()
         let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
         guard let id = topWindow(at: p), id != focusedWorkspace.focused else { return }
-        focusWindow(id, warp: false)
+        focusWindow(id, warp: false, raise: false)
+    }
+
+    /// `size` centred in `area`; one larger than the area keeps its top-left corner inside it.
+    static func centered(_ size: CGSize, in area: CGRect) -> CGRect {
+        CGRect(x: max(area.minX, area.midX - size.width / 2), y: max(area.minY, area.midY - size.height / 2),
+               width: size.width, height: size.height)
     }
 
     /// The window's CoreGraphics layer (its window level).
@@ -2084,6 +2221,8 @@ final class WindowManager {
     // MARK: - Focus history and search
 
     private func focusChanged(_ id: WindowID) {
+        // The Dock helper may have loaded since the last layout: floats go up with the next focus.
+        syncFloatLayers()
         // One focus change reaches here up to three times (paw's own focus, the app's
         // focused-window notification, its activation): the hook and event go out once.
         guard id != lastFocusReported else { return }
