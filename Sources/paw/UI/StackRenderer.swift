@@ -35,9 +35,9 @@ enum StackRenderer {
                 // No colour of its own (a white or grey icon): white, like the icon, not gold.
                 color = item.hasFocus || item.isActive ? c.fg : (focused ? c.muted : c.dim)
             }
-            if icons.mapped(item.app) == nil,
+            if icons.mapped(item.app) == nil || style.appFont == nil,
                let image = AppColors.shared.image(for: item.app, side: Int(saturating: (style.a.appIconSize * 1.3 * scale).rounded())) {
-                // No glyph in the font: the app's own icon, faded like the glyphs behind it.
+                // No glyph (or no font): the app's own icon, faded like the glyphs behind it.
                 let side = (style.a.appIconSize * 1.3).rounded()
                 let img = CALayer()
                 img.contents = image

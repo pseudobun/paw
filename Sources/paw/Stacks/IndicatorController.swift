@@ -72,7 +72,7 @@ final class IndicatorController {
             renders += 1
             panel.setFrame(ScreenGeometry.cocoa(fromAX: axRect, primaryHeight: primary), display: false)
             configure(panel.view, stack: stack, side: side, axRect: axRect, scale: screens[si].backingScaleFactor)
-            panel.view.redraw()
+            panel.view.redraw(animated: !isNew)
             if isNew { panel.orderFrontRegardless() }
             let target = stack.hasFocus ? 1 : CGFloat(config.indicator.unfocusedOpacity)
             if isNew || panel.alphaValue != target {
