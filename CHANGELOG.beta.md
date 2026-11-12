@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0-beta.19](https://github.com/pseudobun/paw/compare/v0.1.0-beta.18...v0.1.0-beta.19) (2026-11-12)
+
+
+### Bug Fixes
+
+* **border:** hide focus border while dragging or resizing a window ([#60](https://github.com/pseudobun/paw/issues/60)) ([bfb525c](https://github.com/pseudobun/paw/commit/bfb525c6c2fb1fe9ae6edce03364c5f6d66b4c56))
+* **bundle:** don't fail when PackageFrameworks is missing ([#62](https://github.com/pseudobun/paw/issues/62)) ([18698a9](https://github.com/pseudobun/paw/commit/18698a9f56adf312db29c904e0bfb5525816cffc))
+
 ## [0.1.0-beta.18](https://github.com/pseudobun/paw/compare/v0.1.0-beta.17...v0.1.0-beta.18) (2026-11-12)
 
 
