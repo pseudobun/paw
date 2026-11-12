@@ -2231,6 +2231,8 @@ final class WindowManager {
     // MARK: - Focus history and search
 
     private func focusChanged(_ id: WindowID) {
+        // The Dock helper may have loaded since the last layout: floats go up with the next focus.
+        syncFloatLayers()
         // One focus change reaches here up to three times (paw's own focus, the app's
         // focused-window notification, its activation): the hook and event go out once.
         guard id != lastFocusReported else { return }
