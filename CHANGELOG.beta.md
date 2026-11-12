@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.22](https://github.com/pseudobun/paw/compare/v0.1.0-beta.21...v0.1.0-beta.22) (2026-11-12)
+
+
+### Bug Fixes
+
+* **float:** keep tiled parents below floating windows ([#76](https://github.com/pseudobun/paw/issues/76)) ([fd8f959](https://github.com/pseudobun/paw/commit/fd8f9591d7d4720819d46acd0aac551fd41cf5a7))
+
 ## [0.1.0-beta.21](https://github.com/pseudobun/paw/compare/v0.1.0-beta.20...v0.1.0-beta.21) (2026-11-12)
 
 
