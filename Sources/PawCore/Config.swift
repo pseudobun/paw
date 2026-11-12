@@ -12,10 +12,14 @@ public struct PawConfig: Codable, Equatable, Sendable {
     /// Workspace presets by name: layout and which apps go in which tile. Used when no setup in
     /// `setups` matches the connected displays.
     public var workspaces: [String: WorkspacePreset] = [:]
-    /// Presets per display arrangement ("home": laptop + DELL + Gigabyte). The first setup whose
+    /// Presets per display arrangement ("home": laptop + DELL + Gigabyte). A setup whose
     /// `displays` match the connected displays replaces `workspaces`; paw switches by itself
-    /// when displays come and go.
+    /// when displays come and go (see `autoSwitchSetups`).
     public var setups: [String: Setup] = [:]
+    /// Switch to the setup that matches the displays by itself when displays come and go (and at
+    /// launch). A setup's own `autoSwitch` wins over this. Off: the setup in use stays until you
+    /// pick another one (menu bar, `paw initiate <setup>`).
+    public var autoSwitchSetups = true
     public var rules: [Rule] = Defaults.rules
     public var indicator = Indicator()
     public var appearance = Appearance()
@@ -142,10 +146,15 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var workspaces: [String: WorkspacePreset] = [:]
         /// Workspace to focus after switching to this setup; "" keeps `initiate.focus`.
         public var focus = ""
-        public init(displays: [String] = [], workspaces: [String: WorkspacePreset] = [:], focus: String = "") {
+        /// Whether paw switches to this setup by itself when its displays connect; nil follows
+        /// `autoSwitchSetups`.
+        public var autoSwitch: Bool?
+        public init(displays: [String] = [], workspaces: [String: WorkspacePreset] = [:], focus: String = "",
+                    autoSwitch: Bool? = nil) {
             self.displays = displays
             self.workspaces = workspaces
             self.focus = focus
+            self.autoSwitch = autoSwitch
         }
 
         /// Whether these displays (names, built-in or not) are exactly the ones `displays` asks for.
@@ -175,6 +184,40 @@ public struct PawConfig: Codable, Equatable, Sendable {
     /// The setup for these displays, if one matches.
     public func setup(for connected: [(name: String, builtin: Bool)]) -> (name: String, setup: Setup)? {
         setups.sorted { $0.key < $1.key }.first { $0.value.matches(connected) }.map { ($0.key, $0.value) }
+    }
+
+    /// Every setup whose displays match these, by name.
+    public func matchingSetups(for connected: [(name: String, builtin: Bool)]) -> [String] {
+        setups.keys.sorted().filter { setups[$0]!.matches(connected) }
+    }
+
+    /// Whether paw switches to this setup by itself: its `autoSwitch`, else `autoSwitchSetups`.
+    public func switchesAutomatically(_ setup: String) -> Bool {
+        setups[setup]?.autoSwitch ?? autoSwitchSetups
+    }
+
+    /// The setup paw switches to by itself for these displays: of the matching setups that switch
+    /// automatically, `preferred` (the one picked last for these displays), else the first by
+    /// name. nil: none.
+    public func autoSetup(for connected: [(name: String, builtin: Bool)], preferred: String? = nil) -> String? {
+        let candidates = matchingSetups(for: connected).filter(switchesAutomatically)
+        if let preferred, candidates.contains(preferred) { return preferred }
+        return candidates.first
+    }
+
+    /// What a display change leaves in effect: the setup to switch to by itself, `workspaces`
+    /// (nil) when no setup matches and switching is on, else `current`, as switching is off for
+    /// these displays.
+    public func setupAfterDisplayChange(_ connected: [(name: String, builtin: Bool)], preferred: String?,
+                                        current: String?) -> String? {
+        if let auto = autoSetup(for: connected, preferred: preferred) { return auto }
+        if autoSwitchSetups, matchingSetups(for: connected).isEmpty { return nil }
+        return current.flatMap { setups[$0] == nil ? nil : $0 }
+    }
+
+    /// One string per display arrangement, for remembering the setup picked for it.
+    public static func arrangementKey(_ connected: [(name: String, builtin: Bool)]) -> String {
+        connected.map { "\($0.builtin ? "builtin" : $0.name)" }.sorted().joined(separator: " + ")
     }
 
     public struct Initiate: Codable, Equatable, Sendable {
@@ -406,12 +449,12 @@ struct Fields<K: CodingKey> {
 
 extension PawConfig {
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case layout, focus, animation, bindings, modes, workspaces, setups, rules, indicator, appearance, icons, hooks, mouse, overview, hud, border, initiate, openAtLogin, updates
+        case layout, focus, animation, bindings, modes, workspaces, setups, autoSwitchSetups, rules, indicator, appearance, icons, hooks, mouse, overview, hud, border, initiate, openAtLogin, updates
     }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.layout, &layout); try f(.focus, &focus); try f(.animation, &animation); try f(.bindings, &bindings); try f(.modes, &modes)
-        try f(.workspaces, &workspaces); try f(.setups, &setups); try f(.rules, &rules); try f(.indicator, &indicator); try f(.appearance, &appearance)
+        try f(.workspaces, &workspaces); try f(.setups, &setups); try f(.autoSwitchSetups, &autoSwitchSetups); try f(.rules, &rules); try f(.indicator, &indicator); try f(.appearance, &appearance)
         try f(.icons, &icons); try f(.hooks, &hooks); try f(.mouse, &mouse); try f(.overview, &overview); try f(.hud, &hud); try f(.border, &border); try f(.initiate, &initiate); try f(.openAtLogin, &openAtLogin)
         try f(.updates, &updates)
     }
@@ -490,10 +533,10 @@ extension PawConfig.HUD {
 }
 
 extension PawConfig.Setup {
-    enum CodingKeys: String, CodingKey, CaseIterable { case displays, workspaces, focus }
+    enum CodingKeys: String, CodingKey, CaseIterable { case displays, workspaces, focus, autoSwitch }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
-        try f(.displays, &displays); try f(.workspaces, &workspaces); try f(.focus, &focus)
+        try f(.displays, &displays); try f(.workspaces, &workspaces); try f(.focus, &focus); try f(.autoSwitch, &autoSwitch)
     }
 }
 
