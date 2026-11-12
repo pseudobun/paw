@@ -51,10 +51,19 @@ struct Style {
         NSAttributedString(string: s, attributes: [.font: font ?? self.font, .foregroundColor: color.ns, .ligature: 1])
     }
 
-    /// The app's sketchybar-app-font glyph, or its initial without the font.
+    /// The app's sketchybar-app-font glyph; without the font, the app's own icon, or its initial
+    /// when the app can't be found either.
     func appGlyph(_ ligature: String, app: String, color: ARGB) -> NSAttributedString {
         if let appFont {
             return NSAttributedString(string: ligature, attributes: [.font: appFont, .foregroundColor: color.ns, .ligature: 1])
+        }
+        let side = (a.appIconSize * 1.3).rounded()
+        if let image = AppColors.shared.image(for: app, side: Int(saturating: (side * 2).rounded())) {
+            let attachment = NSTextAttachment()
+            attachment.image = NSImage(cgImage: image, size: NSSize(width: side, height: side))
+            // Centre the icon on the text's cap height, like a glyph.
+            attachment.bounds = CGRect(x: 0, y: ((font.capHeight - side) / 2).rounded(), width: side, height: side)
+            return NSAttributedString(attachment: attachment)
         }
         return text(String(app.prefix(1)).uppercased(), color, font: bold)
     }
