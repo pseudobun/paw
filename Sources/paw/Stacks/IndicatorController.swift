@@ -98,8 +98,10 @@ final class IndicatorController {
         v.stack = stack
         v.metrics = config.indicator.metrics
         v.render = { hovered in
-            StackRenderer.layer(stack, size: size, style: style, config: config, icons: icons, scale: scale, hovered: hovered)
+            StackRenderer.layer(stack, size: size, style: style, config: config, icons: icons, scale: scale, hovered: hovered,
+                                glide: true)
         }
+        v.makeHighlight = { StackRenderer.highlight(style: style, metrics: config.indicator.metrics) }
         v.onClick = { [weak self] i in
             guard let self, config.indicator.clickToFocus else { return }
             onFocus?(WindowID(stack.items[i].id))
