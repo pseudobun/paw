@@ -40,6 +40,14 @@ class TextLayer: CALayer {
     /// Centres the ink (glyph outlines), not the advance box: app-font icons have uneven side
     /// bearings, so centring the line box leaves them off to one side.
     private func drawCentered(in ctx: CGContext) {
+        // An app's own icon (no app font) is an attachment, which Core Text doesn't draw.
+        if text.length > 0, let image = (text.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment)?.image,
+           let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            let s = image.size
+            ctx.draw(cg, in: CGRect(x: ((bounds.width - s.width) / 2).rounded(), y: ((bounds.height - s.height) / 2).rounded(),
+                                    width: s.width, height: s.height))
+            return
+        }
         let line = CTLineCreateWithAttributedString(text)
         let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
         let px = 1 / max(contentsScale, 1)
