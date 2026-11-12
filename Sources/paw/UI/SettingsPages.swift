@@ -331,6 +331,8 @@ enum SettingsCatalog {
                   "focus stack.next/prev go from the last window to the first; off: they stop."),
                 f(\.focus.wrapWorkspaces, "focus.wrapWorkspaces", "Workspaces wrap around", .toggle,
                   "workspace next/prev go from the last workspace to the first; off: they stop at either end."),
+                f(\.focus.floatsOnTop, "focus.floatsOnTop", "Floating windows on top", .toggle,
+                  "Floating windows stay in front of tiled ones. With the Dock helper loaded the window server keeps them there; otherwise paw raises them again when a tile takes focus."),
             ]),
         ])
     }

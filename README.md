@@ -391,8 +391,11 @@ config. The Settings window writes the same file, so people and agents can both 
   leaves) with an island at the top of the screen; define your own key modes in `modes`
 - **Rules**: float or ignore apps and windows by name/title, send apps to workspaces
 - **Floating windows**: fixed-size windows (a greyed-out green button, like System Settings) float
-  on their own (a rule with `float: false` tiles them) and open centred; floats stay in front of the tiles you focus, and
-  `focusFollowsMouse` gives focus without raising, so hovering a tile doesn't bury them
+  on their own (a rule with `float: false` tiles them) and open centred. Floats stay in front of
+  tiles (`focus.floatsOnTop`): with the Dock helper loaded the window server keeps them above, as
+  in Hyprland; otherwise paw raises them again whenever a tile takes focus, clicks included.
+  `focusFollowsMouse` focuses without raising, and a float dragged to another display joins the
+  workspace shown there
 - **Key bindings** in the config (left/right modifiers like `ralt` work, `hyper` = ⌘⌃⌥⇧), and
   the same commands on the CLI: `paw focus west`, `paw workspace 3`
 - **Events** for status bars and scripts: `paw subscribe` streams JSON lines (a snapshot first,
@@ -470,7 +473,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | Section | Keys |
 |---|---|
 | `layout` | `default` (`stack`; also `bsp columns master float`), `minTileWidth` (0: off), `minTileHeight` (0), `placeholders` (true: a placeholder for windows that won't shrink to their tile; false: they stick out), `placeholderMinWidth` (160), `placeholderMinHeight` (120), `windowServer` (true: move windows through the Dock helper when it's loaded, see Faster workspace switching), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10), `unassignedWorkspace` ("": windows of apps no preset places stay put; or a workspace) |
-| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends), `wrapWorkspaces` (false: workspace next/prev stop at the first and last) |
+| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends), `wrapWorkspaces` (false: workspace next/prev stop at the first and last), `floatsOnTop` (true: floating windows stay in front of tiled ones) |
 | `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
 | `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |
 | `modes` | `"name": { "key": "command" }`; while `mode <name>` is on its keys come first. Default: `resize` |

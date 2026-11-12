@@ -278,6 +278,8 @@ final class WindowManager {
 
     /// Puts every hidden window back on screen (paw quitting must not lose windows).
     func restoreAll() {
+        DockBridge.shared.setLevel(Array(layeredFloats), Self.normalLevel)
+        layeredFloats = []
         guard let d = displays.first else { return }
         var offset: CGFloat = 0
         for w in windows.values where w.isHidden {
@@ -539,7 +541,7 @@ final class WindowManager {
         // A new floating window opened off its workspace's area (another display, under the menu
         // bar, a stale position): centred there instead. Ones already open when paw starts, and
         // ones on hidden workspaces (no display to centre on yet), stay.
-        if float, !initial, ghost == nil, frame.width > 0, frame.height > 0, ws.isFloating(id),
+        if float, !initial, frame.width > 0, frame.height > 0, ws.isFloating(id),
            let di = displayShowing(ws.name), !displays[di].area.contains(frame) {
             let r = Self.centered(frame.size, in: displays[di].area)
             w.setFrame(r)
@@ -554,6 +556,8 @@ final class WindowManager {
 
     private func remove(_ id: WindowID, relayout: Bool = true, closed: Bool = false) {
         guard let w = windows[id] else { return }
+        // Let go but still open (a manage: false rule): back to the normal level.
+        if layeredFloats.remove(id) != nil, !closed { DockBridge.shared.setLevel([id], Self.normalLevel) }
         let ws = workspaceOf(id)
         let wasFocused = ws?.focused == id && (!closed || ws === focusedWorkspace)
         let closingFrame = w.isHidden && closed && wasFocused
@@ -760,7 +764,12 @@ final class WindowManager {
             focusedDisplay = di
             ws.focused = id
             ws.activate(id)
-            if let w = windows[id] { retryMinimum(w, focus: true) }
+            if let w = windows[id] {
+                retryMinimum(w, focus: true)
+                // A click on a tile: macOS raised it over the floats it overlaps.
+                let floats = floatsAbove(w, onlyBehind: true)
+                if !floats.isEmpty { focusQueue.async { for f in floats { f.perform(kAXRaiseAction) } } }
+            }
             if ws.frameCamera(on: id, area: displays[di].area, gap: config.layout.gap) { layout(ws, animated: true) }
             updateIndicators()
             focusChanged(id)
@@ -787,6 +796,17 @@ final class WindowManager {
         if ws.isFloating(w.id) {
             _ = w.readFrame()
             w.floatFrame = w.frame
+            // Dragged onto another display: it belongs to the workspace shown there now, or it
+            // would stay on screen when that display switches workspace.
+            let c = CGPoint(x: w.frame.midX, y: w.frame.midY)
+            if let d = displays.first(where: { $0.frame.contains(c) }), d.workspace != ws.name {
+                let to = workspace(d.workspace)
+                let wasFocused = ws.focused == w.id
+                moveQuietly(w.id, from: ws, to: to)
+                if wasFocused { to.focused = w.id }
+                updateIndicators()
+                scheduleSave()
+            }
             if w.id == focusedID { updateBorder(cramped: []) }
             return
         }
@@ -868,6 +888,7 @@ final class WindowManager {
     }
 
     func layout(_ ws: Workspace, animated: Bool) {
+        syncFloatLayers()
         guard let di = displayShowing(ws.name) else { return }
         let area = displays[di].area
         // A canvas keeps the focused window on screen with its tiles at their minimum size.
@@ -1084,7 +1105,7 @@ final class WindowManager {
             ? TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap)[id] : nil
         let frame = w.frameForBorder(tile: tile, placeholder: placeholder)
         let radius = !placeholder && config.border.autoRadius ? w.radiusForBorder() : nil
-        border.show(frame, window: id, above: !placeholder, screen: displays[di].frame, config: config.border, radius: radius)
+        border.show(frame, window: id, above: !placeholder, floating: layeredFloats.contains(id), screen: displays[di].frame, config: config.border, radius: radius)
     }
 
     private var placeholderMin: CGSize {
@@ -1362,16 +1383,53 @@ final class WindowManager {
 
     /// Visible floating windows of other apps on a tiled window's workspace that overlap it,
     /// back to front: raised again after it is, so focusing a tile doesn't bury them or reorder
-    /// them. Same-app floats are left alone (raising one could make it key).
-    private func floatsAbove(_ w: Window) -> [AXUIElement] {
-        guard let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil else { return [] }
+    /// them. `onlyBehind`: the tile is already in front (a click), so only the floats now behind
+    /// it. Same-app floats are left alone (raising one could make it key). None when the window
+    /// server keeps floats above (layered) or floatsOnTop is off.
+    private func floatsAbove(_ w: Window, onlyBehind: Bool = false) -> [AXUIElement] {
+        guard config.focus.floatsOnTop, let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil else { return [] }
         let floats = ws.floating.filter { id in
-            windows[id].map { !$0.isHidden && $0.pid != w.pid && $0.frame.intersects(w.frame) } ?? false
+            !layeredFloats.contains(id) && windows[id].map { !$0.isHidden && $0.pid != w.pid && $0.frame.intersects(w.frame) } ?? false
         }
         guard !floats.isEmpty else { return [] }
         let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
         let order = list.compactMap { $0[kCGWindowNumber as String] as? UInt32 } // front to back
-        return Self.backToFront(floats, stacking: order).compactMap { windows[$0]?.element }
+        let behind = onlyBehind ? Self.behind(floats, window: w.id, stacking: order) : floats
+        return Self.backToFront(behind, stacking: order).compactMap { windows[$0]?.element }
+    }
+
+    /// Of `ids`, those after `window` in `stacking` (front to back): behind it.
+    static func behind(_ ids: [WindowID], window: WindowID, stacking: [WindowID]) -> [WindowID] {
+        guard let at = stacking.firstIndex(of: window) else { return [] }
+        let back = Set(stacking[(at + 1)...])
+        return ids.filter(back.contains)
+    }
+
+    static let normalLevel = Int32(CGWindowLevelForKey(.normalWindow))
+    static let floatingLevel = Int32(CGWindowLevelForKey(.floatingWindow))
+
+    /// Floating windows the window server keeps above the normal level (floatsOnTop with the
+    /// Dock helper loaded and current).
+    private var layeredFloats: Set<WindowID> = []
+
+    /// Puts floating windows at the floating level and windows no longer floating back, when the
+    /// Dock helper can; without it floatsAbove raises them over AX instead.
+    private func syncFloatLayers() {
+        let all = Set(workspaces.values.flatMap(\.floating)).filter { windows[$0] != nil }
+        let want = config.focus.floatsOnTop && config.layout.windowServer ? all : []
+        let up = want.subtracting(layeredFloats), down = layeredFloats.subtracting(want).filter { windows[$0] != nil }
+        guard !up.isEmpty || !down.isEmpty else { layeredFloats.formIntersection(windows.keys); return }
+        // No helper (SIP on, not loaded, an older one): nothing changes, AX raising takes over.
+        guard DockBridge.shared.setLevel(Array(up), Self.floatingLevel) else { return }
+        DockBridge.shared.setLevel(Array(down), Self.normalLevel)
+        layeredFloats = want
+    }
+
+    /// For `paw status`.
+    var floatsOnTopStatus: String {
+        guard config.focus.floatsOnTop else { return "off" }
+        if config.layout.windowServer, DockBridge.shared.canSetLevel { return "window server (Dock helper)" }
+        return "raised over accessibility when a tile takes focus (window server needs the Dock helper: sudo paw dock install)"
     }
 
     /// `ids` in `stacking` (front-to-back) order reversed; ones missing from it go first.

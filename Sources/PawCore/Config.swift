@@ -79,6 +79,9 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var wrapStacks = false
         /// workspace next/prev go round from the last workspace to the first (false: they stop).
         public var wrapWorkspaces = false
+        /// Floating windows stay in front of tiled ones (like Hyprland): above them in the window
+        /// server with the Dock helper loaded, otherwise raised again whenever a tile takes focus.
+        public var floatsOnTop = true
         public init() {}
     }
 
@@ -427,11 +430,11 @@ extension PawConfig.Layout {
 }
 
 extension PawConfig.Focus {
-    enum CodingKeys: String, CodingKey, CaseIterable { case mouseFollowsFocus, focusFollowsMouse, wrapStacks, wrapWorkspaces }
+    enum CodingKeys: String, CodingKey, CaseIterable { case mouseFollowsFocus, focusFollowsMouse, wrapStacks, wrapWorkspaces, floatsOnTop }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.mouseFollowsFocus, &mouseFollowsFocus); try f(.focusFollowsMouse, &focusFollowsMouse); try f(.wrapStacks, &wrapStacks)
-        try f(.wrapWorkspaces, &wrapWorkspaces)
+        try f(.wrapWorkspaces, &wrapWorkspaces); try f(.floatsOnTop, &floatsOnTop)
     }
 }
 

@@ -138,6 +138,22 @@ final class DockBridge {
         return send(body)
     }
 
+    /// Puts windows (and the sheets and panels attached to them) at a window level, as a sub-level
+    /// that keeps them above windows of the normal level whichever app is in front. False when
+    /// the payload isn't there or is one from before it could (it would ignore the message).
+    var canSetLevel: Bool { isReady && (Self.bundledVersion == nil || loadedVersion == Self.bundledVersion) }
+
+    @discardableResult
+    func setLevel(_ ids: [WindowID], _ level: Int32) -> Bool {
+        guard !ids.isEmpty else { return true }
+        guard canSetLevel else { return false }
+        var body = Data([0x04])
+        append(&body, UInt32(ids.count))
+        append(&body, level)
+        for id in ids { append(&body, UInt32(id)) }
+        return send(body)
+    }
+
     private func append<T>(_ d: inout Data, _ v: T) {
         withUnsafeBytes(of: v) { d.append(contentsOf: $0) }
     }
