@@ -222,6 +222,7 @@ public enum ConfigTemplate {
           updates: {
             check: \(c.updates.check), // look once a day, download in the background, install when paw quits
             automatic: \(c.updates.automatic), // install as soon as it is downloaded; paw restarts
+            channel: "\(c.updates.channel)", // "stable", "beta" (betas too), "auto" (beta when this paw is one)
           },
 
           // Keys: cmd ctrl alt shift fn hyper meh, lalt/ralt (and lcmd, rctrl…), a key name or 0x keycode.

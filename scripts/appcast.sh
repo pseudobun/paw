@@ -3,7 +3,9 @@
 # Usage: scripts/appcast.sh <appcast.xml> <version> <build> <zip url> <"sparkle:edSignature=… length=…"> [notes.md]
 # notes.md (this version's CHANGELOG section) becomes the notes Sparkle shows; without it, a link.
 # A prerelease (a version with "-") goes into Sparkle's `beta` channel, which only paws following
-# betas see (`updates.channel`); stable versions stay in the default channel everyone sees.
+# betas see (`updates.channel`); stable versions stay in the default channel everyone sees. Until
+# the appcast has a stable version, betas stay in the default channel too: every paw out there is
+# a beta then, and those before 0.1.0 don't know channels.
 set -euo pipefail
 file="$1" version="$2" build="$3" url="$4" sig="$5" notes_md="${6:-}"
 channel=""
@@ -96,6 +98,8 @@ else:
 item = item.replace("@NOTES@", notes)
 xml = open(path).read()
 items = re.findall(r"    <item>.*?</item>\n", xml, re.S)
+if not re.search(r"<sparkle:shortVersionString>[^<-]+</sparkle:shortVersionString>", "".join(items)):
+    item = re.sub(r"\n *<sparkle:channel>beta</sparkle:channel>", "", item)
 items = [i for i in items if f"<sparkle:shortVersionString>{version}<" not in i]
 items = ([item + "\n"] + items)[:20]
 head = re.sub(r"    <item>.*?</item>\n", "", xml, flags=re.S)
