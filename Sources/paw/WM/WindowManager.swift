@@ -385,18 +385,24 @@ final class WindowManager {
             return Display(id: id, name: s.localizedName, builtin: CGDisplayIsBuiltin(id) != 0, frame: frame, area: area, workspace: ws)
         }
         let displaysNow = displays.map { "\($0.id)" }
-        if !lastDisplayIDs.isEmpty, displaysNow != lastDisplayIDs { forcedSetup = nil; movedTo = [:] }
+        let launching = lastDisplayIDs.isEmpty
+        if !launching, displaysNow != lastDisplayIDs { forcedSetup = nil; movedTo = [:] }
         lastDisplayIDs = displaysNow
-        let match = forcedSetup.flatMap { n in config.setups[n].map { (name: n, setup: $0) } }
-            ?? config.setup(for: displays.map { (name: $0.name, builtin: $0.builtin) })
-        if match?.name != activeSetup {
-            activeSetup = match?.name
+        let connected = self.connected
+        // A setup picked by hand stays until the displays change; then the setup for the new
+        // displays, unless switching is off for them (the setup in use, at launch the last one).
+        let match = forcedSetup.flatMap { config.setups[$0] == nil ? nil : $0 }
+            ?? config.setupAfterDisplayChange(connected, preferred: SetupMemory.picked[PawConfig.arrangementKey(connected)],
+                                              current: launching ? SetupMemory.last : activeSetup)
+        if match != activeSetup {
+            activeSetup = match
+            SetupMemory.last = match
             setupChanged = true
             // A new arrangement: every display gets its pinned workspace again.
             used = []
             for i in displays.indices { displays[i].workspace = "" }
-            Log.app.info("setup: \(match?.name ?? "default", privacy: .public)")
-            let name = match?.name ?? ""
+            Log.app.info("setup: \(match ?? "default", privacy: .public)")
+            let name = match ?? ""
             DispatchQueue.main.async { [weak self] in self?.publish("setupChanged", ["setup": name]) }
         }
         for n in 1...max(1, l.workspaces) { _ = workspace("\(n)") }
@@ -409,6 +415,9 @@ final class WindowManager {
         }
         focusedDisplay = min(focusedDisplay, max(0, displays.count - 1))
     }
+
+    /// The connected displays as setups match them.
+    var connected: [(name: String, builtin: Bool)] { displays.map { (name: $0.name, builtin: $0.builtin) } }
 
     func displayIndex(for spec: String?) -> Int? {
         guard let spec else { return nil }
@@ -1821,8 +1830,10 @@ final class WindowManager {
     /// window (or the timeout), then arranges every preset workspace.
     private func initiate(setup: String? = nil) {
         if let setup {
-            guard config.setups[setup] != nil else { Log.app.error("no setup \(setup, privacy: .public)"); return }
+            guard let s = config.setups[setup] else { Log.app.error("no setup \(setup, privacy: .public)"); return }
             forcedSetup = setup
+            // Picked for these displays: it's the one they get next time too.
+            if s.matches(connected) { SetupMemory.picked[PawConfig.arrangementKey(connected)] = setup }
             rebuildDisplays()
         }
         let cfg = config.initiate
@@ -2851,6 +2862,38 @@ final class WindowManager {
                                 "stacked": (ws.tile(of: id)?.windows.count ?? 0) > 1, "focused": ws.focused == id]
                     }]
         }
+    }
+}
+
+/// The setup in use (for launching with automatic switching off) and the setup picked by hand
+/// for each display arrangement (the one paw switches to when several match).
+enum SetupMemory {
+    private struct File: Codable {
+        var last: String?
+        var picked: [String: String] = [:]
+    }
+
+    static var url: URL { StateFile.url.deletingLastPathComponent().appending(path: "setups.json") }
+
+    private static func read() -> File {
+        (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode(File.self, from: $0) } ?? File()
+    }
+
+    private static func write(_ change: (inout File) -> Void) {
+        var f = read()
+        change(&f)
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(f).write(to: url, options: .atomic)
+    }
+
+    static var last: String? {
+        get { read().last }
+        set { write { $0.last = newValue } }
+    }
+
+    static var picked: [String: String] {
+        get { read().picked }
+        set { write { $0.picked = newValue } }
     }
 }
 

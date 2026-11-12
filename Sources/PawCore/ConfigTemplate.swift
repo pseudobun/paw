@@ -85,9 +85,15 @@ public enum ConfigTemplate {
         o += """
           },
 
+          // Switch setups by themselves when displays come and go (a setup's autoSwitch wins). Off: the
+          // setup in use stays until you pick one in the menu bar or with `paw initiate <setup>`.
+          autoSwitchSetups: \(c.autoSwitchSetups),
+
           // Presets per display arrangement. When the connected displays match a setup's `displays`
           // (one entry each: "builtin", "external" or part of a name), its workspaces replace the ones
           // above, every display shows its pinned workspace and windows move where the presets say.
+          // Several setups for the same displays: paw takes the one you picked last for them, else the
+          // first by name; autoSwitch: false keeps one for picking by hand.
           setups: {
 
         """
@@ -96,6 +102,7 @@ public enum ConfigTemplate {
                 // home: {
                 //   displays: ["builtin", "DELL", "Gigabyte"],
                 //   focus: "9",
+                //   autoSwitch: true,               // switch here by itself when these displays connect
                 //   workspaces: {
                 //     "1": { display: "builtin" },
                 //     "8": { display: "DELL", layout: "stack", tiles: [ { apps: ["Discord", "Spotify"] } ] },
@@ -109,6 +116,7 @@ public enum ConfigTemplate {
                 o += "    \(key(name)): {\n"
                 o += "      displays: [\(s.displays.map(str).joined(separator: ", "))],\n"
                 if !s.focus.isEmpty { o += "      focus: \(str(s.focus)),\n" }
+                if let a = s.autoSwitch { o += "      autoSwitch: \(a),\n" }
                 o += "      workspaces: {\n" + presets(s.workspaces, indent: "        ") + "      },\n"
                 o += "    },\n"
             }
