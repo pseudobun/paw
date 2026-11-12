@@ -75,6 +75,9 @@ In **System Settings → Desktop & Dock**:
   windows to tile*
 
 Keep one native Space per display; paw's workspaces replace Spaces.
+Extra macOS desktops can make tiles appear empty or switch desktops when an app takes focus.
+Check `paw status` → `nativeSpaces` or Settings → General → macOS desktops. In Mission Control,
+close extra desktop thumbnails to merge their windows into the remaining desktop, then run `paw recover`.
 
 ### 5. Check it works
 
@@ -361,6 +364,10 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Mouse follows focus** (and optional focus follows mouse)
 - **Focus after closing the focused window**: the window under the mouse takes focus; otherwise paw
   prefers another window from the same app on that workspace, then the workspace's next window
+- If the pointer was inside the closed window, focus follows the tile that fills that position.
+  With a placeholder selected, ⌘Q quits its app and ⌘W presses its window's close control. A
+  decorationless, single-window Alacritty instance quits on ⌘W; other apps without a close control
+  must first be enlarged to close normally.
 - **Virtual workspaces** (like AeroSpace): `layout.workspaces` exist from the start,
   `workspace new|close|next|prev|last`, `move-to <n> [--follow]`. A hidden workspace's windows
   wait in a screen corner, so switching is instant and needs no Mission Control or SIP. ⌘Tab to a

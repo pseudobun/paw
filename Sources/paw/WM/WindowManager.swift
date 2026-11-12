@@ -54,6 +54,7 @@ final class WindowManager {
     private let modePanel = TitlePanel()
     private var lastWindowsSignature = ""
     private var mouseMonitors: [Any] = []
+    private var placeholderKeys: Any?
     private var lastHover = Date.distantPast
     private var observers: [NSObjectProtocol] = []
     private var pruneTimer: Timer?
@@ -103,6 +104,9 @@ final class WindowManager {
     private var droppingSide = false
     /// The window paw just focused, until macOS catches up (the border goes there at once).
     private var pawFocus: (id: WindowID, at: Date)?
+    /// Focus moved off a closed window whose process outlives it (Alacritty's ⌘W: the window goes,
+    /// its process exits a moment later). macOS can activate its own choice as the process exits.
+    private var exitFocus: (pid: pid_t, target: WindowID, at: Date)?
     /// The window server and AX calls that focus a window take 20–40 ms; they run here, in
     /// order, while the border, indicators and pointer move at once.
     private let focusQueue = DispatchQueue(label: "paw.focus", qos: .userInteractive)
@@ -124,6 +128,9 @@ final class WindowManager {
     // MARK: - Lifecycle
 
     func start() {
+        if let counts = SkyLight.nativeDesktopCounts(), counts.contains(where: { $0 > 1 }) {
+            Log.app.warning("\(SkyLight.nativeSpacesStatus(counts: counts), privacy: .public)")
+        }
         AXUIElementSetMessagingTimeout(AXUIElement.systemWide, 0.5)
         animator.settings = { [unowned self] in config.animation }
         animator.onFinish = { [weak self] in
@@ -135,6 +142,34 @@ final class WindowManager {
         indicators.onFocus = { [weak self] id in self?.focusWindow(id, warp: false) }
         edges.onClick = { [weak self] name in self?.show(name) }
         configChanged()
+        // A placeholder gives paw the keyboard, and paw has no menu: ⌘Q and ⌘W go to the app and
+        // window it stands in for. Key bindings take theirs first; Settings or the overview
+        // (a key window) keeps its own.
+        placeholderKeys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            guard let self, NSApp.isActive, NSApp.keyWindow == nil,
+                  e.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
+                  let id = focusedID, isCramped(id), let w = windows[id],
+                  let app = NSRunningApplication(processIdentifier: w.pid) else { return e }
+            switch e.charactersIgnoringModifiers?.lowercased() {
+            case "q": app.terminate()
+            case "w":
+                let (element, pid) = (w.element, w.pid)
+                let alacritty = app.bundleIdentifier == "org.alacritty"
+                focusQueue.async {
+                    if let close = element.element(kAXCloseButtonAttribute) {
+                        close.perform(kAXPressAction)
+                    } else if alacritty {
+                        // shortcut: buttonless close supports single-window Alacritty; add other apps when needed.
+                        let open = AXUIElementCreateApplication(pid).elements(kAXWindowsAttribute)
+                        if open.count == 1, open[0].windowID == id {
+                            DispatchQueue.main.async { app.terminate() }
+                        }
+                    }
+                }
+            default: return e
+            }
+            return nil
+        }
         gestures.start()
         if !hotkeys.start() { Log.app.error("key bindings: event tap not allowed (Accessibility)") }
 
@@ -500,7 +535,13 @@ final class WindowManager {
     }
 
     private func remove(_ id: WindowID, relayout: Bool = true, closed: Bool = false) {
-        guard let w = windows.removeValue(forKey: id) else { return }
+        guard let w = windows[id] else { return }
+        let ws = workspaceOf(id)
+        let wasFocused = ws?.focused == id && (!closed || ws === focusedWorkspace)
+        let closingFrame = w.isHidden && closed && wasFocused
+            ? ws.flatMap { TreeLayout.windowFrames($0, in: area(of: $0), gap: config.layout.gap)[id] } ?? w.frame
+            : w.frame
+        windows[id] = nil
         suppressMoves[id] = nil
         minimumBackoff[id] = nil
         if lastFocusReported == id { lastFocusReported = nil }
@@ -509,13 +550,14 @@ final class WindowManager {
         minimumChecks[id] = nil
         for ws in workspaces.values { ws.windowMins[id] = nil }
         animator.cancel(id)
-        let ws = workspaceOf(id)
-        let wasFocused = ws?.focused == id && (!closed || ws === focusedWorkspace)
         ws?.remove(id)
-        if let ws, relayout, displayShowing(ws.name) != nil {
+        if let ws, relayout, let di = displayShowing(ws.name) {
             // Hit-test before retiling, ignoring the closed window's lingering animation.
             let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
-            let hovered = closed && wasFocused ? topWindow(at: p, ignoring: [id]) : nil
+            let underneath = closed && wasFocused && closingFrame.contains(p)
+                ? Self.windowUnder(p, after: ws, frames: TreeLayout.windowFrames(ws, in: displays[di].area, gap: config.layout.gap), gap: config.layout.gap)
+                : nil
+            let hovered = closed && wasFocused ? topWindow(at: p, ignoring: [id], fallback: underneath) : nil
             if wasFocused {
                 let appFocused = AXUIElementCreateApplication(w.pid).element(kAXFocusedWindowAttribute)?.windowID
                 let target = Self.focusAfterRemoval(in: ws, hovered: hovered, appFocused: appFocused) {
@@ -523,6 +565,10 @@ final class WindowManager {
                 }
                 ignoreFocus(0.35)
                 focusWindow(target, warp: false)
+                if closed, let target, !windows.values.contains(where: { $0.pid == w.pid }),
+                   NSRunningApplication(processIdentifier: w.pid)?.isTerminated == false {
+                    exitFocus = (w.pid, target, Date())
+                }
             }
             layout(ws, animated: true)
         }
@@ -536,6 +582,15 @@ final class WindowManager {
         removeAll(gone)
         AXQueue.forget(pid)
         AXHealth.forget(pid)
+        // Its last window closed earlier and focus moved on: claim it again over macOS's choice.
+        // ponytail: 2 s covers a shell's exit; an app lingering longer keeps macOS's choice.
+        if let e = exitFocus, e.pid == pid {
+            exitFocus = nil
+            if Date().timeIntervalSince(e.at) < 2, focusedWorkspace.focused == e.target {
+                ignoreFocus(0.35)
+                focusWindow(e.target, warp: false)
+            }
+        }
     }
 
     /// Drops windows macOS no longer has. Some apps (Find My) quit as their last window closes
@@ -953,8 +1008,12 @@ final class WindowManager {
         guard config.border.enabled else { return }
         borderRefreshWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.animator.isRunning, !AXQueue.deferring,
-                  let id = self.focusedID, let w = self.windows[id], !w.isMoving else { return }
+            guard let self, let id = self.focusedID, let w = self.windows[id] else { return }
+            // Still moving (a slow app takes a while to resize): look again once it lands.
+            if self.animator.isRunning || AXQueue.deferring || w.isMoving { self.scheduleBorderRefresh(); return }
+            // Read again: just after an app takes a new size the window server can still report
+            // the old one, and a border drawn from that would stay there.
+            w.borderNeedsRefresh = true
             self.updateBorder(cramped: self.isCramped(id) ? [id] : [])
         }
         borderRefreshWork = work
@@ -1197,6 +1256,13 @@ final class WindowManager {
             ?? ws.allWindows.first(where: sameApp) ?? ws.focused
     }
 
+    /// The window under `p` once `ws` retiles after a removal. The pointer usually sat inside the
+    /// closed window, where nothing is until the neighbours animate in: tiles count where they go.
+    /// Half the gap fills seams without letting an expanded tile overlap its neighbour.
+    static func windowUnder(_ p: CGPoint, after ws: Workspace, frames: [WindowID: CGRect], gap: Double) -> WindowID? {
+        ws.tiles.compactMap(\.activeWindow).first { frames[$0]?.insetBy(dx: -max(0, gap / 2), dy: -max(0, gap / 2)).contains(p) == true }
+    }
+
     func focusWindow(_ id: WindowID?, warp: Bool) {
         guard let id, let w = windows[id] else { return }
         focusWork?.cancel()
@@ -1293,19 +1359,21 @@ final class WindowManager {
     }
 
     /// The front-most window under a point, only if paw manages it.
-    func topWindow(at p: CGPoint, ignoring ignored: Set<WindowID> = []) -> WindowID? {
+    func topWindow(at p: CGPoint, ignoring ignored: Set<WindowID> = [], fallback: WindowID? = nil) -> WindowID? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
         let ignored = ignored.union(NSApp.windows.filter(\.ignoresMouseEvents).compactMap { WindowID(exactly: $0.windowNumber) })
         return Self.topWindow(at: p, in: list, ignoring: ignored,
-                              standIns: placeholders.standIns.filter { windows[$0.value] != nil }) {
+                              standIns: placeholders.standIns.filter { windows[$0.value] != nil }, fallback: fallback) {
             windows[$0]?.isHidden == false
         }
     }
 
+    private static let cursorLevel = Int(CGWindowLevelForKey(.cursorWindow))
+
     static func topWindow(at p: CGPoint, in list: [[String: Any]], ignoring ignored: Set<WindowID> = [],
-                          standIns: [WindowID: WindowID] = [:],
+                          standIns: [WindowID: WindowID] = [:], fallback: WindowID? = nil,
                           isManaged: (WindowID) -> Bool) -> WindowID? {
         for info in list {
             guard let layer = info[kCGWindowLayer as String] as? Int,
@@ -1316,11 +1384,12 @@ final class WindowManager {
                 if ignored.contains(standIn) { continue }
                 return standIn
             }
-            guard layer >= 0 else { continue }
+            // The window server sometimes lists the pointer itself: it is under every point.
+            guard layer >= 0, layer != Self.cursorLevel else { continue }
             // Unmanaged dialogs still occlude windows behind them.
             return isManaged(id) ? id : nil
         }
-        return nil
+        return fallback
     }
 
     // MARK: - Workspaces

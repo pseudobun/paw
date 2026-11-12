@@ -258,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "config": settings.url.path, "error": settings.error ?? "",
                     "bindings": wm.hotkeys.problems.isEmpty ? "ok" : wm.hotkeys.problems.joined(separator: "; "),
                     "iconFont": wm.indicators.style.appFont == nil ? "missing (\(settings.config.appearance.appFont))" : "ok",
-                    "windowMoves": DockBridge.shared.statusLine]
+                    "windowMoves": DockBridge.shared.statusLine, "nativeSpaces": SkyLight.nativeSpacesStatus]
         case "query":
             // Encoded by the IPC thread (IPC.Server.serve), not here on the main thread.
             return [IPC.jsonObjectKey: wm.query()]
