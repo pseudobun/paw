@@ -972,9 +972,8 @@ final class WindowManager {
                 overflowSuspects[id] = nil
                 // Smaller than its tile or off it: the app resized or moved it after paw did. Back
                 // on the tile, with the frame sent again (paw's own still says it's there). Once
-                // per check, so an app with a maximum size doesn't loop.
-                // Where the window server has it: the app may not know yet about a move through the
-                // Dock helper.
+                // per check, so an app with a maximum size doesn't loop. The position is the window
+                // server's: the app may not know yet about a move through the Dock helper.
                 let at = SkyLight.frame(id)?.origin ?? actual.origin
                 let off = abs(at.x - r.minX) > 2 || abs(at.y - r.minY) > 2
                 if actual.width < r.width - 4 || actual.height < r.height - 4 || off, !w.isMoving {
