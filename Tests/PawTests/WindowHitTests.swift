@@ -145,3 +145,19 @@ struct WindowHitTests {
          kCGWindowBounds as String: frame.dictionaryRepresentation]
     }
 }
+
+struct FloatPlacementTests {
+    @Test func newFloatsCentreInTheirArea() {
+        let area = CGRect(x: 0, y: 25, width: 1000, height: 800)
+        #expect(WindowManager.centered(CGSize(width: 400, height: 200), in: area) == CGRect(x: 300, y: 325, width: 400, height: 200))
+        // Larger than the area: top-left stays inside it.
+        #expect(WindowManager.centered(CGSize(width: 1200, height: 900), in: area).origin == CGPoint(x: 0, y: 25))
+    }
+
+    @Test func keyRecordsCarryWindowAndDirection() {
+        let gain = SkyLight.keyRecord(0x01020304, gained: true)
+        #expect(gain.count == 0xf8 && gain[0x08] == 0x0d && gain[0x8a] == 0x01)
+        #expect(Array(gain[0x3c..<0x40]) == [0x04, 0x03, 0x02, 0x01])
+        #expect(SkyLight.keyRecord(1, gained: false)[0x8a] == 0x02)
+    }
+}

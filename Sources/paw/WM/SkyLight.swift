@@ -119,4 +119,34 @@ enum SkyLight {
         }
         element.perform(kAXRaiseAction)
     }
+
+    /// Gives one window key focus without changing the stacking order (yabai's autofocus):
+    /// `from` loses key, `windowID` gains it, and its app comes forward with none of its windows
+    /// (kCPSNoWindows). `from` must be the window that has focus now. False when SkyLight is missing.
+    static func focusWithoutRaise(pid: pid_t, windowID: UInt32, from: (pid: pid_t, windowID: UInt32)) -> Bool {
+        guard let setFront, let post, let getPSN else { return false }
+        var psn = ProcessSerialNumber(), fromPSN = ProcessSerialNumber()
+        guard getPSN(pid, &psn) == noErr, getPSN(from.pid, &fromPSN) == noErr else { return false }
+        var lose = keyRecord(from.windowID, gained: false), gain = keyRecord(windowID, gained: true)
+        if pid == from.pid {
+            _ = post(&psn, &lose)
+            _ = post(&psn, &gain)
+            return true
+        }
+        let noWindows: UInt32 = 0x400 // kCPSNoWindows
+        _ = setFront(&fromPSN, from.windowID, noWindows)
+        _ = post(&fromPSN, &lose)
+        _ = setFront(&psn, windowID, noWindows)
+        _ = post(&psn, &gain)
+        return true
+    }
+
+    static func keyRecord(_ windowID: UInt32, gained: Bool) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: 0xf8)
+        bytes[0x04] = 0xf8
+        bytes[0x08] = 0x0d
+        bytes[0x8a] = gained ? 0x01 : 0x02
+        withUnsafeBytes(of: windowID.littleEndian) { for (i, b) in $0.enumerated() { bytes[0x3c + i] = b } }
+        return bytes
+    }
 }

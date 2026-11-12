@@ -510,7 +510,9 @@ final class WindowManager {
         windows[id] = w
         tracker.watch(window: el, pid: pid)
 
-        let float = rules.contains { $0.float == true } || subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute)
+        // A greyed-out green button: the app fixes the window's size (System Settings), so no tile fits it.
+        let fixedSize = el.element(kAXZoomButtonAttribute)?.bool(kAXEnabledAttribute) == false
+        let float = rules.contains { $0.float == true } || subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute) || fixedSize
         var presetName = presets.first { $0.value.slot(for: appName, title: title) != nil }?.key
         // A new window of an app you already use on this workspace (a second Finder window moved
         // here, then ⌘K) stays with it instead of jumping to the app's preset workspace.
@@ -531,6 +533,13 @@ final class WindowManager {
         } else {
             ws.insert(id, area: area(of: ws), floating: float || ghost?.floating == true,
                       slot: presets[ws.name]?.slot(for: appName, title: title))
+        }
+        // A new floating window opened off its workspace's area (another display, under the menu
+        // bar, a stale position): centred there instead. Ones already open when paw starts stay.
+        if float, !initial, ghost == nil, frame.width > 0, frame.height > 0, ws.isFloating(id), !area(of: ws).contains(frame) {
+            let r = Self.centered(frame.size, in: area(of: ws))
+            w.setFrame(r)
+            w.floatFrame = r
         }
         if !initial || ws.focused == nil { ws.focused = id }
         if displayShowing(ws.name) == nil { hide(w, from: ws) }
@@ -1292,8 +1301,11 @@ final class WindowManager {
         ws.tiles.compactMap(\.activeWindow).first { frames[$0]?.insetBy(dx: -max(0, gap / 2), dy: -max(0, gap / 2)).contains(p) == true }
     }
 
-    func focusWindow(_ id: WindowID?, warp: Bool) {
+    /// `raise: false` (focus follows mouse) gives key focus without changing the stacking order,
+    /// so a floating window the pointer left stays in front of the tile it covers.
+    func focusWindow(_ id: WindowID?, warp: Bool, raise: Bool = true) {
         guard let id, let w = windows[id] else { return }
+        let previous = focusedID.flatMap { windows[$0] }
         focusWork?.cancel()
         focusRevision += 1
         let ticket = FocusTicket.shared.issue()
@@ -1324,10 +1336,18 @@ final class WindowManager {
             return
         }
         let (pid, element) = (w.pid, w.element)
+        // Without raising needs the window that has key now; anything else (an app paw doesn't
+        // manage in front) and it raises as usual.
+        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let from = raise ? nil : previous.flatMap { $0.id != id && $0.pid == frontmost ? (pid: $0.pid, windowID: $0.id) : nil }
+        let floats = floatsAbove(w)
         // Requests pile up behind a slow app: only the newest one still goes.
         focusQueue.async {
             guard FocusTicket.shared.isLatest(ticket) else { return }
+            if let from, SkyLight.focusWithoutRaise(pid: pid, windowID: id, from: from) { return }
             SkyLight.focus(pid: pid, windowID: id, element: element)
+            // Floating windows stay in front of tiles. AXRaise doesn't activate their apps.
+            for f in floats { f.perform(kAXRaiseAction) }
         }
         pawFocus = (id, Date())
         if warp && config.focus.mouseFollowsFocus {
@@ -1340,6 +1360,16 @@ final class WindowManager {
         }
         updateIndicators()
         focusChanged(id)
+    }
+
+    /// Visible floating windows of other apps on a tiled window's workspace that overlap it:
+    /// raised again after it is, so focusing a tile doesn't bury them. Same-app floats are left
+    /// alone (raising one could make it key).
+    private func floatsAbove(_ w: Window) -> [AXUIElement] {
+        guard let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil else { return [] }
+        return ws.floating.compactMap { windows[$0] }
+            .filter { !$0.isHidden && $0.pid != w.pid && $0.frame.intersects(w.frame) }
+            .map(\.element)
     }
 
     private func updateFocusFollowsMouse() {
@@ -1373,7 +1403,13 @@ final class WindowManager {
         lastHover = Date()
         let p = ScreenGeometry.cocoa(fromAX: NSEvent.mouseLocation, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
         guard let id = topWindow(at: p), id != focusedWorkspace.focused else { return }
-        focusWindow(id, warp: false)
+        focusWindow(id, warp: false, raise: false)
+    }
+
+    /// `size` centred in `area`; one larger than the area keeps its top-left corner inside it.
+    static func centered(_ size: CGSize, in area: CGRect) -> CGRect {
+        CGRect(x: max(area.minX, area.midX - size.width / 2), y: max(area.minY, area.midY - size.height / 2),
+               width: size.width, height: size.height)
     }
 
     /// The window's CoreGraphics layer (its window level).
