@@ -1402,9 +1402,19 @@ final class WindowManager {
         guard !floats.isEmpty else { return }
         Log.app.info("floatsOnTop: \(floats.count) float(s) back over \(w.app, privacy: .public)")
         // The float's app comes forward on the way: not a focus change to follow.
-        ignoreFocus(0.3)
+        ignoreFocus(0.5)
         let (pid, id, element) = (w.pid, w.id, w.element)
         focusQueue.async { Self.bringForward(floats, thenFocus: (pid, id, element)) }
+        // Whether it worked, for the log (macOS gives no answer to any of these calls).
+        let floatIDs = floats.map(\.id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self, let w = self.windows[id] else { return }
+            let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+            let order = list.compactMap { $0[kCGWindowNumber as String] as? UInt32 }
+            let buried = Self.behind(floatIDs, window: id, stacking: order).count
+            let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "-"
+            Log.app.info("floatsOnTop: \(buried) still behind \(w.app, privacy: .public), \(front, privacy: .public) in front")
+        }
     }
 
     /// AXRaise only orders a window among its own app's windows: a float of an app in the
@@ -1414,6 +1424,8 @@ final class WindowManager {
     private static func bringForward(_ floats: [Window], thenFocus target: (pid_t, WindowID, AXUIElement)) {
         guard !floats.isEmpty else { return }
         for f in floats { SkyLight.focus(pid: f.pid, windowID: f.id, element: f.element) }
+        // Its app takes a moment to come forward; taking focus back at once beats it to it.
+        usleep(60_000)
         SkyLight.focus(pid: target.0, windowID: target.1, element: target.2, raise: false)
     }
 
@@ -1462,7 +1474,7 @@ final class WindowManager {
         mouseMonitors = []
         // A click on a tile of the app already in front (focus follows mouse got there first)
         // changes no focus, but macOS still raises it over the floats it overlaps.
-        if config.focus.floatsOnTop, let m = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: { [weak self] _ in
+        if config.focus.floatsOnTop, let m = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp, handler: { [weak self] _ in
             self?.clicked()
         }) { mouseMonitors.append(m) }
         guard config.focus.focusFollowsMouse else { return }
