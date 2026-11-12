@@ -3,6 +3,15 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0-beta.16](https://github.com/pseudobun/paw/compare/v0.1.0-beta.15...v0.1.0-beta.16) (2026-11-12)
+
+
+### Bug Fixes
+
+* **cask:** only quit paw on upgrade ([9141c0e](https://github.com/pseudobun/paw/commit/9141c0eb426411eee50a072f73f9d916ab30ee0d))
+* **focus:** select revealed tiles and restore placeholder shortcuts ([#57](https://github.com/pseudobun/paw/issues/57)) ([e2c6d35](https://github.com/pseudobun/paw/commit/e2c6d35732146e6bedc6589a0627dd116eced260))
+* **wm:** ignore pop-up menu windows such as Qt context menus ([#59](https://github.com/pseudobun/paw/issues/59)) ([6e9434f](https://github.com/pseudobun/paw/commit/6e9434f93d5e0d0b7d7538c94c1a7675e5c86ac8))
+
 ## [0.1.0-beta.15](https://github.com/pseudobun/paw/compare/v0.1.0-beta.14...v0.1.0-beta.15) (2026-11-11)
 
 
