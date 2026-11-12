@@ -6,6 +6,18 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.22</title>
+      <pubDate>Thu, 12 Nov 2026 16:28:59 +0000</pubDate>
+      <sparkle:version>130</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.22</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
+<ul>
+<li><b>float:</b> keep tiled parents below floating windows (<a href="https://github.com/pseudobun/paw/issues/76">#76</a>) (<a href="https://github.com/pseudobun/paw/commit/fd8f9591d7d4720819d46acd0aac551fd41cf5a7">fd8f959</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.22">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.22/paw-0.1.0-beta.22-macos.zip" type="application/octet-stream" sparkle:edSignature="oThQb+Yg1xno/AQvLrVteouhShQraDta1xMfIm0KCFjvr6h9zfn2Q1zJSyG+E2HR+LdIZYWMFpafbvJ9lSQABQ==" length="3673433"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.21</title>
       <pubDate>Thu, 12 Nov 2026 13:19:09 +0000</pubDate>
       <sparkle:version>128</sparkle:version>
@@ -269,15 +281,6 @@
 <li><b>settings:</b> show permissions with request buttons; fix the update window (<a href="https://github.com/pseudobun/paw/issues/20">#20</a>) (<a href="https://github.com/pseudobun/paw/commit/4986b5abd877bbc1e0e35ecbe3bafb05e646e5c9">4986b5a</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.3">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.3/paw-0.1.0-beta.3-macos.zip" type="application/octet-stream" sparkle:edSignature="ID4HjoiWbyZmpUfcoqq4OCl6F9pDm3vFYwiAyyS8ThByNWrOYSCcmj4Qgf8mOD7Ma9qoybQmyFRJy6I3FuqhAQ==" length="3189282"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.2</title>
-      <pubDate>Tue, 10 Nov 2026 17:06:56 +0000</pubDate>
-      <sparkle:version>63</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.2</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.2</sparkle:releaseNotesLink>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.2/paw-0.1.0-beta.2-macos.zip" type="application/octet-stream" sparkle:edSignature="wvtKsRT+ekQ2Kchuz/mVmyeU3DxSnX+2FC6iX8VcWz5trIbf+Y3CPZ+rY9YgkOpbPYnxy4Fkyn/BkeZFizt4CA==" length="3165521"/>
     </item>
   </channel>
 </rss>
