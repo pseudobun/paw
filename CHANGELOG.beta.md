@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.0-beta.21](https://github.com/pseudobun/paw/compare/v0.1.0-beta.20...v0.1.0-beta.21) (2026-11-12)
+
+
+### Features
+
+* **setups:** make switching setups on display changes optional ([#74](https://github.com/pseudobun/paw/issues/74)) ([7646592](https://github.com/pseudobun/paw/commit/7646592ca4020bda5cc33fd71b493cb73ec75ad2))
+
+
+### Bug Fixes
+
+* **layout:** put windows an app shrank right after placing back on their tile ([#72](https://github.com/pseudobun/paw/issues/72)) ([6b3d065](https://github.com/pseudobun/paw/commit/6b3d06588626a54fd3901340cdb060ac4ef728c1))
+
 ## [0.1.0-beta.20](https://github.com/pseudobun/paw/compare/v0.1.0-beta.19...v0.1.0-beta.20) (2026-11-12)
 
 
