@@ -58,6 +58,7 @@ final class Updater: NSObject {
         driver.owner = self
         let u = SPUUpdater(hostBundle: AppPaths.appBundle, applicationBundle: AppPaths.appBundle, userDriver: driver, delegate: self)
         updater = u
+        self.config = config
         apply(config)
         do { try u.start() } catch {
             Log.app.error("updater: \(error.localizedDescription, privacy: .public)")
@@ -66,8 +67,11 @@ final class Updater: NSObject {
     }
 
     func apply(_ config: PawConfig.Updates) {
+        let switched = config.wantsBeta(running: AppPaths.version) != self.config.wantsBeta(running: AppPaths.version)
         self.config = config
         guard let u = updater else { return }
+        // A new channel: look at it now rather than in up to a day.
+        if switched, config.check, u.canCheckForUpdates { u.checkForUpdatesInBackground() }
         u.automaticallyChecksForUpdates = config.check
         // Always in the background; `automatic` decides whether it also installs right away.
         u.automaticallyDownloadsUpdates = config.check

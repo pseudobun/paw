@@ -264,6 +264,9 @@ enum SettingsCatalog {
                 f(\.updates.check, "updates.check", "Check for updates", .toggle,
                   "Once a day, downloaded in the background; installs when paw quits, or from hop or paw update."),
                 f(\.updates.automatic, "updates.automatic", "Install right away", .toggle, "As soon as it is downloaded; paw restarts."),
+                f(\.updates.channel, "updates.channel", "Channel", .choice([
+                    ("auto", "Automatic"), ("stable", "Stable"), ("beta", "Beta"),
+                ]), "Beta also gets betas, ahead of stable versions. Automatic follows the paw you run (now \(AppPaths.version))."),
             ]),
             SettingsSection("Config file", [
                 .info(SettingsInfo(label: "Open in editor", help: "Everything here is saved to config.json5 at once; edits there apply here too.",
