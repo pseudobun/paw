@@ -102,7 +102,8 @@ paw keeps itself current, without windows or prompts:
 | Just look | `paw update --check` (exit 10 when there is a new version) |
 | Install right after downloading | `updates.automatic: true` |
 | No checks at all | `updates.check: false` |
-| Homebrew instead | `brew upgrade --cask pseudobun/tap/paw` (the full name: `paw` alone is RapidAPI's app) |
+| Betas too | `updates.channel: "beta"` (a beta build follows betas by itself; `"stable"` leaves them) |
+| Homebrew instead | `brew upgrade --cask pseudobun/tap/paw` (the full name: `paw` alone is RapidAPI's app); betas: `pseudobun/tap/paw@beta` |
 
 Updates are signed (EdDSA) and keep the Accessibility grant.
 
@@ -482,7 +483,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `overview` | `thumbnails` (`auto`: when Screen Recording is allowed; `on` asks for it; `off`) |
 | `hud` | `workspace` (true), `durationMs` (600), `edges` (true) |
 | `border` | `enabled` (false), `color` (`0xccead186`), `width` (2), `autoRadius` (true), `radius` (12), `offset` (2) |
-| `updates` | `check` (true: look once a day and offer new versions), `automatic` (false: install without asking) |
+| `updates` | `check` (true: look once a day and offer new versions), `automatic` (false: install without asking), `channel` (`auto`: betas when running one; `stable`, `beta`) |
 | `openAtLogin` | |
 
 App names are what macOS shows in the menu bar (`paw query` lists the open ones); `/regex/`

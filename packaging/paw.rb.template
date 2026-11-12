@@ -1,4 +1,4 @@
-cask "paw" do
+cask "@CASK@" do
   version "@VERSION@"
   sha256 "@SHA256@"
 
@@ -7,6 +7,7 @@ cask "paw" do
   desc "Tiling window manager with virtual workspaces, presets and stack indicators"
   homepage "https://github.com/pseudobun/paw"
 
+  conflicts_with cask: "@OTHER@"
   depends_on macos: :sonoma
 
   auto_updates true
