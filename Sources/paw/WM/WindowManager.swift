@@ -787,8 +787,7 @@ final class WindowManager {
     private func userMoved(_ w: Window) {
         if let until = suppressMoves[w.id], until > Date() {
             if w.id == focusedID { scheduleBorderRefresh() }
-            // The app may be moving or resizing it itself (Arc cascades and sizes a new window a
-            // moment after it opens): look once it stops, or it stays off its tile.
+            // The app may be moving it itself: check once it stops.
             if let ws = workspaceOf(w.id), !ws.isFloating(w.id), displayShowing(ws.name) != nil {
                 scheduleOverflowCheck(ws.name, after: 0.15)
             }
@@ -970,10 +969,8 @@ final class WindowManager {
             let over = CGSize(width: actual.width > r.width + 4 ? actual.width : 0, height: actual.height > r.height + 4 ? actual.height : 0)
             guard over.width > 0 || over.height > 0 else {
                 overflowSuspects[id] = nil
-                // Smaller than its tile or off it: the app resized or moved it after paw did. Back
-                // on the tile, with the frame sent again (paw's own still says it's there). Once
-                // per check, so an app with a maximum size doesn't loop. The position is the window
-                // server's: the app may not know yet about a move through the Dock helper.
+                // Moved or shrunk by its app after paw placed it: put it back, once per check.
+                // Position from the window server, which sees Dock helper moves first.
                 let at = SkyLight.frame(id)?.origin ?? actual.origin
                 let off = abs(at.x - r.minX) > 2 || abs(at.y - r.minY) > 2
                 if actual.width < r.width - 4 || actual.height < r.height - 4 || off, !w.isMoving {
