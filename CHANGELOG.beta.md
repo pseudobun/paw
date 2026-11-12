@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.24](https://github.com/pseudobun/paw/compare/v0.1.0-beta.23...v0.1.0-beta.24) (2026-11-12)
+
+
+### Bug Fixes
+
+* **cask:** name the conflicting cask with its tap ([#82](https://github.com/pseudobun/paw/issues/82)) ([e31e3e1](https://github.com/pseudobun/paw/commit/e31e3e149a497499773c4c6ccc303a6c53a2356b))
+
 ## [0.1.0-beta.23](https://github.com/pseudobun/paw/compare/v0.1.0-beta.22...v0.1.0-beta.23) (2026-11-12)
 
 
