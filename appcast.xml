@@ -6,6 +6,18 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.33</title>
+      <pubDate>Fri, 13 Nov 2026 17:32:24 +0000</pubDate>
+      <sparkle:version>165</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.33</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
+<ul>
+<li><b>config:</b> apply every setting on live reload and surface broken configs (<a href="https://github.com/pseudobun/paw/issues/108">#108</a>) (<a href="https://github.com/pseudobun/paw/commit/7e16c8b530ca6f4ba896e783ceb85a6ed57824e1">7e16c8b</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.33">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.33/paw-0.1.0-beta.33-macos.zip" type="application/octet-stream" sparkle:edSignature="kG1agExtceI4fsTYhQqKlUMgrkQ6pTOyhIYE4VCwjRa0zFpYTAw8dQznfiYDthMUSGRGj40ticsB/eI10oToCQ==" length="3752799"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.32</title>
       <pubDate>Fri, 13 Nov 2026 16:47:20 +0000</pubDate>
       <sparkle:version>162</sparkle:version>
@@ -252,29 +264,6 @@
 <li>match focus borders to window corners and cache updates (<a href="https://github.com/pseudobun/paw/issues/49">#49</a>) (<a href="https://github.com/pseudobun/paw/commit/5738b736f235b1bd52991d383a03e559c0890e54">5738b73</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.14">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.14/paw-0.1.0-beta.14-macos.zip" type="application/octet-stream" sparkle:edSignature="5mqWUnF2N3TMEtD8Kb1fFYuXIlhHW44kAkqj141aBWlgNpVkbHe8QzvGKqltNDCH8JpXDYThttbtC8nZXA75AA==" length="3606521"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.13</title>
-      <pubDate>Wed, 11 Nov 2026 16:44:11 +0000</pubDate>
-      <sparkle:version>101</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.13</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
-<ul>
-<li>add <code>join</code> to move a window into its neighbour's tile as a row (<a href="https://github.com/pseudobun/paw/commit/6fe1364cce0bd59151b0db84a342c5b02b0b111c">6fe1364</a>)</li>
-<li>add indicator themes and a live preview in Settings (<a href="https://github.com/pseudobun/paw/issues/50">#50</a>) (<a href="https://github.com/pseudobun/paw/commit/26143e23a9e5e3f19cc33fa416cc8aa853b95374">26143e2</a>)</li>
-</ul>
-<h3>Bug Fixes</h3>
-<ul>
-<li><b>dock:</b> harden the Dock helper and its uninstall (<a href="https://github.com/pseudobun/paw/commit/bc4b41e8b2aed52311dfd29c28faf434c915f401">bc4b41e</a>)</li>
-<li><b>dock:</b> restart the helper daemon in place when reinstalling (<a href="https://github.com/pseudobun/paw/issues/46">#46</a>) (<a href="https://github.com/pseudobun/paw/commit/442a5191abf930eda7cc6977dc948e8d4082512e">442a519</a>)</li>
-<li><b>focus:</b> prevent hover focus through native dialogs (<a href="https://github.com/pseudobun/paw/issues/48">#48</a>) (<a href="https://github.com/pseudobun/paw/commit/efc0e1016ee0166a6cab9add45d9342e93117717">efc0e10</a>)</li>
-</ul>
-<h3>Performance</h3>
-<ul>
-<li>keep the main thread off slow apps and cut redraw work (<a href="https://github.com/pseudobun/paw/issues/52">#52</a>) (<a href="https://github.com/pseudobun/paw/commit/8b0002483091cbd485fb25157d0006ddbea4dd28">8b00024</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.13">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.13/paw-0.1.0-beta.13-macos.zip" type="application/octet-stream" sparkle:edSignature="4rVHyY5zzEB1XbjuntiTJmk5cc0IEQ6V4T4Vt2+RMywii9vCaApz4h8TbNRgOt0Fk524l/kG5/Q/qhCcXWTKDQ==" length="3580845"/>
     </item>
   </channel>
 </rss>
