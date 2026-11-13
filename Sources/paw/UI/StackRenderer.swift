@@ -26,7 +26,7 @@ enum StackRenderer {
                 bg.frame = frame
                 bg.cornerRadius = min(style.a.cellRadius, frame.height / 2)
                 bg.cornerCurve = .continuous
-                bg.backgroundColor = (item.isActive ? c.islandHi : c.islandHi.withAlpha(0.5)).cg
+                bg.backgroundColor = style.cellFill(active: item.isActive).cg
                 root.addSublayer(bg)
             }
             let color: ARGB
