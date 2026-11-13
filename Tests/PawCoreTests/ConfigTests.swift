@@ -153,6 +153,20 @@ struct PresetConfigTests {
         #expect(Themes.og.appearance == PawConfig.Appearance())
     }
 
+    @Test func glassIsOnByDefaultAndSurvivesThemes() throws {
+        #expect(PawConfig().appearance.glass)
+        #expect(Themes.all.allSatisfy { $0.appearance.glass })
+        func load(_ s: String) throws -> PawConfig { try ConfigLoader.decode(Data(s.utf8)) }
+        let c = try load("{ appearance: { theme: 'minimal', glass: false } }")
+        #expect(!c.appearance.glass)
+        #expect(c.appearance.radius == Themes.minimal.appearance.radius)
+        #expect(!c.appearance.resetToTheme("og").glass, "switching themes keeps glass off")
+        #expect(ConfigLoader.unknownKeys(Data("{ appearance: { glass: false } }".utf8)).isEmpty)
+        #expect(throws: (any Error).self) { try load("{ appearance: { glass: 'yes' } }") }
+        #expect(ConfigTemplate.appearance(c.appearance).contains("\n    glass: false,"))
+        #expect(ConfigTemplate.appearance(PawConfig().appearance).contains("// glass: true,"))
+    }
+
     @Test func themesRoundTrip() throws {
         for t in Themes.all {
             var c = PawConfig()

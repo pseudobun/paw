@@ -73,6 +73,7 @@ final class IndicatorController {
             panel.setFrame(ScreenGeometry.cocoa(fromAX: axRect, primaryHeight: primary), display: false)
             configure(panel.view, stack: stack, side: side, axRect: axRect, scale: screens[si].backingScaleFactor)
             panel.view.redraw(animated: !isNew)
+            panel.host.adopt(panel.view.layer?.sublayers?.first)
             if isNew { panel.orderFrontRegardless() }
             let target = stack.hasFocus ? 1 : CGFloat(config.indicator.unfocusedOpacity)
             if isNew || panel.alphaValue != target {
@@ -98,8 +99,10 @@ final class IndicatorController {
         v.stack = stack
         v.metrics = config.indicator.metrics
         v.render = { hovered in
-            StackRenderer.layer(stack, size: size, style: style, config: config, icons: icons, scale: scale, hovered: hovered)
+            StackRenderer.layer(stack, size: size, style: style, config: config, icons: icons, scale: scale, hovered: hovered,
+                                glide: true)
         }
+        v.makeHighlight = { StackRenderer.highlight(style: style, metrics: config.indicator.metrics) }
         v.onClick = { [weak self] i in
             guard let self, config.indicator.clickToFocus else { return }
             onFocus?(WindowID(stack.items[i].id))
