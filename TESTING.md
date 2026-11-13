@@ -112,6 +112,23 @@ Do not stream logs during an idle measurement.
 - [ ] System Settings, Raycast, CleanShot float; a Brave extension popup floats, the main Brave window tiles
 - [ ] `rules: [{ app: "Slack", workspace: "9" }]` → new Slack window opens on 9 without stealing focus
 
+## Config reload
+
+Keep `just log` open and edit `~/.config/paw/config.json5` in an editor (Settings for the rest).
+
+- [ ] Save without changes, or let the editor write a swap file → nothing moves, no animation
+- [ ] Break the file (a stray `{`) → HUD "Config not loaded: …", menu bar icon orange, a "Config Error" item atop its menu, windows stay put; fix it → "Config loaded", icon back to normal
+- [ ] With the Dock helper and a floating window above tiles: `layout.windowServer: false` → the float drops to the normal level (a tile can cover it); quit paw → nothing stays above other windows
+- [ ] Toggle `focus.focusFollowsMouse` and `focus.floatsOnTop` a few times → one click on a tile raises the floats once (no repeat per reload)
+- [ ] `layout.workspaces: 10` → `5` → empty workspaces 6–10 are gone from `paw query`; one with windows stays
+- [ ] Change `layout.default` → empty workspaces without a preset use it at once
+- [ ] Edit a preset's tiles or layout (also inside the active setup) → its workspace is arranged again
+- [ ] Add `{ app: "Finder", float: true }` → open Finder windows float; remove it → they tile. Add a `workspace` rule → the app's windows move there
+- [ ] Remove a `manage: false` rule → those windows tile without restarting paw
+- [ ] Edit the file `icons.map` names → indicators, edge islands and HUD show the new glyphs
+- [ ] Replace `~/.config/paw` (re-point the symlink, recreate the dotfiles folder) → later saves still apply
+- [ ] Open the overview, switch `appearance.theme` → the open overview redraws in the new theme
+
 ## Closing a focused window
 
 Before testing, check `paw status` → `nativeSpaces`: use one native macOS desktop per display.
