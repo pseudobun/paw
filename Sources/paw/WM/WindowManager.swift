@@ -901,6 +901,7 @@ final class WindowManager {
     }
 
     func layout(_ ws: Workspace, animated: Bool) {
+        Performance.count("layout_calls")
         syncFloatLayers()
         guard let di = displayShowing(ws.name) else { return }
         let area = displays[di].area
@@ -916,6 +917,7 @@ final class WindowManager {
             let topCramped = t.activeWindow.map { isCramped($0, in: frames) } ?? false
             for id in t.windows {
                 guard let w = windows[id], let r = frames[id] else { continue }
+                Performance.count("layout_windows")
                 if topCramped || isCramped(id, in: frames) {
                     if !w.isHidden { hide(w, from: ws) }
                     continue
@@ -1306,6 +1308,7 @@ final class WindowManager {
     /// Parks a window in a corner of its display with one pixel showing (AeroSpace's trick:
     /// macOS keeps windows that are fully off screen from moving).
     private func hide(_ w: Window, from ws: Workspace) {
+        Performance.count("hidden_requests")
         if ws.isFloating(w.id), !w.isHidden {
             // Still on its way somewhere: where it's going is where it is.
             if !w.isMoving { _ = w.readFrame() }
@@ -1384,11 +1387,14 @@ final class WindowManager {
             return
         }
         let (pid, element) = (w.pid, w.element)
+        let measurement = Performance.begin("focus")
         let floats = raise ? floatsAbove(w) : []
         if !floats.isEmpty { ignoreFocus(0.3) }
         // Requests pile up behind a slow app: only the newest one still goes.
         focusQueue.async {
-            guard FocusTicket.shared.isLatest(ticket) else { return }
+            defer { Performance.end(measurement) }
+            guard FocusTicket.shared.isLatest(ticket) else { Performance.count("focus_skipped"); return }
+            Performance.event("Focus dequeued")
             SkyLight.focus(pid: pid, windowID: id, element: element, raise: raise)
             Self.bringForward(floats, thenFocus: (pid, id, element))
         }
@@ -2016,6 +2022,9 @@ final class WindowManager {
     }
 
     func execute(_ c: Command) {
+        let measurement = Performance.begin("command", detail: c == .overview
+            ? (overview.isOpen ? "overview.close" : "overview.open") : c.performanceName)
+        defer { Performance.end(measurement) }
         let ws = focusedWorkspace
         let area = self.area(of: ws)
         let fid = focusedID

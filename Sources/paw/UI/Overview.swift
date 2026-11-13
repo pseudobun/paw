@@ -466,10 +466,21 @@ final class OverviewController {
         // Pictures of windows that are gone go with them.
         thumbnails = thumbnails.filter { ids.contains($0.key) }
         captureTask = Task { @MainActor [weak self] in
-            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else { return }
+            let measurement = Performance.begin("capture")
+            var attempted = 0, succeeded = 0, delivered = 0, enumerated = 0
+            defer {
+                Performance.end(measurement, values: ["expected": ids.count, "attempted": attempted,
+                    "succeeded": succeeded, "delivered": delivered, "enumerated": enumerated])
+            }
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else {
+                Performance.count("capture_enumeration_failures")
+                return
+            }
+            enumerated = 1
             var pending = 0
             for w in content.windows where ids.contains(w.windowID) {
                 if Task.isCancelled { return }
+                attempted += 1
                 let cfg = SCStreamConfiguration()
                 let scale = min(1, Self.thumbnailWidth / max(1, w.frame.width))
                 cfg.width = min(8192, max(32, Int(saturating: w.frame.width * scale * 2)))
@@ -478,8 +489,13 @@ final class OverviewController {
                 cfg.ignoreShadowsSingleWindow = true
                 let filter = SCContentFilter(desktopIndependentWindow: w)
                 guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg),
-                      !Task.isCancelled else { continue }
+                      !Task.isCancelled else { Performance.count("capture_failures"); continue }
+                succeeded += 1
                 self?.thumbnails[w.windowID] = image
+                if self != nil {
+                    delivered += 1
+                    if delivered == 1 { Performance.event("First fresh thumbnail") }
+                }
                 // A redraw every few pictures, not after each one.
                 pending += 1
                 if pending >= 4 { pending = 0; self?.redraw() }
