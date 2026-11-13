@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.30](https://github.com/pseudobun/paw/compare/v0.1.0-beta.29...v0.1.0-beta.30) (2026-11-13)
+
+
+### Performance
+
+* **wm:** read live window numbers without bridging descriptions ([#96](https://github.com/pseudobun/paw/issues/96)) ([2d08fa8](https://github.com/pseudobun/paw/commit/2d08fa8c47a74b809ec8d51efad09611c9b486c7))
+
 ## [0.1.0-beta.29](https://github.com/pseudobun/paw/compare/v0.1.0-beta.28...v0.1.0-beta.29) (2026-11-13)
 
 
