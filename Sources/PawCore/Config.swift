@@ -734,7 +734,47 @@ public enum ConfigLoader {
                 if k == "appearance", sk == "colors", let colors = sv as? [String: Any] {
                     for ck in colors.keys.sorted() where !colorKeys.contains(ck) { out.append("appearance.colors.\(ck)") }
                 }
+                if k == "layout", sk == "padding" { out += unknown(sv, "layout.padding", paddingKeys) }
+                if k == "mouse", sk == "gestures", let list = sv as? [Any] {
+                    for (i, g) in list.enumerated() { out += unknown(g, "mouse.gestures[\(i)]", gestureKeys) }
+                }
             }
+        }
+        if let rules = root["rules"] as? [Any] {
+            for (i, r) in rules.enumerated() { out += unknown(r, "rules[\(i)]", ruleKeys) }
+        }
+        if let presets = root["workspaces"] as? [String: Any] { out += unknownPresets(presets, "workspaces") }
+        if let setups = root["setups"] as? [String: Any] {
+            for (name, s) in setups.sorted(by: { $0.key < $1.key }) {
+                out += unknown(s, "setups.\(name)", Set(PawConfig.Setup.CodingKeys.allCases.map(\.rawValue)))
+                if let presets = (s as? [String: Any])?["workspaces"] as? [String: Any] {
+                    out += unknownPresets(presets, "setups.\(name).workspaces")
+                }
+            }
+        }
+        return out
+    }
+
+    static let paddingKeys = Set(Padding.CodingKeys.allCases.map(\.rawValue))
+    /// Rules and gestures decode with synthesized keys: listed here, kept in step by a test.
+    static let ruleKeys: Set<String> = ["app", "title", "unlessTitle", "manage", "float", "workspace"]
+    static let gestureKeys: Set<String> = ["button", "direction", "command"]
+
+    /// `value`'s keys that aren't in `known`, as `path.key`; nothing when it isn't an object.
+    private static func unknown(_ value: Any, _ path: String, _ known: Set<String>) -> [String] {
+        guard let dict = value as? [String: Any] else { return [] }
+        return dict.keys.sorted().filter { !known.contains($0) }.map { "\(path).\($0)" }
+    }
+
+    /// Workspace presets by name: their keys and their tiles' keys.
+    private static func unknownPresets(_ presets: [String: Any], _ path: String) -> [String] {
+        let presetKeys = Set(WorkspacePreset.CodingKeys.allCases.map(\.rawValue))
+        let tileKeys = Set(WorkspacePreset.Tile.CodingKeys.allCases.map(\.rawValue))
+        var out: [String] = []
+        for (name, p) in presets.sorted(by: { $0.key < $1.key }) {
+            out += unknown(p, "\(path).\(name)", presetKeys)
+            guard let tiles = (p as? [String: Any])?["tiles"] as? [Any] else { continue }
+            for (i, t) in tiles.enumerated() { out += unknown(t, "\(path).\(name).tiles[\(i)]", tileKeys) }
         }
         return out
     }
@@ -749,6 +789,12 @@ public enum ConfigLoader {
             if let other = seen[spec] { w.append("bindings: “\(key)” and “\(other)” are the same key") }
             seen[spec] = key
             do { _ = try Command.parseAll(cmd) } catch { w.append("bindings.\(key): \(error)") }
+        }
+        for (mode, keys) in c.modes.sorted(by: { $0.key < $1.key }) {
+            for (key, cmd) in keys.sorted(by: { $0.key < $1.key }) {
+                guard KeySpec.parse(key) != nil else { w.append("modes.\(mode): “\(key)” is not a key"); continue }
+                do { _ = try Command.parseAll(cmd) } catch { w.append("modes.\(mode).\(key): \(error)") }
+            }
         }
         for (name, p) in c.workspaces.sorted(by: { $0.key < $1.key }) where p.tiles.isEmpty && p.layout != .float {
             w.append("workspaces.\(name): no tiles")

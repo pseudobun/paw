@@ -421,8 +421,9 @@ config. The Settings window writes the same file, so people and agents can both 
 
 On first launch paw writes `~/.config/paw/config.json5` (or `$PAW_CONFIG`) with every default and
 a comment for each key; the same file is [`examples/config.json5`](examples/config.json5). Saving
-applies it at once. A broken file keeps the last good config, and `paw config check` prints the
-problem. Every key is optional: delete one to get its default.
+applies it at once, including the file `icons.map` points to. A broken file keeps the last good
+config: the HUD says so, the menu bar icon turns orange until the file reads again, and
+`paw config check` prints the problem. Every key is optional: delete one to get its default.
 
 A typical setup: presets for the apps you always use, a status bar, and a key to set it all up:
 
