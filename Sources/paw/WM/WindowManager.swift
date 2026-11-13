@@ -2973,14 +2973,22 @@ enum StateFile {
         return out
     }
 
+    /// The state last written: every workspace switch saves, usually with nothing changed. An
+    /// unchanged state is still rewritten after 10 minutes, keeping `savedAt` fresh for `load`.
+    private static var written: (windows: [WindowID: String], trees: [String: WorkspaceSnapshot], at: Date)?
+
     static func save(_ map: [WindowID: String], trees: [String: WorkspaceSnapshot]) {
+        let now = Date()
+        if let w = written, w.windows == map, w.trees == trees, now.timeIntervalSince(w.at) < 600 { return }
+        written = nil
         var d: [String: String] = [:]
         for (k, v) in map { d["\(k)"] = v }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? JSONEncoder().encode(File(windows: d, trees: trees)).write(to: url, options: .atomic)
+        guard (try? JSONEncoder().encode(File(windows: d, trees: trees)).write(to: url, options: .atomic)) != nil else { return }
+        written = (map, trees, now)
     }
 
-    static func clear() { try? FileManager.default.removeItem(at: url) }
+    static func clear() { written = nil; try? FileManager.default.removeItem(at: url) }
 }
 
 enum Shell {
