@@ -9,6 +9,10 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct MainThreadTests {
+    /// With the Dock helper loaded, moves inside `run` would go to the real window server (fake
+    /// window ids, real windows) instead of the fake app.
+    init() { DockBridge.shared.enabled = false }
+
     /// A window of an app that isn't there: its accessibility calls fail at once.
     private func window(_ id: WindowID, pid: pid_t = 99_991) -> Window {
         Window(id: id, element: AXUIElementCreateApplication(pid), pid: pid, app: "Fake", frame: CGRect(x: 0, y: 0, width: 100, height: 100))
@@ -45,6 +49,7 @@ struct MainThreadTests {
             if settle, let size { el.setSize(size) }
         }
         AXHealth.reset()
+        DockBridge.shared.enabled = true
     }
 
     // MARK: AXHealth

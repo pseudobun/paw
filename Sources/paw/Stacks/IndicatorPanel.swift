@@ -6,8 +6,12 @@ import QuartzCore
 /// clicks focus a window, scrolling moves through the stack.
 final class IndicatorPanel: NSPanel {
     let view = IndicatorView()
+    /// Puts the island on Liquid Glass when the style asks for it.
+    let host: GlassHost
 
     init() {
+        host = GlassHost(content: view)
+        host.interactive = true
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
@@ -20,7 +24,7 @@ final class IndicatorPanel: NSPanel {
         animationBehavior = .none
         becomesKeyOnlyIfNeeded = true
         alphaValue = 0
-        contentView = view
+        contentView = host
     }
 
     override var canBecomeKey: Bool { false }
@@ -155,20 +159,21 @@ final class TitlePanel: NSPanel {
         collectionBehavior = [.ignoresCycle, .fullScreenAuxiliary, .canJoinAllSpaces]
         isReleasedWhenClosed = false
         animationBehavior = .none
-        let v = NSView()
-        v.layer = CALayer()
-        v.wantsLayer = true
-        contentView = v
+        contentView = host
     }
 
     override var canBecomeKey: Bool { false }
+
+    /// Holds the island's layers, on glass when the island is a glass one.
+    let host = GlassHost(content: GlassHost.layerView())
 
     func show(_ l: CALayer, at cocoaFrame: CGRect) {
         setFrame(cocoaFrame, display: false)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         l.frame = CGRect(origin: .zero, size: cocoaFrame.size)
-        contentView?.layer?.sublayers = [l]
+        host.content.layer?.sublayers = [l]
+        host.adopt(l)
         CATransaction.commit()
         orderFrontRegardless()
     }

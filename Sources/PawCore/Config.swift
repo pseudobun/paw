@@ -83,6 +83,9 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var wrapStacks = false
         /// workspace next/prev go round from the last workspace to the first (false: they stop).
         public var wrapWorkspaces = false
+        /// Floating windows stay in front of tiled ones (like Hyprland): above them in the window
+        /// server with the Dock helper loaded, otherwise raised again whenever a tile takes focus.
+        public var floatsOnTop = true
         public init() {}
     }
 
@@ -401,6 +404,9 @@ public struct PawConfig: Codable, Equatable, Sendable {
         /// How opaque the workspace HUD and the idle edge markers are.
         public var hudOpacity = 0.85
         public var edgeOpacity = 0.8
+        /// macOS 26 and later: the islands are Liquid Glass (the theme's island colour tints it);
+        /// false, or an older macOS: the theme's flat fill, border and shadow. Not part of a theme.
+        public var glass = true
         public var colors = Colors()
         public init() {}
     }
@@ -470,11 +476,11 @@ extension PawConfig.Layout {
 }
 
 extension PawConfig.Focus {
-    enum CodingKeys: String, CodingKey, CaseIterable { case mouseFollowsFocus, focusFollowsMouse, wrapStacks, wrapWorkspaces }
+    enum CodingKeys: String, CodingKey, CaseIterable { case mouseFollowsFocus, focusFollowsMouse, wrapStacks, wrapWorkspaces, floatsOnTop }
     public init(from decoder: Decoder) throws {
         let f = Fields(c: try decoder.container(keyedBy: CodingKeys.self))
         try f(.mouseFollowsFocus, &mouseFollowsFocus); try f(.focusFollowsMouse, &focusFollowsMouse); try f(.wrapStacks, &wrapStacks)
-        try f(.wrapWorkspaces, &wrapWorkspaces)
+        try f(.wrapWorkspaces, &wrapWorkspaces); try f(.floatsOnTop, &floatsOnTop)
     }
 }
 
@@ -571,7 +577,7 @@ extension PawConfig.Indicator {
 extension PawConfig.Appearance {
     enum CodingKeys: String, CodingKey, CaseIterable {
         case theme, font, fontSize, fontWeight, boldWeight, appFont, appIconSize, radius, cellRadius, borderWidth, shadow,
-             shadowOpacity, shadowRadius, islandHeight, pills, hudOpacity, edgeOpacity, colors
+             shadowOpacity, shadowRadius, islandHeight, pills, hudOpacity, edgeOpacity, glass, colors
     }
     /// Starts from the theme, then applies the keys that are set.
     public init(from decoder: Decoder) throws {
@@ -584,6 +590,7 @@ extension PawConfig.Appearance {
         try f(.radius, &radius); try f(.cellRadius, &cellRadius); try f(.borderWidth, &borderWidth); try f(.shadow, &shadow)
         try f(.shadowOpacity, &shadowOpacity); try f(.shadowRadius, &shadowRadius); try f(.islandHeight, &islandHeight)
         try f(.pills, &pills); try f(.hudOpacity, &hudOpacity); try f(.edgeOpacity, &edgeOpacity)
+        try f(.glass, &glass)
         if c.contains(.colors) {
             try colors.decodeOver(c.nestedContainer(keyedBy: PawConfig.Colors.CodingKeys.self, forKey: .colors))
         }
@@ -603,11 +610,12 @@ extension PawConfig.Appearance {
         return out
     }
 
-    /// Back to the theme's values, keeping the app icon font (it is not part of a theme's look).
+    /// Back to the theme's values, keeping the app icon font and glass (not part of a theme's look).
     public func resetToTheme(_ name: String? = nil) -> Self {
         var a = Themes.appearance(name ?? theme)
         a.appFont = appFont
         a.appIconSize = appIconSize
+        a.glass = glass
         return a
     }
 }

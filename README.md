@@ -385,6 +385,12 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Themes** for every indicator: OG, OG Light, Modern, Minimal, Solarpunk and Cyberpunk set
   colours, fonts and shape at once (Settings → Appearance: hover one to see it, click to use it;
   or `paw theme <name>`). Any appearance key overrides the theme
+- **Liquid Glass** on macOS 26 and later: the stack indicators, their title islands, the
+  workspace HUD, the move strip, the mode island and the edge markers sit on native glass
+  (`NSGlassEffectView`), tinted with the theme's island colour, light or dark as the theme is.
+  The window server draws it, so it costs paw nothing per frame. On by default;
+  `appearance.glass: false` (Settings → Appearance → Liquid Glass) keeps the theme's flat fill,
+  border and shadow, which is also what older macOS versions get
 - **Animations** for window moves: duration, curve (`easeOutCubic`, `spring`, `easeOutBack`…),
   and how sizes change
 - **Stack indicators**: a vertical island next to each stack with one app icon per window, each
@@ -393,6 +399,13 @@ config. The Settings window writes the same file, so people and agents can both 
 - **Modes**: `hyper+r` turns on resize mode (arrows or hjkl grow, with shift shrink, `esc`
   leaves) with an island at the top of the screen; define your own key modes in `modes`
 - **Rules**: float or ignore apps and windows by name/title, send apps to workspaces
+- **Floating windows**: fixed-size windows (a greyed-out green button, like System Settings) float
+  on their own (a rule with `float: false` tiles them) and open centred. Floats stay in front of
+  tiles (`focus.floatsOnTop`): with the Dock helper loaded the window server keeps them above, as
+  in Hyprland; otherwise paw brings them forward again whenever a tile takes focus, clicks included (a
+  brief flicker).
+  `focusFollowsMouse` focuses without raising, and a float dragged to another display joins the
+  workspace shown there
 - **Key bindings** in the config (left/right modifiers like `ralt` work, `hyper` = ⌘⌃⌥⇧), and
   the same commands on the CLI: `paw focus west`, `paw workspace 3`
 - **Events** for status bars and scripts: `paw subscribe` streams JSON lines (a snapshot first,
@@ -473,7 +486,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | Section | Keys |
 |---|---|
 | `layout` | `default` (`stack`; also `bsp columns master float`), `minTileWidth` (0: off), `minTileHeight` (0), `placeholders` (true: a placeholder for windows that won't shrink to their tile; false: they stick out), `placeholderMinWidth` (160), `placeholderMinHeight` (120), `windowServer` (true: move windows through the Dock helper when it's loaded, see Faster workspace switching), `gap` (10), `padding {top bottom left right}` (2/2/24/24, widened on the sides to fit indicators), `barTop` (0), `barBottom` (0), `workspaces` (10), `unassignedWorkspace` ("": windows of apps no preset places stay put; or a workspace) |
-| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends), `wrapWorkspaces` (false: workspace next/prev stop at the first and last) |
+| `focus` | `mouseFollowsFocus` (true), `focusFollowsMouse` (false), `wrapStacks` (false: stack next/prev stop at the ends), `wrapWorkspaces` (false: workspace next/prev stop at the first and last), `floatsOnTop` (true: floating windows stay in front of tiled ones) |
 | `animation` | `enabled` (true), `durationMs` (180), `curve` (`easeOutCubic`; also `linear easeInOutCubic easeOutQuint easeOutBack spring`), `resize` (`start` / `animate` / `end`), `maxWindows` (12) |
 | `bindings` | `"key": "command"`; modifiers `cmd ctrl alt shift fn hyper meh` and `lalt/ralt lcmd/rcmd lctrl/rctrl lshift/rshift`, a key name or a keycode like `0x18` |
 | `modes` | `"name": { "key": "command" }`; while `mode <name>` is on its keys come first. Default: `resize` |
@@ -483,7 +496,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
 | `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
 | `indicator` | `enabled` (true), `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
-| `appearance` | `theme` (og, og-light, modern, minimal, solarpunk, cyberpunk; the other keys override it), `font` (a family, or system / system-mono / system-rounded), `fontSize`, `fontWeight`, `boldWeight`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `pills`, `islandHeight`, `borderWidth`, `shadow`, `shadowOpacity`, `shadowRadius`, `hudOpacity`, `edgeOpacity`, `colors {island islandHi border fg muted dim accent wave good bad}` |
+| `appearance` | `theme` (og, og-light, modern, minimal, solarpunk, cyberpunk; the other keys override it), `font` (a family, or system / system-mono / system-rounded), `fontSize`, `fontWeight`, `boldWeight`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `pills`, `islandHeight`, `borderWidth`, `shadow`, `shadowOpacity`, `shadowRadius`, `hudOpacity`, `edgeOpacity`, `glass` (Liquid Glass on macOS 26+, default true; kept across themes), `colors {island islandHi border fg muted dim accent wave good bad}` |
 | `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`), `brandColors` (true), `colors` (`"App": "#RRGGBB"`) |
 | `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged`, `displaysChanged` (shell commands with `PAW_*` variables) |
 | `mouse` | `dropZones` (true), `stackModifier` (`alt`), `seamHandles` (true), `gestures` (`[{ button: "middle", direction: "left", command: "workspace prev" }, …]`; buttons `middle back forward`, directions `left right up down click`) |

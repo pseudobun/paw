@@ -38,6 +38,8 @@
     wrapStacks: false,
     // workspace next on the last workspace goes back to the first (false: it stays)
     wrapWorkspaces: false,
+    // floating windows stay in front of tiled ones (false: a focused tile can cover them)
+    floatsOnTop: true,
   },
 
   animation: {
@@ -138,6 +140,8 @@
     // pills: true,
     // hudOpacity: 0.85,
     // edgeOpacity: 0.8,
+    // Liquid Glass islands on macOS 26 and later; false keeps the theme's flat fill.
+    // glass: true,
     // 0xAARRGGBB or "#RRGGBB"
     colors: {
       // island: "0xeb1d1d16",

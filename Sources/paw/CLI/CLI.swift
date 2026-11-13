@@ -155,7 +155,7 @@ enum CLI {
 
     static func status(_ args: [String]) -> Int32 {
         guard let r = request("status", timeout: 3) else { return 1 }
-        for k in ["version", "pid", "trusted", "windows", "workspaces", "stacks", "bindings", "iconFont", "windowMoves", "nativeSpaces", "config", "error"] {
+        for k in ["version", "pid", "trusted", "windows", "workspaces", "stacks", "bindings", "iconFont", "windowMoves", "floatsOnTop", "nativeSpaces", "config", "error"] {
             if let v = r[k] as? String, !v.isEmpty { print("\(k): \(v)") }
         }
         return 0
