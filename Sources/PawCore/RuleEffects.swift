@@ -23,6 +23,11 @@ extension PawConfig {
         rules(app: app, title: title).contains { $0.manage == false }
     }
 
+    /// Whether a `manage: true` rule claims the window even when paw would leave it alone.
+    public func forcesManage(app: String, title: String) -> Bool {
+        rules(app: app, title: title).contains { $0.manage == true }
+    }
+
     /// Whether the window floats instead of tiling.
     public func floats(app: String, title: String, native: NativeFloat) -> Bool {
         let rules = rules(app: app, title: title)

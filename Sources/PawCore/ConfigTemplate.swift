@@ -338,6 +338,10 @@ public enum ConfigTemplate {
         line("edgeOpacity", num(a.edgeOpacity), a.edgeOpacity == base.edgeOpacity)
         o += "    // Liquid Glass islands on macOS 26 and later; false keeps the theme's flat fill.\n"
         line("glass", "\(a.glass)", a.glass)
+        o += "    // \"regular\" (frosted, like Spotlight) or \"clear\" (barely frosted, most see-through)\n"
+        line("glassStyle", str(a.glassStyle), a.glassStyle == "regular")
+        o += "    // How much of the island colour tints the glass, 0–1: 0 is bare glass\n"
+        line("glassTint", num(a.glassTint), a.glassTint == 0.2)
         o += "    // 0xAARRGGBB or \"#RRGGBB\"\n    colors: {\n"
         for key in PawConfig.Colors.CodingKeys.allCases {
             line(key.rawValue, str(a.colors[key].description), a.colors[key] == base.colors[key], indent: "      ")
