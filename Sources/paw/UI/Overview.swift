@@ -14,6 +14,8 @@ final class OverviewController {
     private weak var wm: WindowManager?
     private(set) var isOpen = false
     private var panels: [OverviewPanel] = []
+    /// Only fully hidden panels: an earlier close must never order out a reopened panel.
+    private var cachedPanels: [OverviewPanel] = []
     private(set) var model: [WindowManager.OverviewWorkspace] = []
     /// The workspace each display's stage shows.
     private(set) var stageWorkspace: [Int: String] = [:]
@@ -99,6 +101,8 @@ final class OverviewController {
         watchKeys()
         wm.hud.hide()
         query = ""
+        drag = nil
+        cardDrag = nil
         keyDisplay = wm.focusedDisplayIndex
         activeDisplay = keyDisplay
         reloadModel()
@@ -106,10 +110,18 @@ final class OverviewController {
         for ws in model where ws.visible { stageWorkspace[ws.display] = ws.name }
         selected = model.first(where: { $0.focused })?.windows.first(where: { $0.focused })?.id
             ?? model.first(where: { $0.focused })?.windows.first?.id
-        panels.forEach { $0.orderOut(nil) }
+        let environment = OverviewPanel.Environment(config: wm.config, style: style.a,
+            appearance: NSApp.effectiveAppearance.name.rawValue, keyDisplay: keyDisplay,
+            screens: NSScreen.screens.enumerated().map { i, s in
+                .init(id: (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? UInt32(i),
+                      frame: s.frame, visibleFrame: s.visibleFrame, scale: s.backingScaleFactor)
+            })
+        let cached = cachedPanels
+        cachedPanels = []
         panels = (0..<wm.displayCount).compactMap { i in
             guard let frame = wm.displayFrame(i) else { return nil }
-            let p = OverviewPanel(controller: self, display: i)
+            let p = cached.first { $0.display == i && $0.environment == environment }
+                ?? OverviewPanel(controller: self, display: i, environment: environment)
             p.setFrame(ScreenGeometry.cocoa(fromAX: frame, primaryHeight: primaryHeight), display: false)
             p.alphaValue = 0
             return p
@@ -143,8 +155,11 @@ final class OverviewController {
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
             for p in closing { p.animator().alphaValue = 0 }
-        }, completionHandler: {
+        }, completionHandler: { [weak self] in
             for p in closing { p.orderOut(nil) }
+            guard let self else { return }
+            for p in closing { p.view.resetForReuse() }
+            cachedPanels = closing
         })
         if let then {
             then()
@@ -508,11 +523,28 @@ final class OverviewController {
 // MARK: - Panel
 
 final class OverviewPanel: NSPanel {
+    struct Environment: Equatable {
+        struct Screen: Equatable {
+            var id: UInt32
+            var frame: CGRect
+            var visibleFrame: CGRect
+            var scale: CGFloat
+        }
+
+        var config: PawConfig
+        var style: PawConfig.Appearance
+        var appearance: String
+        var keyDisplay: Int
+        var screens: [Screen]
+    }
+
     let display: Int
     let view: OverviewView
+    let environment: Environment
 
-    init(controller: OverviewController, display: Int) {
+    init(controller: OverviewController, display: Int, environment: Environment) {
         self.display = display
+        self.environment = environment
         view = OverviewView(controller: controller, display: display)
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
@@ -665,6 +697,34 @@ final class OverviewView: NSView {
     }
 
     func setSearchText(_ s: String) { searchField?.stringValue = s }
+
+    /// Runs after orderOut, so resetting the field cannot change the closing fade.
+    func resetForReuse() {
+        // A newer overview may already be open; ending an IME session must not change its query.
+        let delegate = searchField?.delegate
+        searchField?.delegate = nil
+        defer { searchField?.delegate = delegate }
+        let editor = window?.fieldEditor(false, for: searchField) as? NSTextView
+        let undoManager = editor?.undoManager ?? window?.undoManager
+        editor?.unmarkText()
+        editor?.inputContext?.discardMarkedText()
+        _ = searchField?.abortEditing()
+        window?.makeFirstResponder(nil)
+        editor?.string = ""
+        editor?.setSelectedRange(NSRange(location: 0, length: 0))
+        undoManager?.removeAllActions()
+        searchField?.stringValue = ""
+        hits = []
+        hovered = nil
+        pressed = nil
+        band = nil
+        layoutCache = nil
+        scrollX = 0
+        revealPending = true
+        layer?.removeAnimation(forKey: "in")
+        updateTrackingAreas()
+        needsDisplay = true
+    }
 
     required init?(coder: NSCoder) { fatalError() }
 
