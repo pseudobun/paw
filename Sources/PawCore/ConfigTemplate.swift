@@ -336,6 +336,8 @@ public enum ConfigTemplate {
         line("pills", "\(a.pills)", a.pills == base.pills)
         line("hudOpacity", num(a.hudOpacity), a.hudOpacity == base.hudOpacity)
         line("edgeOpacity", num(a.edgeOpacity), a.edgeOpacity == base.edgeOpacity)
+        o += "    // Liquid Glass islands on macOS 26 and later; false keeps the theme's flat fill.\n"
+        line("glass", "\(a.glass)", a.glass)
         o += "    // 0xAARRGGBB or \"#RRGGBB\"\n    colors: {\n"
         for key in PawConfig.Colors.CodingKeys.allCases {
             line(key.rawValue, str(a.colors[key].description), a.colors[key] == base.colors[key], indent: "      ")

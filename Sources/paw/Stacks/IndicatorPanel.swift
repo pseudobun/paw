@@ -6,8 +6,12 @@ import QuartzCore
 /// clicks focus a window, scrolling moves through the stack.
 final class IndicatorPanel: NSPanel {
     let view = IndicatorView()
+    /// Puts the island on Liquid Glass when the style asks for it.
+    let host: GlassHost
 
     init() {
+        host = GlassHost(content: view)
+        host.interactive = true
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
@@ -20,7 +24,7 @@ final class IndicatorPanel: NSPanel {
         animationBehavior = .none
         becomesKeyOnlyIfNeeded = true
         alphaValue = 0
-        contentView = view
+        contentView = host
     }
 
     override var canBecomeKey: Bool { false }
@@ -50,24 +54,56 @@ final class IndicatorView: NSView {
     // turned the bottom-up rendered island (and its icons) upside down. Points are flipped by hand.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    /// Draws the stack again; `animated`, the old cells cross-fade into the new ones like the
-    /// bar's spaces on a workspace change: sketchybar's `animate("tanh", 12)`, 12 frames at 60 Hz.
+    /// The top window's cell, kept across redraws so it can glide to the next one like the
+    /// tip bar's sliding highlights.
+    var makeHighlight: (() -> CALayer)?
+    /// Where the highlight sits, top-left coordinates (the panel's height changes with the stack).
+    private var highlightCell: CGRect?
+
+    /// The tip bar's motion: highlights glide over 220 ms (easeOutQuint), content swaps in 80 ms.
+    static let glide: CFTimeInterval = 0.22
+    static let contentFade: CFTimeInterval = 0.08
+
+    /// Draws the stack again; `animated`, the highlight glides to the window now on top and the
+    /// icons cross-fade, as in the tip bar.
     func redraw(animated: Bool = false) {
         guard let render else { return }
+        let motion = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let l = render(hovered)
         l.frame = bounds
-        if animated, layer?.sublayers?.isEmpty == false {
+        if motion, layer?.sublayers?.isEmpty == false {
             let t = CATransition()
             t.type = .fade
-            t.duration = 0.2
-            // tanh: fast out of the old state, easing into the new one.
-            t.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.75, 0.4, 1)
+            t.duration = Self.contentFade
             layer?.add(t, forKey: "redraw")
         }
         layer?.sublayers = [l]
+        placeHighlight(in: l, animated: motion)
         CATransaction.commit()
+    }
+
+    private func placeHighlight(in root: CALayer, animated: Bool) {
+        guard let stack, let i = stack.activeIndex, let makeHighlight else {
+            highlightCell = nil
+            return
+        }
+        let h = makeHighlight()
+        let cell = IndicatorLayout.cell(i, metrics: metrics)
+        func frame(_ tl: CGRect) -> CGRect { CGRect(x: tl.minX, y: bounds.height - tl.maxY, width: tl.width, height: tl.height) }
+        h.frame = frame(cell)
+        root.insertSublayer(h, at: 0)
+        if animated, let from = highlightCell, from != cell {
+            let a = CABasicAnimation(keyPath: "position")
+            let f = frame(from)
+            a.fromValue = NSValue(point: CGPoint(x: f.midX, y: f.midY))
+            a.toValue = NSValue(point: CGPoint(x: h.frame.midX, y: h.frame.midY))
+            a.duration = Self.glide
+            a.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+            h.add(a, forKey: "glide")
+        }
+        highlightCell = cell
     }
 
     override func updateTrackingAreas() {
@@ -123,20 +159,21 @@ final class TitlePanel: NSPanel {
         collectionBehavior = [.ignoresCycle, .fullScreenAuxiliary, .canJoinAllSpaces]
         isReleasedWhenClosed = false
         animationBehavior = .none
-        let v = NSView()
-        v.layer = CALayer()
-        v.wantsLayer = true
-        contentView = v
+        contentView = host
     }
 
     override var canBecomeKey: Bool { false }
+
+    /// Holds the island's layers, on glass when the island is a glass one.
+    let host = GlassHost(content: GlassHost.layerView())
 
     func show(_ l: CALayer, at cocoaFrame: CGRect) {
         setFrame(cocoaFrame, display: false)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         l.frame = CGRect(origin: .zero, size: cocoaFrame.size)
-        contentView?.layer?.sublayers = [l]
+        host.content.layer?.sublayers = [l]
+        host.adopt(l)
         CATransaction.commit()
         orderFrontRegardless()
     }
