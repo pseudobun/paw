@@ -12,6 +12,18 @@ struct WindowHitTests {
         #expect(!WindowManager.isMenuLayer(Int(CGWindowLevelForKey(.modalPanelWindow))))
     }
 
+    @MainActor @Test func liveWindowsKeepsOnlyWindowsTheServerHas() {
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: CGRect(x: -2000, y: -2000, width: 50, height: 50), styleMask: .borderless,
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.orderFrontRegardless()
+        defer { window.close() }
+        let id = WindowID(window.windowNumber)
+        #expect(WindowManager.liveWindows([id, 0x7FFF_FFF0]) == [id])
+        #expect(WindowManager.liveWindows([]).isEmpty)
+    }
+
     @Test func placeholderStandsInForItsParkedWindow() {
         let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
         let placeholder = info(100, frame: frame, layer: -1)
