@@ -6,6 +6,19 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.29</title>
+      <pubDate>Fri, 13 Nov 2026 11:09:09 +0000</pubDate>
+      <sparkle:version>154</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.29</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Performance</h3>
+<ul>
+<li><b>overview:</b> reuse closed overview panels (<a href="https://github.com/pseudobun/paw/issues/99">#99</a>) (<a href="https://github.com/pseudobun/paw/commit/4c766e0fbc9ebf66bd2eec4e9312d61880a4e0bd">4c766e0</a>)</li>
+<li><b>state:</b> skip rewriting an unchanged state file (<a href="https://github.com/pseudobun/paw/issues/97">#97</a>) (<a href="https://github.com/pseudobun/paw/commit/d08d4dc5ea3742003b47904c8b12268faeb99a8e">d08d4dc</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.29">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.29/paw-0.1.0-beta.29-macos.zip" type="application/octet-stream" sparkle:edSignature="QueRXt0pkhs8xGImtrjdNkkUYNZ2SdM/PANjTpMLrjsHAnMNPZ73scsQHBSZLdtG6ef9T4cq+soWRYGER6QlCQ==" length="3705385"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.28</title>
       <pubDate>Fri, 13 Nov 2026 00:20:00 +0000</pubDate>
       <sparkle:version>150</sparkle:version>
@@ -262,18 +275,6 @@
 <li><b>zoom:</b> move focus to the next display at the edge of a zoom (<a href="https://github.com/pseudobun/paw/issues/40">#40</a>) (<a href="https://github.com/pseudobun/paw/commit/fdfd44c7ecdada8fa4516ea3fff6056cb6d7beeb">fdfd44c</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.10">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.10/paw-0.1.0-beta.10-macos.zip" type="application/octet-stream" sparkle:edSignature="F6dZ1nGem9sFEgaPFXdlA5+WtMgHhQPsjgWes695LAoS5PMufLj+G0pdJxsglqyEyqNB95z37fb+gXaqBQwWCg==" length="3258830"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.9</title>
-      <pubDate>Wed, 11 Nov 2026 08:32:03 +0000</pubDate>
-      <sparkle:version>87</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.9</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
-<ul>
-<li><b>zoom:</b> keep directional focus inside a zoom and report the zoom level (<a href="https://github.com/pseudobun/paw/issues/38">#38</a>) (<a href="https://github.com/pseudobun/paw/commit/f3239f0f48c0fe7844c11343b20931d229cb39b7">f3239f0</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.9">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.9/paw-0.1.0-beta.9-macos.zip" type="application/octet-stream" sparkle:edSignature="XKQcuTr+1GSBOXeDVjNc+fhOGsjH3xGc7tUsVK5hvXN56qk3sbSFjdkM/LdFt9e77St9QrWZCPioqjCvkbGEBQ==" length="3258825"/>
     </item>
   </channel>
 </rss>
