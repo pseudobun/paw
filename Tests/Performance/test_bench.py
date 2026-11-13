@@ -257,6 +257,14 @@ class SafetyTests(unittest.TestCase):
         with patch.object(bench, "main_apps", side_effect=[[(123, app), (456, other)], [(456, other)]]), patch.object(bench.os, "kill") as kill:
             bench.stop_candidate(app); kill.assert_called_once_with(123, signal.SIGTERM)
 
+    def test_batches_wait_for_a_quiet_machine(self):
+        with patch.object(bench.os, "getloadavg", side_effect=[(9, 0, 0), (9, 0, 0), (9, 0, 0), (1, 0, 0)]), \
+             patch.object(bench.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
+            bench.quiet(4, 60)
+        with patch.object(bench.os, "getloadavg", return_value=(9, 0, 0)), contextlib.redirect_stdout(io.StringIO()), \
+             self.assertRaisesRegex(RuntimeError, "load average stayed"):
+            bench.quiet(4, 0.05)
+
     def test_labels_cannot_escape_build_directory(self):
         for value in ("../daily", "/tmp/test", "foo/bar", "", "."):
             with self.assertRaises(RuntimeError): bench.label(value)
