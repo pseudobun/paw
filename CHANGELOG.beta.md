@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.34](https://github.com/pseudobun/paw/compare/v0.1.0-beta.33...v0.1.0-beta.34) (2026-11-13)
+
+
+### Features
+
+* **ui:** make liquid glass more see-through and configurable ([#107](https://github.com/pseudobun/paw/issues/107)) ([4e061cf](https://github.com/pseudobun/paw/commit/4e061cf78a4cb52dd445bff3f2c9b8dbc61f61ad))
+
 ## [0.1.0-beta.33](https://github.com/pseudobun/paw/compare/v0.1.0-beta.32...v0.1.0-beta.33) (2026-11-13)
 
 

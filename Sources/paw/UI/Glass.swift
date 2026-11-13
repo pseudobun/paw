@@ -18,13 +18,16 @@ enum Glass {
     static let tintKey = "pawGlassTint"
     /// Layer key: true when the island's own colours are light (a light theme), so the glass is too.
     static let lightKey = "pawGlassLight"
+    /// Layer key: true for clear glass (`appearance.glassStyle: "clear"`), false for regular.
+    static let clearKey = "pawGlassClear"
 
-    /// Marks `l` as a glass island tinted `fill`.
-    static func mark(_ l: CALayer, fill: ARGB) {
+    /// Marks `l` as a glass island tinted `fill`, `tint` (0…1, `appearance.glassTint`) strong.
+    static func mark(_ l: CALayer, fill: ARGB, tint: Double, clear: Bool) {
         // A hint of the theme's island colour: enough to keep its character, not enough to hide
-        // the glass. Opaque fills (most themes) end up around a third.
-        l.setValue(fill.withAlpha(min(fill.alpha, 1) * 0.35).cg, forKey: tintKey)
+        // the glass (the default 0.2 lets the wallpaper through as Spotlight does).
+        l.setValue(fill.withAlpha(min(fill.alpha, 1) * min(max(tint, 0), 1)).cg, forKey: tintKey)
         l.setValue(fill.luminance > 0.5, forKey: lightKey)
+        l.setValue(clear, forKey: clearKey)
     }
 
     /// The tint `mark` stored, or nil for a layer that isn't a glass island.
@@ -67,6 +70,7 @@ final class GlassHost: NSView {
     private var glass: NSView?
     private var shownTint: CGColor?
     private var shownLight: Bool?
+    private var shownClear: Bool?
 
     init(content: NSView) {
         self.content = content
@@ -115,6 +119,11 @@ final class GlassHost: NSView {
             shownTint = tint
             g.tintColor = NSColor(cgColor: tint)
         }
+        let clear = root.value(forKey: Glass.clearKey) as? Bool ?? false
+        if clear != shownClear {
+            shownClear = clear
+            g.style = clear ? .clear : .regular
+        }
         // The theme decides light or dark, not the system: its text colours are made for one.
         let light = root.value(forKey: Glass.lightKey) as? Bool ?? false
         if light != shownLight {
@@ -128,6 +137,7 @@ final class GlassHost: NSView {
         glass = nil
         shownTint = nil
         shownLight = nil
+        shownClear = nil
         if #available(macOS 26, *), let g = g as? NSGlassEffectView { g.contentView = nil }
         g.removeFromSuperview()
         content.frame = bounds
