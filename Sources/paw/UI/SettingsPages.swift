@@ -331,6 +331,8 @@ enum SettingsCatalog {
                   "focus stack.next/prev go from the last window to the first; off: they stop."),
                 f(\.focus.wrapWorkspaces, "focus.wrapWorkspaces", "Workspaces wrap around", .toggle,
                   "workspace next/prev go from the last workspace to the first; off: they stop at either end."),
+                f(\.focus.floatsOnTop, "focus.floatsOnTop", "Floating windows on top", .toggle,
+                  "Floating windows stay in front of tiled ones. With the Dock helper loaded the window server keeps them there; otherwise paw raises them again when a tile takes focus."),
             ]),
         ])
     }
@@ -474,6 +476,8 @@ enum SettingsCatalog {
                 f(\.appearance.appIconSize, "appearance.appIconSize", "Icon size", .number(min: 6, max: 48, unit: "pt")),
             ]),
             SettingsSection("Shape", [
+                f(\.appearance.glass, "appearance.glass", "Liquid Glass", .toggle,
+                  "macOS 26 and later: islands on glass, tinted with the island colour; border and shadow come from the glass. Off: the theme's flat fill. Themes keep it."),
                 f(\.appearance.radius, "appearance.radius", "Island radius", .number(min: 0, max: 40, unit: "pt")),
                 f(\.appearance.cellRadius, "appearance.cellRadius", "Cell radius", .number(min: 0, max: 40, unit: "pt"),
                   "The highlighted window in a stack."),

@@ -42,6 +42,7 @@ final class WorkspaceHUD {
         let wasVisible = panel.isVisible && panel.alphaValue > 0.4
         panel.show(root, at: frame)
         if !wasVisible {
+            if style.glass { Glass.settle(root) }
             panel.alphaValue = 0
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.1
@@ -170,6 +171,7 @@ final class MoveHUD {
         let root = Self.layer(prev: prev, current: current, next: next, side: side, icons: icons, config: config, style: style, scale: scale)
         let width = root.bounds.width, h = root.bounds.height
         let ax = CGRect(x: (area.midX - width / 2).rounded(), y: area.minY + 10, width: width, height: h)
+        if style.glass, !panel.isVisible || panel.alphaValue < 0.4 { Glass.settle(root) }
         panel.show(root, at: ScreenGeometry.cocoa(fromAX: ax, primaryHeight: NSScreen.screens.first?.frame.height ?? 0))
         panel.alphaValue = 0.95
         shownAt = Date()
