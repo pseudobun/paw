@@ -167,14 +167,10 @@ final class TitlePanel: NSPanel {
     /// Holds the island's layers, on glass when the island is a glass one.
     let host = GlassHost(content: GlassHost.layerView())
 
-    func show(_ l: CALayer, at cocoaFrame: CGRect) {
-        setFrame(cocoaFrame, display: false)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        l.frame = CGRect(origin: .zero, size: cocoaFrame.size)
-        host.content.layer?.sublayers = [l]
-        host.adopt(l)
-        CATransaction.commit()
-        orderFrontRegardless()
+    private let motion = IslandMotion()
+
+    /// Shows the island `l` at `cocoaFrame`; `transition` says how it gets there from the one shown.
+    func show(_ l: CALayer, at cocoaFrame: CGRect, _ transition: IslandMotion.Transition = .none) {
+        motion.show(l, at: cocoaFrame, in: self, host: host, transition)
     }
 }
