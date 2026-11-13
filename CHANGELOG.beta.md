@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.33](https://github.com/pseudobun/paw/compare/v0.1.0-beta.32...v0.1.0-beta.33) (2026-11-13)
+
+
+### Bug Fixes
+
+* **config:** apply every setting on live reload and surface broken configs ([#108](https://github.com/pseudobun/paw/issues/108)) ([7e16c8b](https://github.com/pseudobun/paw/commit/7e16c8b530ca6f4ba896e783ceb85a6ed57824e1))
+
 ## [0.1.0-beta.32](https://github.com/pseudobun/paw/compare/v0.1.0-beta.31...v0.1.0-beta.32) (2026-11-13)
 
 

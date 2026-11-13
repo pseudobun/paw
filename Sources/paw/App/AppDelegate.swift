@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var ipc: IPC.Server?
     private var ipcRetry: Timer?
+    /// The config error the menu bar icon and the HUD last showed.
+    private var shownError: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if isAlreadyRunning() {
@@ -20,7 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Theme.registerFonts() // bundled fonts, for themes' indicators and the settings window
         settings.start()
         wm = WindowManager(settings: settings)
-        settings.onChange = { [weak self] in self?.apply() }
+        settings.onChange = { [weak self] in self?.apply(configChanged: $0) }
         let server = IPC.Server(handler: { [weak self] text in self?.command(text) ?? ["error": "paw is shutting down"] },
                                 subscribe: { [weak self] fd, text in
             guard let self, let wm = self.wm else { close(fd); return }
@@ -119,16 +121,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func apply() {
-        wm.configChanged()
-        wm.publish("configReloaded", ["error": settings.error ?? "", "warnings": settings.warnings])
-        if let e = settings.error { Log.app.error("config: \(e, privacy: .public)") }
-        for w in settings.warnings { Log.app.warning("config: \(w, privacy: .public)") }
-        updateLoginItem(settings.config.openAtLogin)
-        MainActor.assumeIsolated {
-            Updater.shared.apply(settings.config.updates)
-            SettingsWindowController.shared.configDidChange()
+    /// `configChanged` false: only the error or warnings are new (a broken save keeps the config
+    /// in effect, so there is nothing to apply), but they still show.
+    private func apply(configChanged: Bool) {
+        if configChanged {
+            wm.configChanged()
+            updateLoginItem(settings.config.openAtLogin)
+            MainActor.assumeIsolated { Updater.shared.apply(settings.config.updates) }
         }
+        wm.publish("configReloaded", ["error": settings.error ?? "", "warnings": settings.warnings])
+        for w in settings.warnings { Log.app.warning("config: \(w, privacy: .public)") }
+        showConfigError()
+        MainActor.assumeIsolated { SettingsWindowController.shared.configDidChange() }
+    }
+
+    /// A broken config is easy to miss (paw keeps the last good one): the HUD says so once, and
+    /// the menu bar icon turns orange until the file reads again.
+    private func showConfigError() {
+        let error = settings.error
+        defer { shownError = error; updateStatusBadge() }
+        guard error != shownError else { return }
+        if let error {
+            showNote("Config not loaded: \(error.prefix(120))", duration: 6)
+        } else if shownError != nil {
+            showNote("Config loaded", duration: 1.5)
+        }
+    }
+
+    private func updateStatusBadge() {
+        guard let button = statusItem?.button else { return }
+        button.contentTintColor = settings.error == nil ? nil : .systemOrange
+        button.toolTip = settings.error.map { "paw: the config can't be read (the last good one stays): \($0)" }
     }
 
     // MARK: - Menu bar
@@ -143,6 +166,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.delegate = self
         item.menu = menu
         statusItem = item
+        shownError = settings.error
+        updateStatusBadge()
     }
 
     /// Resources/menubar.svg as an 18 pt template image (light facets → opaque, like hop's bunny).
@@ -204,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func checkForUpdates() { MainActor.assumeIsolated { Updater.shared.installNow() } }
     @objc private func initiateCurrent() { wm.run([.initiate(nil)]) }
-    @objc private func reloadConfig() { settings.load() }
+    @objc private func reloadConfig() { settings.load(force: true) }
     @objc private func openConfig() { NSWorkspace.shared.open(settings.url) }
     @objc private func quit() { NSApp.terminate(nil) }
 
@@ -237,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "hide": wm.indicators.setHidden(true)
         case "show": wm.indicators.setHidden(false)
         case "reload":
-            settings.load()
+            settings.load(force: true)
             return ["error": settings.error ?? "", "warnings": settings.warnings.joined(separator: "\n")]
         case "quit":
             // Answer first; terminating here would close the connection without a reply.
@@ -283,6 +308,13 @@ extension AppDelegate: NSMenuDelegate {
     /// Built when it opens, so setups and the active one are current.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        if let error = settings.error {
+            let item = NSMenuItem(title: "Config Error: \(error.prefix(80))", action: #selector(openConfig), keyEquivalent: "")
+            item.target = self
+            item.toolTip = "paw keeps the last good config until the file reads again"
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
         let setups = settings.config.setups.keys.sorted()
         if !setups.isEmpty {
             menu.addItem(NSMenuItem(title: "Set Workspace", action: nil, keyEquivalent: ""))

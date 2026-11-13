@@ -59,6 +59,39 @@ struct ConfigTests {
         #expect(keys == ["appearance.colors.gold", "indicator.sid", "yabi"])
     }
 
+    @Test func nestedUnknownKeysAreReported() {
+        let text = """
+        {
+          layout: { padding: { top: 1, lef: 2 } },
+          rules: [{ app: "Finder", flaot: true }, { app: "Zed", workspace: "2" }],
+          workspaces: { code: { layuot: "bsp", tiles: [{ apps: ["Zed"], szie: 2 }] } },
+          setups: { home: { displys: ["DELL"], workspaces: { web: { tiles: [{ app: ["Brave"] }] } } } },
+          mouse: { gestures: [{ button: "middle", direction: "left", comand: "focus west" }] },
+        }
+        """
+        #expect(ConfigLoader.unknownKeys(Data(text.utf8)) == [
+            "layout.padding.lef", "mouse.gestures[0].comand", "rules[0].flaot",
+            "workspaces.code.layuot", "workspaces.code.tiles[0].szie",
+            "setups.home.displys", "setups.home.workspaces.web.tiles[0].app",
+        ])
+    }
+
+    /// Rules and gestures decode with synthesized keys; the lists unknownKeys checks must match them.
+    @Test func ruleAndGestureKeyListsMatchTheirFields() throws {
+        let rule = PawConfig.Rule(app: "A", title: "t", unlessTitle: "u", manage: true, float: true, workspace: "1")
+        let ruleKeys = try JSONSerialization.jsonObject(with: JSONEncoder().encode(rule)) as? [String: Any]
+        #expect(Set(ruleKeys?.keys.map { $0 } ?? []) == ConfigLoader.ruleKeys)
+        let gesture = PawConfig.Gesture(button: "middle", direction: "left", command: "balance")
+        let gestureKeys = try JSONSerialization.jsonObject(with: JSONEncoder().encode(gesture)) as? [String: Any]
+        #expect(Set(gestureKeys?.keys.map { $0 } ?? []) == ConfigLoader.gestureKeys)
+    }
+
+    @Test func modeBindingsAreChecked() {
+        var c = PawConfig()
+        c.modes = ["resize": ["escap": "mode exit", "h": "fly away", "escape": "mode exit"]]
+        #expect(ConfigLoader.warnings(c).count == 2, "\(ConfigLoader.warnings(c))")
+    }
+
     @Test func templateParsesToDefaults() throws {
         #expect(try load(ConfigTemplate.text) == PawConfig())
         #expect(ConfigLoader.unknownKeys(Data(ConfigTemplate.text.utf8)).isEmpty)
