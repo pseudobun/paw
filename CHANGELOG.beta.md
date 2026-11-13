@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.32](https://github.com/pseudobun/paw/compare/v0.1.0-beta.31...v0.1.0-beta.32) (2026-11-13)
+
+
+### Bug Fixes
+
+* **hud:** keep island content centred while a glass island glides ([20c89e4](https://github.com/pseudobun/paw/commit/20c89e4a8f26b42537b1f9f86fd372575fafa511))
+
 ## [0.1.0-beta.31](https://github.com/pseudobun/paw/compare/v0.1.0-beta.30...v0.1.0-beta.31) (2026-11-13)
 
 
