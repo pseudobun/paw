@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.28](https://github.com/pseudobun/paw/compare/v0.1.0-beta.27...v0.1.0-beta.28) (2026-11-13)
+
+
+### Features
+
+* **ui:** add liquid glass design ([#93](https://github.com/pseudobun/paw/issues/93)) ([56e8bf8](https://github.com/pseudobun/paw/commit/56e8bf8313aa728ef16d2d1189fed09571a2437e))
+
 ## [0.1.0-beta.27](https://github.com/pseudobun/paw/compare/v0.1.0-beta.26...v0.1.0-beta.27) (2026-11-12)
 
 
