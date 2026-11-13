@@ -54,6 +54,13 @@ struct RuleEffectsTests {
         #expect(c.ruleWorkspace(app: "Mail", title: "Draft") == nil)
     }
 
+    @Test func manageTrueClaimsSelfLayeredPanels() {
+        let c = config([.init(app: "Ghostty", manage: true), .init(app: "Raycast", manage: false)])
+        #expect(c.forcesManage(app: "Ghostty", title: ""))
+        #expect(!c.forcesManage(app: "Raycast", title: ""))
+        #expect(!c.forcesManage(app: "Zed", title: ""))
+    }
+
     @Test func presetsComeFromTheActiveSetup() {
         var c = PawConfig()
         c.workspaces = ["code": .init(tiles: [.init(apps: ["Zed"])])]

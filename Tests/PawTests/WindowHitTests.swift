@@ -12,6 +12,11 @@ struct WindowHitTests {
         #expect(!WindowManager.isMenuLayer(Int(CGWindowLevelForKey(.modalPanelWindow))))
     }
 
+    @Test func selfFloatingPanelsAreLeftAlone() {
+        #expect(WindowManager.isSelfLayeredPanel(Int(CGWindowLevelForKey(.floatingWindow))))
+        #expect(!WindowManager.isSelfLayeredPanel(Int(CGWindowLevelForKey(.normalWindow))))
+    }
+
     @MainActor @Test func liveWindowsKeepsOnlyWindowsTheServerHas() {
         _ = NSApplication.shared
         let window = NSWindow(contentRect: CGRect(x: -2000, y: -2000, width: 50, height: 50), styleMask: .borderless,

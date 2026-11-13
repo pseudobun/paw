@@ -577,12 +577,17 @@ final class WindowManager {
         guard ["AXStandardWindow", "AXDialog", "AXFloatingWindow"].contains(subrole) else { return nil }
         // Qt draws its menus as floating windows at the menu level: managing one would focus it
         // and, with mouseFollowsFocus, warp the pointer onto an item that opens the next submenu.
-        if let layer = Self.layer(of: id), Self.isMenuLayer(layer) { return nil }
+        let layer = Self.layer(of: id)
+        if let layer, Self.isMenuLayer(layer) { return nil }
         guard el.bool(kAXMinimizedAttribute) != true, el.bool("AXFullScreen") != true else { return nil }
         let appName = NSRunningApplication(processIdentifier: pid)?.localizedName ?? ""
         let title = el.string(kAXTitleAttribute) ?? ""
         if config.ignores(app: appName, title: title) { return nil }
         let ruleWorkspace = config.ruleWorkspace(app: appName, title: title)
+        // A panel that floats itself above normal windows (Ghostty's quick terminal) places
+        // itself: managing it would re-centre it off its edge. A manage: true rule still takes it.
+        if subrole == "AXFloatingWindow", let layer, Self.isSelfLayeredPanel(layer),
+           !config.forcesManage(app: appName, title: title) { return nil }
         let frame = el.frame ?? .zero
         let w = Window(id: id, element: el, pid: pid, app: appName, frame: frame)
         windows[id] = w
@@ -1656,6 +1661,11 @@ final class WindowManager {
     static func layer(of id: WindowID) -> Int? {
         let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]]
         return list?.first?[kCGWindowLayer as String] as? Int
+    }
+
+    /// Above normal windows: a panel its app keeps floating itself.
+    static func isSelfLayeredPanel(_ layer: Int) -> Bool {
+        layer > Int(normalLevel)
     }
 
     /// Menus, tooltips and other pop-ups sit at or above the pop-up menu level.
