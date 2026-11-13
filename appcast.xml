@@ -6,6 +6,18 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.32</title>
+      <pubDate>Fri, 13 Nov 2026 16:47:20 +0000</pubDate>
+      <sparkle:version>162</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.32</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
+<ul>
+<li><b>hud:</b> keep island content centred while a glass island glides (<a href="https://github.com/pseudobun/paw/commit/20c89e4a8f26b42537b1f9f86fd372575fafa511">20c89e4</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.32">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.32/paw-0.1.0-beta.32-macos.zip" type="application/octet-stream" sparkle:edSignature="a+qa+/NAHyOPcEv3vbfy0RQbnOLaB6i4EItTz9F9jos9HSHQsvUseWD0b0l4SdNgMDFuNyzW55QqSPUC9xWeAw==" length="3717957"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.31</title>
       <pubDate>Fri, 13 Nov 2026 16:18:25 +0000</pubDate>
       <sparkle:version>159</sparkle:version>
@@ -263,18 +275,6 @@
 <li>keep the main thread off slow apps and cut redraw work (<a href="https://github.com/pseudobun/paw/issues/52">#52</a>) (<a href="https://github.com/pseudobun/paw/commit/8b0002483091cbd485fb25157d0006ddbea4dd28">8b00024</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.13">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.13/paw-0.1.0-beta.13-macos.zip" type="application/octet-stream" sparkle:edSignature="4rVHyY5zzEB1XbjuntiTJmk5cc0IEQ6V4T4Vt2+RMywii9vCaApz4h8TbNRgOt0Fk524l/kG5/Q/qhCcXWTKDQ==" length="3580845"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.12</title>
-      <pubDate>Wed, 11 Nov 2026 12:11:09 +0000</pubDate>
-      <sparkle:version>93</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.12</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
-<ul>
-<li>switch workspaces faster and show the neighbouring workspaces (<a href="https://github.com/pseudobun/paw/issues/44">#44</a>) (<a href="https://github.com/pseudobun/paw/commit/4caac46e426b83da0ed96ce7a6259fe67d60f352">4caac46</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.12">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.12/paw-0.1.0-beta.12-macos.zip" type="application/octet-stream" sparkle:edSignature="2VFV8xGvNoMCIjStTsF6JQuRrIb+FJKo/ppTn/xP13c59PYqKX8wqqOALbW00u+8b+Pt7lKzgPCZBta2CdFPDA==" length="3342664"/>
     </item>
   </channel>
 </rss>
