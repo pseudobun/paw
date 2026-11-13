@@ -14,6 +14,8 @@ final class OverviewController {
     private weak var wm: WindowManager?
     private(set) var isOpen = false
     private var panels: [OverviewPanel] = []
+    /// Only fully hidden panels: an earlier close must never order out a reopened panel.
+    private var cachedPanels: [OverviewPanel] = []
     private(set) var model: [WindowManager.OverviewWorkspace] = []
     /// The workspace each display's stage shows.
     private(set) var stageWorkspace: [Int: String] = [:]
@@ -99,6 +101,8 @@ final class OverviewController {
         watchKeys()
         wm.hud.hide()
         query = ""
+        drag = nil
+        cardDrag = nil
         keyDisplay = wm.focusedDisplayIndex
         activeDisplay = keyDisplay
         reloadModel()
@@ -106,10 +110,18 @@ final class OverviewController {
         for ws in model where ws.visible { stageWorkspace[ws.display] = ws.name }
         selected = model.first(where: { $0.focused })?.windows.first(where: { $0.focused })?.id
             ?? model.first(where: { $0.focused })?.windows.first?.id
-        panels.forEach { $0.orderOut(nil) }
+        let environment = OverviewPanel.Environment(config: wm.config, style: style.a,
+            appearance: NSApp.effectiveAppearance.name.rawValue, keyDisplay: keyDisplay,
+            screens: NSScreen.screens.enumerated().map { i, s in
+                .init(id: (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? UInt32(i),
+                      frame: s.frame, visibleFrame: s.visibleFrame, scale: s.backingScaleFactor)
+            })
+        let cached = cachedPanels
+        cachedPanels = []
         panels = (0..<wm.displayCount).compactMap { i in
             guard let frame = wm.displayFrame(i) else { return nil }
-            let p = OverviewPanel(controller: self, display: i)
+            let p = cached.first { $0.display == i && $0.environment == environment }
+                ?? OverviewPanel(controller: self, display: i, environment: environment)
             p.setFrame(ScreenGeometry.cocoa(fromAX: frame, primaryHeight: primaryHeight), display: false)
             p.alphaValue = 0
             return p
@@ -143,8 +155,11 @@ final class OverviewController {
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
             for p in closing { p.animator().alphaValue = 0 }
-        }, completionHandler: {
+        }, completionHandler: { [weak self] in
             for p in closing { p.orderOut(nil) }
+            guard let self else { return }
+            for p in closing { p.view.resetForReuse() }
+            cachedPanels = closing
         })
         if let then {
             then()
@@ -466,10 +481,21 @@ final class OverviewController {
         // Pictures of windows that are gone go with them.
         thumbnails = thumbnails.filter { ids.contains($0.key) }
         captureTask = Task { @MainActor [weak self] in
-            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else { return }
+            let measurement = Performance.begin("capture")
+            var attempted = 0, succeeded = 0, delivered = 0, enumerated = 0
+            defer {
+                Performance.end(measurement, values: ["expected": ids.count, "attempted": attempted,
+                    "succeeded": succeeded, "delivered": delivered, "enumerated": enumerated])
+            }
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else {
+                Performance.count("capture_enumeration_failures")
+                return
+            }
+            enumerated = 1
             var pending = 0
             for w in content.windows where ids.contains(w.windowID) {
                 if Task.isCancelled { return }
+                attempted += 1
                 let cfg = SCStreamConfiguration()
                 let scale = min(1, Self.thumbnailWidth / max(1, w.frame.width))
                 cfg.width = min(8192, max(32, Int(saturating: w.frame.width * scale * 2)))
@@ -478,8 +504,13 @@ final class OverviewController {
                 cfg.ignoreShadowsSingleWindow = true
                 let filter = SCContentFilter(desktopIndependentWindow: w)
                 guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg),
-                      !Task.isCancelled else { continue }
+                      !Task.isCancelled else { Performance.count("capture_failures"); continue }
+                succeeded += 1
                 self?.thumbnails[w.windowID] = image
+                if self != nil {
+                    delivered += 1
+                    if delivered == 1 { Performance.event("First fresh thumbnail") }
+                }
                 // A redraw every few pictures, not after each one.
                 pending += 1
                 if pending >= 4 { pending = 0; self?.redraw() }
@@ -492,11 +523,28 @@ final class OverviewController {
 // MARK: - Panel
 
 final class OverviewPanel: NSPanel {
+    struct Environment: Equatable {
+        struct Screen: Equatable {
+            var id: UInt32
+            var frame: CGRect
+            var visibleFrame: CGRect
+            var scale: CGFloat
+        }
+
+        var config: PawConfig
+        var style: PawConfig.Appearance
+        var appearance: String
+        var keyDisplay: Int
+        var screens: [Screen]
+    }
+
     let display: Int
     let view: OverviewView
+    let environment: Environment
 
-    init(controller: OverviewController, display: Int) {
+    init(controller: OverviewController, display: Int, environment: Environment) {
         self.display = display
+        self.environment = environment
         view = OverviewView(controller: controller, display: display)
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
@@ -649,6 +697,34 @@ final class OverviewView: NSView {
     }
 
     func setSearchText(_ s: String) { searchField?.stringValue = s }
+
+    /// Runs after orderOut, so resetting the field cannot change the closing fade.
+    func resetForReuse() {
+        // A newer overview may already be open; ending an IME session must not change its query.
+        let delegate = searchField?.delegate
+        searchField?.delegate = nil
+        defer { searchField?.delegate = delegate }
+        let editor = window?.fieldEditor(false, for: searchField) as? NSTextView
+        let undoManager = editor?.undoManager ?? window?.undoManager
+        editor?.unmarkText()
+        editor?.inputContext?.discardMarkedText()
+        _ = searchField?.abortEditing()
+        window?.makeFirstResponder(nil)
+        editor?.string = ""
+        editor?.setSelectedRange(NSRange(location: 0, length: 0))
+        undoManager?.removeAllActions()
+        searchField?.stringValue = ""
+        hits = []
+        hovered = nil
+        pressed = nil
+        band = nil
+        layoutCache = nil
+        scrollX = 0
+        revealPending = true
+        layer?.removeAnimation(forKey: "in")
+        updateTrackingAreas()
+        needsDisplay = true
+    }
 
     required init?(coder: NSCoder) { fatalError() }
 

@@ -14,6 +14,7 @@ final class Animator {
     private var moves: [WindowID: Move] = [:]
     private var start: CFTimeInterval = 0
     private var timer: Timer?
+    private var measurement: Performance.Interval?
     var settings: () -> PawConfig.Animation = { .init() }
     /// Called when a run finishes (indicators redraw then).
     var onFinish: (() -> Void)?
@@ -24,6 +25,7 @@ final class Animator {
         let s = settings()
         let changed = targets.filter { $0.0.frame.integral != $0.1.integral || moves[$0.0.id] != nil }
         guard s.enabled, s.durationMs > 0, changed.count <= max(1, s.maxWindows), !changed.isEmpty else {
+            Performance.count("animation_direct_targets", by: targets.count)
             for (w, r) in targets {
                 moves[w.id] = nil
                 if w.frame.integral != r.integral { w.setFrame(r) }
@@ -33,6 +35,7 @@ final class Animator {
             return
         }
         let now = CACurrentMediaTime()
+        Performance.count("animated_targets", by: changed.count)
         // Continue moves still running from their current point.
         let progress = curvePosition(now)
         for (w, r) in changed {
@@ -49,6 +52,7 @@ final class Animator {
         }
         start = now
         if timer == nil {
+            measurement = Performance.begin("animation")
             let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.tick() }
             RunLoop.main.add(t, forMode: .common)
             timer = t
@@ -69,6 +73,7 @@ final class Animator {
     }
 
     private func step() {
+        Performance.count("animation_ticks")
         let s = settings()
         let now = CACurrentMediaTime()
         let t = s.durationMs > 0 ? (now - start) * 1000 / s.durationMs : 1
@@ -95,5 +100,7 @@ final class Animator {
     func stop() {
         timer?.invalidate()
         timer = nil
+        Performance.end(measurement)
+        measurement = nil
     }
 }
