@@ -2194,7 +2194,7 @@ final class WindowManager {
         case .recover:
             recover()
         case .reload:
-            settings.load()
+            settings.load(force: true)
         }
     }
 

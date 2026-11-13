@@ -24,13 +24,15 @@ final class EdgeMarkers {
     var onClick: ((String) -> Void)?
     private var panels: [String: EdgePanel] = [:]
     private var shown: [String: Marker] = [:]
-    private var styleKey: (PawConfig.Appearance, PawConfig.Icons)?
+    /// What the islands were drawn with: a change redraws them all (the icon map counts, as its
+    /// own file can change while the config stays the same).
+    private var styleKey: (PawConfig.Appearance, PawConfig.Icons, AppIconMap)?
 
     /// `steps`: per display, which way its workspace just went (+1 next, -1 previous), so the
     /// neighbours' content slides along with it.
     func apply(_ markers: [Marker], steps: [CGDirectDisplayID: Int] = [:], icons: AppIconMap, config: PawConfig) {
-        let restyle = styleKey.map { $0.0 != config.appearance || $0.1 != config.icons } ?? true
-        styleKey = (config.appearance, config.icons)
+        let restyle = styleKey.map { $0.0 != config.appearance || $0.1 != config.icons || $0.2 != icons } ?? true
+        styleKey = (config.appearance, config.icons, icons)
         var keep = Set<String>()
         for m in markers {
             let k = "\(m.display)-\(m.left ? "l" : "r")"
