@@ -6,6 +6,18 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.30</title>
+      <pubDate>Fri, 13 Nov 2026 13:57:39 +0000</pubDate>
+      <sparkle:version>156</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.30</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Performance</h3>
+<ul>
+<li><b>wm:</b> read live window numbers without bridging descriptions (<a href="https://github.com/pseudobun/paw/issues/96">#96</a>) (<a href="https://github.com/pseudobun/paw/commit/2d08fa8c47a74b809ec8d51efad09611c9b486c7">2d08fa8</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.30">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.30/paw-0.1.0-beta.30-macos.zip" type="application/octet-stream" sparkle:edSignature="s+0i5DumVYrXm/Vn3BjgFT+bGCnniCDZax6ptUoKA6dXN2oBoR2OschpGnd4UOHB5R+gRJKZa7dHy8IKaZYkDw==" length="3705162"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.29</title>
       <pubDate>Fri, 13 Nov 2026 11:09:09 +0000</pubDate>
       <sparkle:version>154</sparkle:version>
@@ -263,18 +275,6 @@
 <li><b>zoom:</b> stop windows gliding across neighbouring displays (<a href="https://github.com/pseudobun/paw/issues/42">#42</a>) (<a href="https://github.com/pseudobun/paw/commit/5b1b548cc08414f0ac536aba2f209c1fabf6c1ad">5b1b548</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.11">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.11/paw-0.1.0-beta.11-macos.zip" type="application/octet-stream" sparkle:edSignature="GAWgPkCcmhAoPsga4GHlSaPQIpGSybSwRE4DpeTVE4FD9Lzyz6h+aOxBVfwnZVCmVyscuR8KoLfCiVCaNHVpDg==" length="3259829"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.10</title>
-      <pubDate>Wed, 11 Nov 2026 08:51:28 +0000</pubDate>
-      <sparkle:version>89</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.10</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
-<ul>
-<li><b>zoom:</b> move focus to the next display at the edge of a zoom (<a href="https://github.com/pseudobun/paw/issues/40">#40</a>) (<a href="https://github.com/pseudobun/paw/commit/fdfd44c7ecdada8fa4516ea3fff6056cb6d7beeb">fdfd44c</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.10">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.10/paw-0.1.0-beta.10-macos.zip" type="application/octet-stream" sparkle:edSignature="F6dZ1nGem9sFEgaPFXdlA5+WtMgHhQPsjgWes695LAoS5PMufLj+G0pdJxsglqyEyqNB95z37fb+gXaqBQwWCg==" length="3258830"/>
     </item>
   </channel>
 </rss>
