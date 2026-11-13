@@ -159,6 +159,33 @@ p90 of 50 runs after 10 warm-up runs, process start included; starting `/usr/bin
 paw managed 7 workspaces with one window during the run, so these are the floor. The window
 management numbers above need `just bench` against paw Dev with windows on two workspaces.
 
+## Liquid Glass
+
+Measured on 2026-11-13 on olympus (Mac mini, Apple M4 Pro, macOS 27.2): the release-configuration
+dev build (`PAW_DEV=1 scripts/bundle.sh`), `appearance.glass` on and off, paw restarted between
+runs, on and off interleaved. The screen was locked and paw managed no windows, so the panels
+shown were the workspace HUD and an edge marker.
+
+| | glass on | glass off |
+|---|---|---|
+| Idle CPU (120 s) | 0.011 % | 0.009 % |
+| Wakeups | 4.9 per 10 s | 5.3 per 10 s |
+| Footprint at rest | 16.6 MB | 14.2 MB |
+| paw CPU per workspace switch (HUD shown), median of 12 × 200 | 4.0 ms | 4.3 ms |
+| `paw workspace` round trip, CLI start included, median of 12 × 200 | 14.0 ms | 15.0 ms |
+
+- The switch numbers spread by ±0.6 ms from run to run with either setting: no difference
+  shows. The main thread's time in a switch goes to ordering the HUD in
+  (`SLSWindowIsOrderedIn`), the same with and without glass.
+- Glass costs about 2.5 MB once, as soon as the first glass island shows (AppKit's glass
+  machinery: dirty `__DATA` and malloc). It doesn't grow with more islands or switches.
+- The window server draws the glass. paw sets its shape, tint and light or dark only when they
+  change and draws no frames for it; the islands' content rises into place with one Core
+  Animation group (240 ms, skipped with Reduce Motion).
+
+To measure again: `appearance.glass` in a copy of the config, `PAW_CONFIG=<copy>` for the dev
+build, and the `proc_pid_rusage` counters above around 100 × `paw workspace 2; paw workspace 1`.
+
 ## Known costs
 
 - Reading from an app (titles, frames, its windows) is still synchronous. A slow app costs up

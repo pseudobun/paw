@@ -13,12 +13,21 @@ struct Style {
     let bold: NSFont
     /// nil when sketchybar-app-font isn't installed: cells then show the app's initial.
     let appFont: NSFont?
-    var colors: PawConfig.Colors { a.colors }
+    /// Liquid Glass islands: `appearance.glass` on macOS 26 and later.
+    let glass: Bool
+    /// The theme's colours; on glass the highlighted cell is a veil of the text colour instead of
+    /// a solid fill, so the glass shows through it.
+    let colors: PawConfig.Colors
     /// Height of title islands (sketchybar's: 28).
     var islandHeight: CGFloat { max(12, a.islandHeight) }
 
-    init(_ a: PawConfig.Appearance) {
+    /// `glass`: nil follows `appearance.glass`; false for drawings glass can't be part of (a PNG).
+    init(_ a: PawConfig.Appearance, glass: Bool? = nil) {
         self.a = a
+        self.glass = (glass ?? a.glass) && Glass.supported
+        var c = a.colors
+        if self.glass { c.islandHi = c.fg.withAlpha(0.14) }
+        colors = c
         font = Self.font(a.font, size: a.fontSize, weight: a.fontWeight)
         bold = Self.font(a.font, size: a.fontSize, weight: a.boldWeight)
         appFont = NSFont(name: a.appFont, size: a.appIconSize)
@@ -68,8 +77,23 @@ struct Style {
         return text(String(app.prefix(1)).uppercased(), color, font: bold)
     }
 
-    /// Island chrome: fill, 1 px border, radius, soft shadow.
+    /// A stack cell's fill: the window on top, or a hovered one.
+    func cellFill(active: Bool) -> ARGB {
+        active ? colors.islandHi : colors.islandHi.withAlpha(glass ? colors.islandHi.alpha * 0.5 : 0.5)
+    }
+
+    /// Island chrome: fill, 1 px border, radius, soft shadow. On glass: only the shape; the
+    /// panel's `GlassHost` draws the glass, tinted with the fill.
     func decorate(_ l: CALayer, radius: Double, fill: ARGB? = nil, border: ARGB? = nil) {
+        if glass {
+            Glass.mark(l, fill: fill ?? colors.island)
+            l.backgroundColor = nil
+            l.borderWidth = 0
+            l.shadowOpacity = 0
+            l.cornerRadius = radius
+            l.cornerCurve = .continuous
+            return
+        }
         l.backgroundColor = (fill ?? colors.island).cg
         l.borderColor = (border ?? colors.border).cg
         l.borderWidth = a.borderWidth
