@@ -32,8 +32,8 @@ final class IslandMotion {
     /// Where the panel is headed (it may still be gliding there).
     private var target: CGRect?
     private var generation = 0
-    /// The panel's frame is animating (a glass glide).
-    private var framing = false
+    /// Steps the panel's frame through a glass glide.
+    private var ticker: Timer?
 
     private static var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
@@ -68,15 +68,11 @@ final class IslandMotion {
         for layer in [l, content] { layer.actions = ["position": NSNull(), "bounds": NSNull(), "frame": NSNull()] }
 
         guard glide else {
-            if framing {
-                // Stop the glide still under way, or it would carry on to its old place.
-                framing = false
-                NSAnimationContext.runAnimationGroup { ctx in
-                    ctx.duration = 0
-                    panel.animator().setFrame(frame, display: false)
-                }
-            }
+            // Stop a glide still under way, or it would carry on to its old place.
+            ticker?.invalidate()
+            ticker = nil
             panel.setFrame(frame, display: false)
+            fit(host)
             l.frame = CGRect(origin: .zero, size: frame.size)
             content.frame = l.frame
             root.sublayers = [l, content]
@@ -93,18 +89,24 @@ final class IslandMotion {
             return
         }
 
+        // Glass: the panel's frame is stepped to the new one; the glass fills it, and the rows are
+        // put back in its middle on every step (the glass doesn't resize its content in between).
+        let start = panel.frame
+        func place(_ size: CGSize) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            fit(host)
+            let mid = CGPoint(x: size.width / 2, y: size.height / 2)
+            l.frame = CGRect(origin: .zero, size: size)
+            content.position = mid
+            oldRows?.position = mid
+            CATransaction.commit()
+        }
         if glass {
-            // The panel's frame animates; the glass fills it, the rows stay centred in it.
-            let now = panel.frame.size
-            l.frame = CGRect(origin: .zero, size: now)
-            l.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
             content.bounds = CGRect(origin: .zero, size: frame.size)
-            content.position = CGPoint(x: now.width / 2, y: now.height / 2)
-            let centred: CAAutoresizingMask = [.layerMinXMargin, .layerMaxXMargin, .layerMinYMargin, .layerMaxYMargin]
-            content.autoresizingMask = centred
-            oldRows?.autoresizingMask = centred
             root.sublayers = [l, oldRows, content].compactMap { $0 }
             host.adopt(l)
+            place(start.size)
         } else {
             // Grow the panel to cover both places; the island's own layer glides between them.
             let union = from.union(frame)
@@ -149,12 +151,12 @@ final class IslandMotion {
 
         let settle = { [weak self, weak panel] in
             guard let self, let panel, gen == generation else { return }
-            framing = false
+            ticker?.invalidate()
+            ticker = nil
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             panel.setFrame(frame, display: false)
-            l.autoresizingMask = []
-            content.autoresizingMask = []
+            fit(host)
             l.frame = CGRect(origin: .zero, size: frame.size)
             content.frame = l.frame
             root.sublayers = [l, content]
@@ -163,13 +165,48 @@ final class IslandMotion {
         CATransaction.setCompletionBlock(glass ? nil : settle)
         CATransaction.commit()
         panel.orderFrontRegardless()
-        if glass {
-            framing = true
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = Self.glide
-                ctx.timingFunction = Self.ease
-                panel.animator().setFrame(frame, display: true)
-            }, completionHandler: settle)
+        ticker?.invalidate()
+        ticker = nil
+        guard glass else { return }
+        let began = CACurrentMediaTime()
+        let scale = panel.backingScaleFactor
+        func px(_ v: CGFloat) -> CGFloat { (v * scale).rounded() / scale }
+        let t = Timer(timeInterval: 1 / 120, repeats: true) { [weak self, weak panel] t in
+            guard let self, let panel, gen == generation else { t.invalidate(); return }
+            let p = min(1, (CACurrentMediaTime() - began) / Self.glide)
+            guard p < 1 else { settle(); return }
+            let e = CGFloat(Self.easeOutQuint(p))
+            let r = CGRect(x: px(start.minX + (frame.minX - start.minX) * e),
+                           y: px(start.minY + (frame.minY - start.minY) * e),
+                           width: px(start.width + (frame.width - start.width) * e),
+                           height: px(start.height + (frame.height - start.height) * e))
+            panel.setFrame(r, display: false)
+            place(r.size)
+        }
+        RunLoop.main.add(t, forMode: .common)
+        ticker = t
+    }
+
+    /// The tip bar's curve, cubic-bezier(0.22, 1, 0.36, 1), at `t` (0…1).
+    static func easeOutQuint(_ t: Double) -> Double {
+        // Solve x(s) = t for the curve's parameter s (Newton), then take y(s).
+        func bez(_ s: Double, _ a: Double, _ b: Double) -> Double {
+            3 * a * s * (1 - s) * (1 - s) + 3 * b * s * s * (1 - s) + s * s * s
+        }
+        var s = t
+        for _ in 0..<8 {
+            let x = bez(s, 0.22, 0.36) - t
+            let dx = 3 * 0.22 * (1 - s) * (1 - s) + 6 * (0.36 - 0.22) * s * (1 - s) + 3 * (1 - 0.36) * s * s
+            guard abs(dx) > 1e-6 else { break }
+            s = min(1, max(0, s - x / dx))
+        }
+        return bez(s, 1, 1)
+    }
+
+    /// Makes the island's view fill the panel now, glass or not.
+    private func fit(_ host: GlassHost) {
+        if let parent = host.content.superview, host.content.frame != parent.bounds {
+            host.content.frame = parent.bounds
         }
     }
 
