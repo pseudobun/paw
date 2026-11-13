@@ -102,6 +102,18 @@ class MeasurementTests(unittest.TestCase):
             self.assertEqual(bench.decision(c, pairs)["verdict"], verdict)
         self.assertEqual(bench.decision([10] * 5, [(10, 6)] * 5)["verdict"], "inconclusive")
         with self.assertRaises(RuntimeError): bench.decision(c[:4], [(10, 6)] * 5)
+        self.assertFalse(bench.decision(c, [(10, 6)] * 5)["rerun"])
+        self.assertTrue(bench.decision(c, [(10, 8)] * 5)["rerun"])  # delta 2 vs range 2: one batch could flip it
+        self.assertEqual(bench.decision(c, [(10, 8)] * 5)["delta_percent"], -20)
+
+    def test_time_profile_follows_refs_and_tagged_backtraces(self):
+        xml = '''<?xml version="1.0"?><trace-query-result><node><row><weight id="1">1000000</weight>
+<tagged-backtrace id="2"><backtrace id="3"><frame id="4" name="0x10" addr="0x10"><binary id="5" name="paw" load-addr="0x0" UUID="U"/></frame>
+<frame id="6" name="main"><binary ref="5"/></frame></backtrace></tagged-backtrace></row>
+<row><weight ref="1"/><tagged-backtrace ref="2"/></row></node></trace-query-result>'''
+        rows = list(bench.time_profile(xml))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1], (1000000, [("0x10", "paw", "0x10", "0x0", "U"), ("main", "paw", None, "0x0", "U")]))
 
 
 class ComparisonTests(unittest.TestCase):
@@ -136,6 +148,9 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "improved")
         self.assertEqual(result["work_counts"]["count.ax_write_attempts"], [{"a": 8, "b": 6, "delta": -2}] * 5)
         self.assertEqual(result["work_counts"]["count.ax_coalesced"], [{"a": 0, "b": 2, "delta": 2}] * 5)
+        self.assertEqual(result["secondary"]["cpu_per_second"]["verdict"], "improved")
+        self.assertNotIn("cpu_seconds", result["secondary"])
+        self.assertIn("command.workspace.median_ms", result["secondary"])
 
     def test_pairing_paths_base_and_signature_guards(self):
         path = self.args.session / "session.json"; original = bench.load(path)

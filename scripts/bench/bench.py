@@ -25,6 +25,7 @@ import tarfile
 import tempfile
 import time
 import uuid
+import xml.etree.ElementTree as ET
 from contextlib import ExitStack
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -358,7 +359,11 @@ def decision(calibration, pairs):
     verdict = "inconclusive"
     if noise > 0 and delta < -noise and all(v < 0 for v in differences): verdict = "improved"
     if noise > 0 and delta > noise and all(v > 0 for v in differences): verdict = "regressed"
+    # Within half to one and a half calibration ranges, one noisy batch can flip the verdict either way.
+    margin = abs(delta) / noise if noise > 0 else None
     return {"verdict": verdict, "noise_range": noise, "median_paired_delta": delta,
+            "delta_percent": 100 * delta / statistics.median(calibration) if statistics.median(calibration) else None,
+            "rerun": margin is not None and 0.5 <= margin < 1.5,
             "paired_differences": differences, "rule": "range-and-consistent-pairs-v1"}
 
 
@@ -496,14 +501,79 @@ def compare(args):
         require(len({(directory / b["path"]).resolve() for b in items}) == len(items), "duplicate/aliased batch paths")
     metric = primary(result["signature"]["workload"]["scene"])
     settings = result["signature"]["workload"]
-    calibrated = [read_metrics(args.calibration, b, settings)[metric] for b in calibration["batches"]]
+    calibrated = [read_metrics(args.calibration, b, settings) for b in calibration["batches"]]
     paired = [{b["side"]: read_metrics(args.session, b, settings) for b in result["batches"] if b["index"] == i} for i in range(batches)]
     counts = sorted({k for pair in paired for metrics in pair.values() for k in metrics if k.startswith("count.")})
-    output = {"metric": metric, **decision(calibrated, [(p["a"][metric], p["b"][metric]) for p in paired]),
+    def judge(key):
+        return decision([m[key] for m in calibrated], [(p["a"][key], p["b"][key]) for p in paired])
+    # Same rule for every other measured value, e.g. command latency; these support, never replace, the verdict.
+    others = sorted(k for k in calibrated[0] if not k.startswith("count.") and k not in (metric, "elapsed_seconds")
+                    and all(k in m for m in calibrated) and all(k in p[s] for p in paired for s in "ab"))
+    secondary = {k: {f: d[f] for f in ("verdict", "median_paired_delta", "delta_percent", "noise_range", "rerun")}
+                 for k in others for d in [judge(k)]}
+    output = {"metric": metric, **judge(metric), "secondary": secondary,
               "work_counts": {k: [{"a": p["a"].get(k, 0), "b": p["b"].get(k, 0),
                                    "delta": p["b"].get(k, 0) - p["a"].get(k, 0)} for p in paired] for k in counts},
-              "review": "Explain changed work counts and inspect other metrics before accepting a speedup."}
+              "review": "Explain changed work counts and inspect other metrics before accepting a speedup. Rerun when "
+                        "rerun is true. Secondary verdicts support the primary; asynchronous intervals can move by chance."}
     print(json.dumps(output, indent=2))
+
+
+def time_profile(xml):
+    """(weight ns, frames innermost first as (name, binary, address, load address, UUID)) per time-profile row."""
+    ids = {}
+    def resolve(e):
+        if "ref" in e.attrib: return ids[e.attrib["ref"]]
+        if "id" in e.attrib: ids[e.attrib["id"]] = e
+        for c in e: resolve(c)
+        return e
+    for row in ET.fromstring(xml.encode()).iter("row"):
+        weight = backtrace = None
+        for c in map(resolve, row):
+            if c.tag == "weight": weight = int(c.text or 0)
+            if c.tag == "backtrace": backtrace = c
+            if c.tag == "tagged-backtrace": backtrace = next((resolve(b) for b in c if b.tag == "backtrace"), None)
+        if weight is None or backtrace is None: continue
+        frames = []
+        for f in map(resolve, backtrace):
+            binary = next((resolve(b) for b in f if b.tag == "binary"), None)
+            b = binary.attrib if binary is not None else {}
+            frames.append((f.attrib.get("name", "?"), b.get("name", "?"), f.attrib.get("addr"), b.get("load-addr"), b.get("UUID")))
+        yield weight, frames
+
+
+def profile(args):
+    """Read-only: top paw frames of traces. xctrace symbolicate names only some paw frames; atos names the rest."""
+    dwarf = args.builds.resolve() / label(args.label) / "paw.dSYM/Contents/Resources/DWARF/paw"
+    require(dwarf.exists(), "no dSYM for that label")
+    rows = []
+    for trace in args.traces:
+        rows += time_profile(command("xcrun", "xctrace", "export", "--input", trace, "--xpath",
+                                     '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]'))
+    uuid_ = command("dwarfdump", "--uuid", dwarf).split()[1]
+    traced = {f[4] for _, frames in rows for f in frames if f[1] == "paw"}
+    require(traced == {uuid_}, f"traces are of paw {sorted(map(str, traced))}, the dSYM is {uuid_}: pick the traced build's label")
+    names, loads = {}, {}
+    for _, frames in rows:
+        for name, binary, addr, load, _ in frames:
+            if binary == "paw" and name.startswith("0x") and addr and load: loads.setdefault(load, set()).add(addr)
+    for load, addrs in loads.items():
+        addrs = sorted(addrs)
+        lines = command("atos", "-o", dwarf, "-arch", "arm64", "-l", load, *addrs).splitlines()
+        names.update((a, line.split(" (in paw)")[0]) for a, line in zip(addrs, lines))
+    total, inclusive, self_time = 0, {}, {}
+    for weight, frames in rows:
+        frames = [(names.get(addr, name) if binary == "paw" else name, binary) for name, binary, addr, _, _ in frames]
+        total += weight
+        if frames: self_time[frames[0]] = self_time.get(frames[0], 0) + weight
+        for f in set(frames): inclusive[f] = inclusive.get(f, 0) + weight
+    ms = lambda w: f"{w / 1e6:9.1f} ms"
+    print(f"sampled {ms(total)}\n\ninclusive, paw frames:")
+    for (name, _), w in sorted(((f, w) for f, w in inclusive.items() if f[1] == "paw"), key=lambda x: -x[1])[:args.top]:
+        print(f"{ms(w)}  {name[:160]}")
+    print("\nself, all binaries:")
+    for (name, binary), w in sorted(self_time.items(), key=lambda x: -x[1])[:args.top]:
+        print(f"{ms(w)}  [{binary}] {name[:140]}")
 
 
 def install(artifact, app):
@@ -741,6 +811,9 @@ def main():
     p.add_argument("--settle", type=float, default=3); p.add_argument("--duration", type=float, default=120)
     p = sub.add_parser("compare", help="read-only comparison of unchanged calibration and A/B session")
     p.add_argument("calibration", type=Path); p.add_argument("session", type=Path)
+    p = sub.add_parser("profile", help="read-only: top paw frames of traces, symbolicated with the label's dSYM")
+    p.add_argument("label"); p.add_argument("traces", nargs="+", type=Path); p.add_argument("--top", type=int, default=40)
+    p.add_argument("--builds", type=Path, default=ROOT / "build.noindex/bench/builds")
     p = sub.add_parser("hung", help="LIVE: pauses another app, with an independent resume watchdog")
     p.add_argument("app")
     sub.add_parser("check", help="run controller and pure Swift unit checks; no PAW/fixture launch")
@@ -756,7 +829,7 @@ def main():
             command("xcrun", "swiftc", "-parse-as-library", ROOT / "scripts/bench/BenchSupport.swift", ROOT / "Tests/Performance/BenchChecks.swift", "-o", directory / "checks")
             subprocess.run([str(directory / "checks")], check=True)
             subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "Tests/Performance", "-p", "test_*.py"], cwd=ROOT, check=True)
-    else: {"prepare": build, "grant": grant, "run": run, "compare": compare}[args.action](args)
+    else: {"prepare": build, "grant": grant, "run": run, "compare": compare, "profile": profile}[args.action](args)
 
 
 if __name__ == "__main__":

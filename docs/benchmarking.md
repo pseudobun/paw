@@ -146,9 +146,9 @@ assumed. Inspect known symbols and spans manually. Profiling overhead is part of
 use a separate calibration for traced runs, and inspect plain/instrumented pilots before
 trusting tiny deltas. A successful symbolication command cannot prove every frame resolves. With
 Xcode 26.6 it named only about a fifth of the distinct paw frames (UUIDs matched); the rest stay
-addresses in `profile-symbolicated.trace`. Resolve those from an export with the same dSYM:
-`atos -o <label>/paw.dSYM/Contents/Resources/DWARF/paw -arch arm64 -l <paw load-addr> <addresses>`,
-taking `load-addr` from the `binary name="paw"` element of `xctrace export`.
+addresses in `profile-symbolicated.trace`. `just bench profile <label> <trace>...` exports the
+time profile, names the rest with `atos` and the label's dSYM (refusing a trace of another build),
+and prints the top inclusive paw frames and self time per binary.
 
 Comparison rereads raw data, checks summaries, workload/identity signatures, safe unique batch
 paths and pairing. It requires five calibration batches and five pairs. The primary metric
@@ -156,7 +156,49 @@ is whole-scene CPU for switch/ops, CPU per second for idle, opening command medi
 overview-off, and fresh capture median for overview-on. A result is improved/regressed only
 when every pair agrees and the median paired difference exceeds the full calibration range.
 A zero range or ambiguous result is inconclusive. This is a conservative decision aid,
-not a confidence interval or approval of every resource/behavior trade-off.
+not a confidence interval or approval of every resource/behavior trade-off. `rerun` is true when
+the median difference is between half and one and a half calibration ranges: one noisy batch can
+flip such a verdict, so repeat the session. `secondary` applies the same rule to every other
+measured value (command latency, round trips, peak RSS). It supports the verdict and catches
+trade-offs; it does not replace it, and asynchronous intervals such as queued focus can move by
+chance. A change aimed at latency, not CPU, shows up there.
+
+## Verifying a change
+
+Calibrate once per scene on the base, then compare each candidate on the scenes it affects.
+Builds must come from clean commits that share this controller (`scripts/bench`); labels are
+single-use.
+
+```sh
+U=$(id -un)
+git switch perf/reliable-bench && just bench prepare base
+git switch <candidate-branch>   && just bench prepare cand1
+git switch perf/reliable-bench
+for scene in switch ops idle overview-off; do just bench run base --scene $scene --user "$U"; done   # calibrations
+just bench run base --against base --user "$U"                    # optional A/A: expect inconclusive
+just bench run base --against cand1 --scene idle --user "$U"      # one A/B per affected scene
+just bench compare <calibration dir of that scene> <A/B dir>
+```
+
+Each session prints its directory. Measured durations with defaults (calibration, then A/B): switch
+and overview-off about 4 and 8 minutes, idle 11 and 21, ops 13 and 25. Recalibrate after
+an OS or Xcode update, a display change or a reboot that changes the load.
+
+## Dedicated Mac (for example a Mac mini)
+
+A headless server works if it has a real desktop session; nothing here runs over SSH alone.
+
+- Log in to the GUI as the benchmark user (automatic login is easiest) and keep one display at a
+  fixed resolution: a monitor or an HDMI dummy plug. Without one, macOS may create a different
+  virtual display per session, which changes the environment signature.
+- Disable sleep, display sleep, the screen saver and screen lock (`sudo pmset -a sleep 0
+  displaysleep 0`, plus System Settings → Lock Screen). A locked screen fails geometry checks.
+- Install full Xcode, `just` and Python 3.9+, then do the one-time setup above. `grant` needs one
+  click in System Settings, so do it from the console or Screen Sharing.
+- Start sessions from Terminal inside that desktop session (Screen Sharing, then `tmux` if you want
+  to detach), and close Screen Sharing while measuring: screen encoding costs CPU on the same
+  machine. Check `uptime` first and avoid builds, backups and Spotlight indexing during a session.
+- No daily PAW needs to be installed; `run` reopens only the PAW apps that were running.
 
 Ctrl-C/SIGTERM/SIGHUP enter cleanup; restoration runs in the independent restorer either way.
 Logs and incomplete sessions remain for inspection; comparison refuses them.
