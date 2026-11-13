@@ -120,7 +120,8 @@ Defaults: 10 round trips/open-close cycles, 2-second spacing, 3-second final dra
 idle scene and 5 batches/pairs. `--windows`, `--iterations`, `--pace`, `--settle`, `--duration`,
 `--batches` and `--trace` must match calibration and comparison. Use one display, fixed scaling,
 refresh/appearance and AC power. Sleep is inhibited while recording; a screen saver may still
-interfere. Each batch records the load average before it starts, to explain outliers.
+interfere. Each batch waits until the 1-minute load average is below 4 (failing after 10 minutes)
+and records it, to explain outliers.
 
 ## Results and profiling
 
@@ -211,3 +212,14 @@ diagnostic's watchdog resumes a stopped target after normal exit, SIGINT, SIGHUP
 SIGKILL; a controlled session restores the daily paw Dev (and stops paw Bench) after a startup
 failure, SIGINT, SIGHUP and controller SIGKILL. Pilots, calibration and A/A/A/B results are
 summarized in the pull request that introduced this harness.
+
+## Planned
+
+Tracked here rather than as issues, in order of value:
+
+1. Window lifecycle scene: open/close windows, move a window to another workspace, float, minimize.
+2. `suite`: every calibration and comparison unattended, one markdown report (dedicated Mac).
+3. Estimate noise inside the A/B session too, not only from a calibration run at another time.
+4. A 24-window pilot, then an optional scale run for per-window paths (pruning, layout, borders).
+5. Focus border: time until it lands on the focused window, and check that it does.
+6. Mouse scenes: focus-follows-mouse, drag to swap, drag to resize (posts real cursor events).
