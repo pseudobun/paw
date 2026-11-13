@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.35](https://github.com/pseudobun/paw/compare/v0.1.0-beta.34...v0.1.0-beta.35) (2026-11-13)
+
+
+### Bug Fixes
+
+* **wm:** leave self-floating panels like Ghostty's quick terminal alone ([1e67994](https://github.com/pseudobun/paw/commit/1e67994f25f66b346f5f7f65ff566e64424ec214))
+
 ## [0.1.0-beta.34](https://github.com/pseudobun/paw/compare/v0.1.0-beta.33...v0.1.0-beta.34) (2026-11-13)
 
 
