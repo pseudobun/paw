@@ -7,14 +7,53 @@ final class WorkspaceHUD {
     var style = Style(PawConfig.Appearance())
     private let panel = TitlePanel()
     private var hideWork: DispatchWorkItem?
+    private var layers = LayerCache()
+
+    struct LayerCache {
+        private struct Key: Equatable {
+            let label: String
+            let apps: [String]
+            let appearance: PawConfig.Appearance
+            let font: NSFont
+            let bold: NSFont
+            let appFont: NSFont?
+            let glyphs: [String]
+            let colors: [ARGB]
+            let scale: CGFloat
+        }
+
+        private var entries: [(key: Key, layer: CALayer)] = []
+
+        mutating func layer(label: String, apps: [String], icons: AppIconMap, config: PawConfig, style: Style, scale: CGFloat) -> CALayer {
+            // shortcut: image fallbacks can change when AppColors evicts images; rebuild until images have a comparable revision.
+            guard style.appFont != nil || apps.isEmpty else {
+                return WorkspaceHUD.layer(label: label, apps: apps, icons: icons, config: config, style: style, scale: scale)
+            }
+            let glyphs = apps.prefix(12).map { icons.glyph(for: $0) }
+            let colors = apps.prefix(12).map { AppColors.shared.color(for: $0, icons: config.icons) ?? style.colors.fg }
+            let key = Key(label: label, apps: apps, appearance: style.a, font: style.font, bold: style.bold,
+                          appFont: style.appFont, glyphs: glyphs, colors: colors, scale: scale)
+            if let entry = entries.first(where: { $0.key == key }) { return entry.layer }
+            let root = WorkspaceHUD.layer(label: label, apps: apps, glyphs: glyphs, colors: colors, style: style, scale: scale)
+            // Two islands cover alternating workspaces without retaining every workspace/zoom label.
+            if entries.count == 2 { entries.removeFirst() }
+            entries.append((key, root))
+            return root
+        }
+    }
 
     /// The HUD's island: the workspace's label, then its apps' icons.
     static func layer(label: String, apps: [String], icons: AppIconMap, config: PawConfig, style: Style, scale: CGFloat) -> CALayer {
+        let glyphs = apps.prefix(12).map { icons.glyph(for: $0) }
+        let colors = apps.prefix(12).map { AppColors.shared.color(for: $0, icons: config.icons) ?? style.colors.fg }
+        return layer(label: label, apps: apps, glyphs: glyphs, colors: colors, style: style, scale: scale)
+    }
+
+    private static func layer(label: String, apps: [String], glyphs: [String], colors: [ARGB], style: Style, scale: CGFloat) -> CALayer {
         let c = style.colors
         var segs: [Island.Segment] = [.init(text: style.text(label, c.accent, font: style.bold), gapAfter: apps.isEmpty ? 0 : 10)]
         for (i, app) in apps.prefix(12).enumerated() {
-            let color = AppColors.shared.color(for: app, icons: config.icons) ?? c.fg
-            segs.append(.init(text: style.appGlyph(icons.glyph(for: app), app: app, color: color), gapAfter: i == apps.count - 1 ? 0 : 8))
+            segs.append(.init(text: style.appGlyph(glyphs[i], app: app, color: colors[i]), gapAfter: i == apps.count - 1 ? 0 : 8))
         }
         let inner = Island.make(segs, style: style, scale: scale)
         let h = style.islandHeight + 2
@@ -33,7 +72,7 @@ final class WorkspaceHUD {
     /// `area` in AX coordinates (the display's tiling area).
     func show(label: String, apps: [String], in area: CGRect, icons: AppIconMap, config: PawConfig, duration: Double) {
         let scale = NSScreen.main?.backingScaleFactor ?? 2
-        let root = Self.layer(label: label, apps: apps, icons: icons, config: config, style: style, scale: scale)
+        let root = layers.layer(label: label, apps: apps, icons: icons, config: config, style: style, scale: scale)
         let w = root.bounds.width, h = root.bounds.height
         // Just under the top of the tiling area, over the windows' title bars.
         let ax = CGRect(x: (area.midX - w / 2).rounded(), y: area.minY + 10, width: w, height: h)
