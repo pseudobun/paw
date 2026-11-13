@@ -247,7 +247,7 @@ class SafetyTests(unittest.TestCase):
             root = Path(directory); artifact = root / "artifact"; artifact.mkdir()
             bench.save(artifact / "build.json", {"instrumented": True})
             args = SimpleNamespace(windows=8, scene="switch")
-            with patch.object(Path, "home", return_value=root), patch.object(bench, "main_apps", return_value=[]), patch.object(bench.subprocess, "run"), patch.object(bench, "command"), patch.object(bench, "wait_for", side_effect=RuntimeError("socket missing")), patch.object(bench, "stop_candidate") as stop:
+            with patch.object(Path, "home", return_value=root), patch.object(bench, "main_apps", return_value=[]), patch.object(bench, "quiet"), patch.object(bench.subprocess, "run"), patch.object(bench, "command"), patch.object(bench, "wait_for", side_effect=RuntimeError("socket missing")), patch.object(bench, "stop_candidate") as stop:
                 with self.assertRaisesRegex(RuntimeError, "socket missing"):
                     bench.record_batch(artifact, artifact, args, root / "batch", root / "Applications/paw Dev.app")
                 stop.assert_called_once_with(root / "Applications/paw Dev.app")
