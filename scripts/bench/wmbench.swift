@@ -1,173 +1,288 @@
-// paw's window-management benchmark, run against the dev build (`just dev`, then `just bench`).
-// It needs a desktop to work on: workspaces 1 and 2 with a few tiled windows each (TextEdit
-// documents are fine), and for `hung` an app with windows on them that may be stopped.
-//
-//   wmbench switch [n]       workspace 1 ↔ 2: the command's round trip, and the time until every
-//                            window of the new workspace is really on screen (window server)
-//   wmbench ops [n]          focus, swap, resize, layout changes, query: round trips
-//   wmbench hung <app>       the same commands while <app> is stopped (SIGSTOP), as a hung app
-//                            would be: how long paw's main thread is held up by it
-//   wmbench all [n]          switch, ops
-//
-// Every number is milliseconds. Round trips are main-thread time: paw answers a command after
-// running it.
-import CoreGraphics
+// Workload driver for just bench. The Python controller owns builds, fixtures and captures.
+import AppKit
+import Darwin
 import Foundation
 
-let sock = NSHomeDirectory() + "/Library/Application Support/com.pseudobun.paw.dev/paw.sock"
+// Controlled runs pass paw Bench's socket; quick diagnostics use the running paw Dev.
+private let socketPath = ProcessInfo.processInfo.environment["PAW_BENCH_SOCKET"]
+    ?? NSHomeDirectory() + "/Library/Application Support/com.pseudobun.paw.dev/paw.sock"
+private func now() -> Double { Double(DispatchTime.now().uptimeNanoseconds) / 1e6 }
 
-func send(_ cmd: String) -> Data {
+private func send(_ text: String) throws -> [String: Any] {
     let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-    guard fd >= 0 else { return Data() }
+    try require(fd >= 0, "cannot open socket")
     defer { close(fd) }
-    var addr = sockaddr_un()
-    addr.sun_family = sa_family_t(AF_UNIX)
-    withUnsafeMutableBytes(of: &addr.sun_path) { p in
-        sock.utf8CString.withUnsafeBytes { p.copyMemory(from: UnsafeRawBufferPointer(rebasing: $0.prefix(p.count - 1))) }
+    var timeout = timeval(tv_sec: 10, tv_usec: 0), noPipe: Int32 = 1
+    try require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout))) == 0
+        && setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout))) == 0
+        && setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noPipe, socklen_t(MemoryLayout.size(ofValue: noPipe))) == 0, "socket options failed")
+    var address = sockaddr_un()
+    address.sun_family = sa_family_t(AF_UNIX)
+    try require(socketPath.utf8CString.count <= MemoryLayout.size(ofValue: address.sun_path), "socket path too long")
+    withUnsafeMutableBytes(of: &address.sun_path) { dest in
+        socketPath.utf8CString.withUnsafeBytes { dest.copyBytes(from: $0) }
     }
-    let ok = withUnsafePointer(to: &addr) {
+    let connected = withUnsafePointer(to: &address) {
         $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
     }
-    guard ok == 0 else { fputs("wmbench: paw Dev is not running\n", stderr); exit(1) }
-    _ = cmd.withCString { write(fd, $0, strlen($0)) }
-    shutdown(fd, SHUT_WR)
-    var out = Data()
-    var buf = [UInt8](repeating: 0, count: 65536)
-    while true {
-        let n = read(fd, &buf, buf.count)
-        if n <= 0 { break }
-        out.append(buf, count: n)
-    }
-    return out
-}
-
-func now() -> Double { Double(DispatchTime.now().uptimeNanoseconds) / 1e6 }
-
-func query() -> [[String: Any]] {
-    let outer = (try? JSONSerialization.jsonObject(with: send("query"))) as? [String: Any]
-    guard let text = outer?["json"] as? String else { return [] }
-    return (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] ?? []
-}
-
-func windows(_ ws: String) -> [[String: Any]] {
-    (query().first { ($0["id"] as? String) == ws }?["windows"] as? [[String: Any]]) ?? []
-}
-
-func ids(_ ws: String) -> [CGWindowID] { windows(ws).compactMap { ($0["id"] as? Int).map(CGWindowID.init) } }
-
-let screen = CGDisplayBounds(CGMainDisplayID())
-
-/// Every window on screen (its middle inside the main display), polling the window server each ms.
-func onScreen(_ wids: [CGWindowID], timeout: Double = 3000) -> Bool {
-    let t0 = now()
-    var ptrs = wids.map { UnsafeRawPointer(bitPattern: UInt($0)) }
-    let arr = CFArrayCreate(nil, &ptrs, ptrs.count, nil)!
-    while now() - t0 < timeout {
-        let desc = (CGWindowListCreateDescriptionFromArray(arr) as? [[String: Any]]) ?? []
-        let ok = desc.count == wids.count && desc.allSatisfy { d in
-            guard let b = d[kCGWindowBounds as String] as? [String: CGFloat] else { return false }
-            let r = CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: b["Width"] ?? 0, height: b["Height"] ?? 0)
-            return screen.intersects(r.insetBy(dx: r.width * 0.45, dy: r.height * 0.45))
+    try require(connected == 0, "paw Dev is not running")
+    let deadline = now() + 10_000
+    try Data(text.utf8).withUnsafeBytes { bytes in
+        var sent = 0
+        while sent < bytes.count {
+            let n = write(fd, bytes.baseAddress!.advanced(by: sent), bytes.count - sent)
+            if n < 0 && errno == EINTR && now() < deadline { continue }
+            try require(n > 0 && now() < deadline, "IPC write failed/timed out")
+            sent += n
         }
-        if ok { return true }
+    }
+    shutdown(fd, SHUT_WR)
+    var data = Data(), buffer = [UInt8](repeating: 0, count: 65536)
+    while true {
+        try require(now() < deadline, "IPC reply timed out")
+        let n = read(fd, &buffer, buffer.count)
+        if n < 0 && errno == EINTR { continue }
+        try require(n >= 0 && now() < deadline, "IPC read failed/timed out")
+        if n == 0 { break }
+        data.append(buffer, count: n)
+        try require(data.count <= 16 * 1024 * 1024, "oversized IPC reply")
+    }
+    return try reply(data)
+}
+
+private func query() throws -> [[String: Any]] {
+    guard let json = try send("query")["json"] as? String,
+          let rows = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]], !rows.isEmpty else {
+        throw BenchError("missing/invalid workspace query")
+    }
+    return rows
+}
+
+private func windows(_ rows: [[String: Any]]) -> [[String: Any]] { rows.flatMap { $0["windows"] as? [[String: Any]] ?? [] } }
+private func focused(_ rows: [[String: Any]]) -> Int? {
+    windows(rows.filter { $0["focused"] as? Bool == true }).first { $0["focused"] as? Bool == true }?["id"] as? Int
+}
+private func intended(_ rows: [[String: Any]]) throws -> [Int: CGRect] {
+    var result: [Int: CGRect] = [:]
+    for window in windows(rows) {
+        guard let id = window["id"] as? Int, let value = window["frame"] as? [String: Any] else { throw BenchError("invalid window query") }
+        try require(result[id] == nil, "duplicate window ID")
+        result[id] = try frame(value)
+    }
+    try require(!result.isEmpty, "scene has no windows")
+    return result
+}
+
+private func actualFrames(_ ids: Set<Int>) -> [Int: CGRect] {
+    var pointers = ids.sorted().map { UnsafeRawPointer(bitPattern: $0) }
+    guard let array = CFArrayCreate(nil, &pointers, pointers.count, nil),
+          let descriptions = CGWindowListCreateDescriptionFromArray(array) as? [[String: Any]] else { return [:] }
+    var frames: [Int: CGRect] = [:]
+    for description in descriptions {
+        guard let id = description[kCGWindowNumber as String] as? Int,
+              let bounds = description[kCGWindowBounds as String] as? [String: Any],
+              let x = bounds["X"] as? Double, let y = bounds["Y"] as? Double,
+              let w = bounds["Width"] as? Double, let h = bounds["Height"] as? Double else { continue }
+        frames[id] = CGRect(x: x, y: y, width: w, height: h)
+    }
+    return frames
+}
+
+/// WindowServer coordinates of the one display the scenes require.
+private let screen = CGDisplayBounds(CGMainDisplayID())
+
+private func waitGeometry(_ target: [Int: CGRect]) throws {
+    let deadline = now() + 3000
+    var actual: [Int: CGRect] = [:]
+    repeat {
+        actual = actualFrames(Set(target.keys))
+        if framesMatch(actual, target, screen: screen) { return }
         usleep(1000)
+    } while now() < deadline
+    throw BenchError("actual window geometry did not reach the target; batch invalid\n" + geometryReport(actual, target, screen: screen))
+}
+
+private struct Driver {
+    let mode: String, count: Int, pace: Double, settle: Double, duration: Double, recording: Bool
+    var measured = false
+    var samples: [[String: Any]] = []
+    var commands: [String] = []
+    var targets: [String: [Int: CGRect]] = [:]
+    var membership: Set<Int> = []
+
+    mutating func run(_ command: String, metric: String? = nil, detail: String? = nil) throws {
+        let start = now()
+        _ = try send("run " + command)
+        if measured {
+            commands.append(detail ?? String(command.split(separator: " ")[0]))
+            if let metric { samples.append(["metric": metric, "elapsed_ms": now() - start]) }
+        }
     }
-    return false
-}
 
-func report(_ name: String, _ xs: [Double]) {
-    guard !xs.isEmpty else { print("\(name): no samples"); return }
-    let s = xs.sorted()
-    func p(_ q: Double) -> Double { s[min(s.count - 1, Int(Double(s.count) * q))] }
-    let label = name.padding(toLength: 24, withPad: " ", startingAt: 0)
-    print(label + String(format: " n=%-4d p50=%8.2f  p90=%8.2f  p99=%8.2f  max=%8.2f", s.count, p(0.5), p(0.9), p(0.99), s.last!))
-}
+    func checkedQuery() throws -> [[String: Any]] {
+        let rows = try query()
+        try require(Set(windows(rows).compactMap { $0["id"] as? Int }) == membership, "window membership changed")
+        return rows
+    }
 
-func rtt(_ cmd: String, _ n: Int) -> [Double] {
-    (0..<n).map { _ in
-        let t = now()
-        _ = send("run " + cmd)
-        return now() - t
+    func drain() throws {
+        let deadline = now() + 10_000
+        repeat {
+            let status = try send("perf status")
+            if status["axIdle"] as? Bool == true && status["active"] as? Int == 0 { return }
+            usleep(10_000)
+        } while now() < deadline
+        throw BenchError("asynchronous work did not drain")
+    }
+
+    mutating func warm() throws {
+        let status = try send("status")
+        try require(status["trusted"] as? String == "yes", "PAW needs Accessibility access")
+        try require(NSScreen.screens.count == 1, "bench requires one display")
+        membership = Set(try windows(query()).compactMap { $0["id"] as? Int })
+        try require(!membership.isEmpty, "prepare windows on workspaces 1 and 2")
+        if mode == "hung" { return }
+        for workspace in ["2", "1"] {
+            try run("workspace " + workspace)
+            Thread.sleep(forTimeInterval: 0.5)
+            let rows = try checkedQuery()
+            let shown = rows.first { $0["id"] as? String == workspace }
+            try require(shown?["visible"] as? Bool == true && !(shown?["windows"] as? [[String: Any]] ?? []).isEmpty,
+                        "need windows on both workspaces 1 and 2")
+            let target = try intended(rows)
+            try waitGeometry(target)
+            targets[workspace] = target
+        }
+        if mode == "ops" {
+            try run("layout columns")
+            for _ in 0..<membership.count { try run("focus west") }
+            try waitGeometry(intended(checkedQuery()))
+        }
+        if mode.hasPrefix("overview") {
+            try run("overview"); Thread.sleep(forTimeInterval: pace)
+            try run("overview"); Thread.sleep(forTimeInterval: pace)
+        }
+        Thread.sleep(forTimeInterval: settle)
+        if recording { try drain() }
+    }
+
+    mutating func switches() throws {
+        for index in 0..<count {
+            let workspace = index.isMultiple(of: 2) ? "2" : "1"
+            let start = now()
+            try run("workspace " + workspace, metric: "switch.round_trip")
+            let rows = try checkedQuery()
+            try require(rows.first { $0["id"] as? String == workspace }?["visible"] as? Bool == true, "wrong visible workspace")
+            let target = try intended(rows)
+            try require(framesMatch(target, targets[workspace]!, screen: screen), "workspace target geometry changed")
+            try waitGeometry(target)
+            samples.append(["metric": "switch.geometry", "elapsed_ms": now() - start])
+            Thread.sleep(forTimeInterval: pace)
+        }
+    }
+
+    mutating func operations() throws {
+        for (name, pair) in [("focus", ["focus east", "focus west"]), ("swap", ["swap east", "swap west"]),
+                             ("resize", ["resize east 20", "resize east -20"])] {
+            for index in 0..<count {
+                let before = try checkedQuery()
+                try run(pair[index % 2], metric: name + ".round_trip")
+                let after = try checkedQuery()
+                let changed = name == "focus" ? focused(before) != focused(after)
+                    : try intended(before) != intended(after)
+                try require(changed, "\(pair[index % 2]) did no work; use columns with two or more visible tiles")
+                try waitGeometry(intended(after))
+                Thread.sleep(forTimeInterval: pace)
+            }
+        }
+        for _ in 0..<max(1, count / 8) {
+            for kind in ["stack", "master", "bsp", "columns"] {
+                try run("layout " + kind, metric: "layout.round_trip")
+                try waitGeometry(intended(checkedQuery()))
+                Thread.sleep(forTimeInterval: pace)
+            }
+        }
+        for _ in 0..<count {
+            let start = now(); _ = try checkedQuery()
+            samples.append(["metric": "query.round_trip", "elapsed_ms": now() - start])
+        }
+    }
+
+    mutating func execute() throws -> [String: Any] {
+        try warm()
+        if recording { _ = try send("perf begin") }
+        measured = true
+        switch mode {
+        case "switch": try switches()
+        case "ops": try operations()
+        case "all":
+            try switches()
+            try run("layout columns")
+            for _ in 0..<membership.count { try run("focus west") }
+            try waitGeometry(intended(checkedQuery()))
+            try operations()
+        case "idle": Thread.sleep(forTimeInterval: duration)
+        case "overview-off", "overview-on":
+            for _ in 0..<(count / 2) {
+                for state in ["open", "close"] {
+                    try run("overview", metric: "overview." + state + ".round_trip", detail: "overview." + state)
+                    Thread.sleep(forTimeInterval: pace)
+                }
+                try waitGeometry(intended(checkedQuery()))
+            }
+        case "hung":
+            for cmd in ["workspace 2", "workspace 1", "layout columns", "layout bsp", "focus east", "swap west", "swap east", "resize east 20", "resize east -20"] {
+                try run(cmd, metric: cmd + ".round_trip")
+            }
+        default: throw BenchError("unknown mode")
+        }
+        Thread.sleep(forTimeInterval: settle)
+        if recording { try drain(); _ = try send("perf end") }
+        let groups = Dictionary(grouping: samples, by: { $0["metric"] as! String })
+        let metrics = try groups.mapValues { try summary($0.map { $0["elapsed_ms"] as! Double }) }
+        return ["schema": 2, "valid": true, "mode": mode, "count": count, "pace": pace, "settle": settle,
+                "duration": duration, "recording": recording, "window_ids": membership.sorted(),
+                "expected_commands": commands, "samples": samples, "metrics": metrics, "status": try send("status")]
     }
 }
 
-/// The windows paw shows on a workspace (not those parked behind a placeholder, too big for
-/// their tile): switched to once to find out.
-func shown(_ ws: String) -> [CGWindowID] {
-    _ = send("run workspace \(ws)")
-    usleep(500_000)
-    return windows(ws).filter { $0["onScreen"] as? Bool ?? true }.compactMap { ($0["id"] as? Int).map(CGWindowID.init) }
-}
-
-func switches(_ n: Int) {
-    let a = shown("1"), b = shown("2")
-    guard !a.isEmpty, !b.isEmpty else { fputs("wmbench: put windows on workspaces 1 and 2 first\n", stderr); exit(1) }
-    print("workspace 1: \(a.count) windows shown, workspace 2: \(b.count) windows shown")
-    var r: [Double] = [], s: [Double] = [], miss = 0
-    for i in 0..<n {
-        let (to, wins) = i % 2 == 0 ? ("2", b) : ("1", a)
-        let t = now()
-        _ = send("run workspace \(to)")
-        r.append(now() - t)
-        if onScreen(wins) { s.append(now() - t) } else { miss += 1 }
-        usleep(30_000)
+@main private enum WMBench {
+    static func main() {
+        do {
+            var args = Array(CommandLine.arguments.dropFirst())
+            let mode = args.isEmpty ? "all" : args.removeFirst()
+            let count = args.first.flatMap(Int.init) ?? 100
+            if args.first.flatMap(Int.init) != nil { args.removeFirst() }
+            func option(_ key: String, fallback: Double) throws -> Double {
+                guard let i = args.firstIndex(of: key) else { return fallback }
+                try require(i + 1 < args.count, "missing \(key)")
+                let value = Double(args[i + 1]); args.removeSubrange(i...i + 1)
+                guard let value, value.isFinite && value >= 0 && value <= 600 else { throw BenchError("invalid \(key)") }
+                return value
+            }
+            let pace = try option("--pace", fallback: 0.03), settle = try option("--settle", fallback: 0.5)
+            let duration = try option("--duration", fallback: 120)
+            let recording = args.contains("--record"); args.removeAll { $0 == "--record" }
+            let paused = args.contains("--paused"); args.removeAll { $0 == "--paused" }
+            var output: URL?
+            if let i = args.firstIndex(of: "--output") {
+                try require(i + 1 < args.count, "missing --output")
+                output = URL(fileURLWithPath: args[i + 1]); args.removeSubrange(i...i + 1)
+                try require(!FileManager.default.fileExists(atPath: output!.path), "output already exists")
+            }
+            try require(args.isEmpty && ["switch", "ops", "all", "idle", "overview-off", "overview-on", "hung"].contains(mode),
+                        "usage: just bench switch|ops|all [even-count] | prepare|register|run|compare|hung|check")
+            try require((2...10000).contains(count) && count.isMultiple(of: 2), "count must be even, 2–10000")
+            try require(mode != "hung" || paused, "hung must be started through just bench's cleanup controller")
+            var driver = Driver(mode: mode, count: count, pace: pace, settle: settle, duration: duration, recording: recording)
+            let result = try driver.execute()
+            if let output { try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]).write(to: output, options: .atomic) }
+            for (name, value) in (result["metrics"] as! [String: [String: Double]]).sorted(by: { $0.key < $1.key }) {
+                print(name + String(format: " n=%.0f median=%.3f p90=%.3f p99=%.3f max=%.3f ms", value["count"]!, value["median_ms"]!, value["p90_ms"]!, value["p99_ms"]!, value["max_ms"]!))
+            }
+        } catch {
+            fputs("wmbench: \(error)\n", stderr)
+            exit(1)
+        }
     }
-    report("switch round trip", r)
-    report("switch all on screen", s)
-    print("switch timeouts: \(miss)")
-}
-
-func ops(_ n: Int) {
-    _ = send("run workspace 1")
-    usleep(300_000)
-    report("focus east/west", rtt("focus east", n / 2) + rtt("focus west", n / 2))
-    report("swap east/west", rtt("swap east", n / 2) + rtt("swap west", n / 2))
-    report("resize east ±20", rtt("resize east 20", n / 2) + rtt("resize east -20", n / 2))
-    var l: [Double] = []
-    for i in 0..<max(4, n / 4) { l += rtt(["layout columns", "layout stack", "layout master", "layout bsp"][i % 4], 1) }
-    report("layout change", l)
-    _ = send("run layout bsp")
-    report("query", (0..<n).map { _ in let t = now(); _ = query(); return now() - t })
-}
-
-func hung(_ app: String) {
-    let pids = pgrep(app)
-    guard !pids.isEmpty else { fputs("wmbench: \(app) is not running\n", stderr); exit(1) }
-    _ = send("run workspace 1; layout bsp")
-    usleep(500_000)
-    for p in pids { kill(p, SIGSTOP) }
-    defer { for p in pids { kill(p, SIGCONT) } }
-    print("\(app) stopped (pid \(pids.map(String.init).joined(separator: ",")))")
-    for cmd in ["workspace 2", "workspace 1", "layout columns", "layout bsp", "focus east", "swap west", "swap east",
-                "resize east 40", "resize east -40"] {
-        let t = now()
-        _ = send("run " + cmd)
-        print("  " + cmd.padding(toLength: 22, withPad: " ", startingAt: 0) + String(format: "%9.1f ms", now() - t))
-    }
-    let t = now()
-    _ = send("status")
-    print("  " + "status (after)".padding(toLength: 22, withPad: " ", startingAt: 0) + String(format: "%9.1f ms", now() - t))
-}
-
-func pgrep(_ name: String) -> [pid_t] {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-    p.arguments = ["-x", name]
-    let pipe = Pipe()
-    p.standardOutput = pipe
-    try? p.run()
-    p.waitUntilExit()
-    let out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-    return out.split(separator: "\n").compactMap { pid_t($0) }
-}
-
-let args = Array(CommandLine.arguments.dropFirst())
-let mode = args.first ?? "all"
-let n = args.dropFirst().first.flatMap { Int($0) } ?? 100
-switch mode {
-case "switch": switches(n)
-case "ops": ops(n)
-case "hung": hung(args.dropFirst().first ?? "TextEdit")
-case "all": switches(n); ops(n)
-default: fputs("usage: wmbench switch|ops|all [n] | hung <app>\n", stderr); exit(64)
 }

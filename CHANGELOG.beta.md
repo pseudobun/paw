@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0-beta.29](https://github.com/pseudobun/paw/compare/v0.1.0-beta.28...v0.1.0-beta.29) (2026-11-13)
+
+
+### Performance
+
+* **overview:** reuse closed overview panels ([#99](https://github.com/pseudobun/paw/issues/99)) ([4c766e0](https://github.com/pseudobun/paw/commit/4c766e0fbc9ebf66bd2eec4e9312d61880a4e0bd))
+* **state:** skip rewriting an unchanged state file ([#97](https://github.com/pseudobun/paw/issues/97)) ([d08d4dc](https://github.com/pseudobun/paw/commit/d08d4dc5ea3742003b47904c8b12268faeb99a8e))
+
 ## [0.1.0-beta.28](https://github.com/pseudobun/paw/compare/v0.1.0-beta.27...v0.1.0-beta.28) (2026-11-13)
 
 
