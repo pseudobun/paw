@@ -651,8 +651,18 @@ final class WindowManager {
         guard !ids.isEmpty else { return [] }
         var ptrs = ids.map { UnsafeRawPointer(bitPattern: UInt($0)) }
         guard let arr = CFArrayCreate(nil, &ptrs, ptrs.count, nil),
-              let list = CGWindowListCreateDescriptionFromArray(arr) as? [[String: Any]] else { return [] }
-        return Set(list.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value })
+              let list = CGWindowListCreateDescriptionFromArray(arr) else { return [] }
+        // Only the number from each description: bridging whole dictionaries to Swift cost about a
+        // third of this call, every 2 seconds while idle.
+        let key = Unmanaged.passUnretained(kCGWindowNumber).toOpaque()
+        var alive = Set<WindowID>()
+        for i in 0..<CFArrayGetCount(list) {
+            guard let d = CFArrayGetValueAtIndex(list, i),
+                  let v = CFDictionaryGetValue(unsafeBitCast(d, to: CFDictionary.self), key) else { continue }
+            var n: Int64 = 0
+            if CFNumberGetValue(unsafeBitCast(v, to: CFNumber.self), .sInt64Type, &n) { alive.insert(WindowID(truncatingIfNeeded: n)) }
+        }
+        return alive
     }
 
     /// Several windows gone at once (an app quit, a prune): each workspace is laid out once, after
