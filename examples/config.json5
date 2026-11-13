@@ -142,6 +142,10 @@
     // edgeOpacity: 0.8,
     // Liquid Glass islands on macOS 26 and later; false keeps the theme's flat fill.
     // glass: true,
+    // "regular" (frosted, like Spotlight) or "clear" (barely frosted, most see-through)
+    // glassStyle: "regular",
+    // How much of the island colour tints the glass, 0–1: 0 is bare glass
+    // glassTint: 0.2,
     // 0xAARRGGBB or "#RRGGBB"
     colors: {
       // island: "0xeb1d1d16",

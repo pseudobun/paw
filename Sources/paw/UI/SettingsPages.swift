@@ -478,6 +478,10 @@ enum SettingsCatalog {
             SettingsSection("Shape", [
                 f(\.appearance.glass, "appearance.glass", "Liquid Glass", .toggle,
                   "macOS 26 and later: islands on glass, tinted with the island colour; border and shadow come from the glass. Off: the theme's flat fill. Themes keep it."),
+                f(\.appearance.glassStyle, "appearance.glassStyle", "Glass", .choice([("regular", "Regular"), ("clear", "Clear")]),
+                  "Regular is frosted like Spotlight; Clear is barely frosted and shows the most of what is behind."),
+                f(\.appearance.glassTint, "appearance.glassTint", "Glass tint", .number(min: 0, max: 1, step: 0.05),
+                  "How much of the island colour tints the glass. 0 is bare glass; 1 is the island colour at full strength."),
                 f(\.appearance.radius, "appearance.radius", "Island radius", .number(min: 0, max: 40, unit: "pt")),
                 f(\.appearance.cellRadius, "appearance.cellRadius", "Cell radius", .number(min: 0, max: 40, unit: "pt"),
                   "The highlighted window in a stack."),

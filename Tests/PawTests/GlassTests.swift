@@ -34,6 +34,23 @@ struct GlassTests {
         #expect(Style(PawConfig.Appearance(), glass: false).glass == false, "a PNG preview is flat")
     }
 
+    @Test func tintAndStyleFollowTheConfig() {
+        guard Glass.supported else { return }
+        var a = PawConfig.Appearance()
+        a.glassTint = 0.5
+        a.glassStyle = "clear"
+        let l = CALayer()
+        Style(a).decorate(l, radius: 9)
+        let tint = Glass.tint(of: l)
+        #expect(abs((tint?.alpha ?? 0) - a.colors.island.alpha * 0.5) < 0.01, "8-bit alpha")
+        #expect(l.value(forKey: Glass.clearKey) as? Bool == true)
+        if #available(macOS 26, *) {
+            let host = GlassHost(content: GlassHost.layerView())
+            host.adopt(l)
+            #expect((host.subviews.first as? NSGlassEffectView)?.style == .clear)
+        }
+    }
+
     @Test func hostPutsGlassBehindGlassIslandsOnly() {
         guard Glass.supported else { return }
         let content = GlassHost.layerView()

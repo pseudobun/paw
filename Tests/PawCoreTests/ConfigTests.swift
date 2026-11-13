@@ -10,6 +10,16 @@ struct ConfigTests {
         #expect(try load("// nothing\n{ }") == PawConfig())
     }
 
+    @Test func glassStyleAndTintAreSetAndKeptAcrossThemes() throws {
+        #expect(try load("").appearance.glassStyle == "regular")
+        #expect(try load("").appearance.glassTint == 0.2)
+        let c = try load("{ appearance: { theme: 'modern', glassStyle: 'clear', glassTint: 1.5 } }")
+        #expect(c.appearance.glassStyle == "clear")
+        #expect(c.appearance.glassTint == 1, "clamped to 0…1")
+        let reset = c.appearance.resetToTheme("solarpunk")
+        #expect(reset.glassStyle == "clear" && reset.glassTint == 1)
+    }
+
     @Test func partialJSON5KeepsDefaults() throws {
         let c = try load("""
         {
