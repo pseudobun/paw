@@ -181,6 +181,14 @@ final class OverviewController {
 
     func redraw() { panels.forEach { $0.view.needsDisplay = true } }
 
+    /// A config reload while open: the cards draw in the new style at once, and the search field
+    /// takes its font and colours (panels cached for the next open are rebuilt then).
+    func configChanged() {
+        guard isOpen else { return }
+        panels.forEach { $0.view.styleSearch() }
+        refresh()
+    }
+
     /// Takes the key window back after paw moved windows around (which focuses apps).
     private func reclaimFocus() {
         NSApp.activate(ignoringOtherApps: true)
@@ -689,11 +697,16 @@ final class OverviewView: NSView {
         }()
         let l = currentLayout()
         f.frame = CGRect(x: l.search.minX + 40, y: l.search.minY + (l.search.height - 20) / 2, width: l.search.width - 54, height: 20)
+        styleSearch()
+        window?.makeFirstResponder(f)
+    }
+
+    func styleSearch() {
+        guard let f = searchField else { return }
         f.font = style.font
         f.textColor = style.colors.fg.ns
         f.placeholderAttributedString = NSAttributedString(string: "Type to find a window",
                                                            attributes: [.font: style.font, .foregroundColor: style.colors.dim.ns])
-        window?.makeFirstResponder(f)
     }
 
     func setSearchText(_ s: String) { searchField?.stringValue = s }

@@ -12,6 +12,8 @@ final class Window {
     /// Where a floating window was before its workspace was hidden.
     var floatFrame: CGRect?
     var isHidden = false
+    /// Whether it floats without a rule (a dialog, a fixed size), for applying changed rules.
+    var nativeFloat = NativeFloat.none
     /// Observed border bounds stay separate from the queued layout target in `frame`.
     var borderFrame: CGRect?
     var borderNeedsRefresh = true
