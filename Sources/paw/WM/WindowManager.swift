@@ -47,7 +47,9 @@ final class WindowManager {
     /// When paw last switched a display's workspace itself.
     private var lastSwitch = Date.distantPast
     /// The workspace presets in effect: the active setup's, else `workspaces`.
-    var presets: [String: WorkspacePreset] { activeSetup.flatMap { config.setups[$0]?.workspaces } ?? config.workspaces }
+    var presets: [String: WorkspacePreset] { config.presets(setup: activeSetup) }
+    /// The config `configChanged` last applied, to tell what a reload changed.
+    private var appliedConfig: PawConfig?
     /// The workspace each display showed last, so one plugged in again gets its workspace back.
     private var workspaceByDisplay: [CGDirectDisplayID: String] = [:]
     private(set) var mode: String?
@@ -256,28 +258,89 @@ final class WindowManager {
     }
 
     func configChanged() {
+        let old = appliedConfig
+        appliedConfig = config
+        let oldPresets = old?.presets(setup: activeSetup)
         for w in windows.values { w.invalidateCornerRadius(); w.borderNeedsRefresh = true }
+        // Turning the Dock helper off: floats it raised go back to the normal level first, while
+        // it still can (after this, setLevel refuses and they would stay above everything).
+        if !config.layout.windowServer, DockBridge.shared.enabled, !layeredFloats.isEmpty {
+            setLevel(layeredFloats, Self.normalLevel)
+            layeredFloats = []
+        }
         DockBridge.shared.enabled = config.layout.windowServer
         hotkeys.set(config.bindings, modes: config.modes)
         gestures.configChanged()
         if let m = mode, config.modes[m] == nil { setMode(nil) }
         for p in hotkeys.problems { Log.app.warning("bindings: \(p, privacy: .public)") }
         indicators.configChanged()
+        overview.configChanged()
         updateFocusFollowsMouse()
         for ws in workspaces.values {
             ws.canvasMin = CGSize(width: config.layout.minTileWidth, height: config.layout.minTileHeight)
             ws.placeholderMin = placeholderMin
         }
         // Windows a rule now leaves alone (manage: false) are let go, where they are.
-        for w in windows.values where config.rules.contains(where: { $0.manage == false && $0.matches(app: w.app, title: w.title) }) {
+        for w in windows.values where config.ignores(app: w.app, title: w.title) {
             if w.isHidden { w.isHidden = false; w.setFrame(w.floatFrame ?? w.frame) }
             remove(w.id)
         }
+        if let old, old.rules != config.rules { applyRules(since: old) }
         if !displays.isEmpty {
             rebuildDisplays()
+            if let old { applyWorkspaceSettings(since: old, presets: oldPresets ?? [:]) }
             layoutAll(animated: true)
             if setupChanged { applySetup() }
         }
+    }
+
+    /// Changed rules for windows paw already has: float or tile the ones whose answer changed,
+    /// move them to a new rule's workspace, and take on windows an ignore rule no longer covers.
+    private func applyRules(since old: PawConfig) {
+        for w in windows.values {
+            guard let ws = workspaceOf(w.id) else { continue }
+            let change = RuleChange.between(old, config, app: w.app, title: w.title, native: w.nativeFloat,
+                                            floating: ws.isFloating(w.id), on: ws.name)
+            if let float = change.float {
+                let area = area(of: ws)
+                ws.toggleFloat(w.id, area: area)
+                // Floated like `toggle float`: two thirds of the area, centred (in the middle once shown).
+                if float, !w.isHidden {
+                    let r = CGRect(x: area.midX - area.width / 3, y: area.midY - area.height / 3,
+                                   width: area.width * 2 / 3, height: area.height * 2 / 3).integral
+                    w.floatFrame = r
+                    w.setFrame(r)
+                } else if float {
+                    w.floatFrame = nil
+                }
+            }
+            if let to = change.workspace { moveQuietly(w.id, from: ws, to: workspace(to)) }
+        }
+        // An ignore rule gone or narrowed: its windows are paw's again, without a restart.
+        let ignoring = { (c: PawConfig) in c.rules.filter { $0.manage == false } }
+        if ignoring(old) != ignoring(config) { adoptAll() }
+    }
+
+    /// Workspace settings that otherwise only count for workspaces made later: a lower
+    /// `layout.workspaces` drops the empty ones above it, a new `layout.default` reaches empty
+    /// workspaces still on the old one, and edited presets arrange their workspaces again.
+    private func applyWorkspaceSettings(since old: PawConfig, presets oldPresets: [String: WorkspacePreset]) {
+        if config.layout.workspaces < old.layout.workspaces {
+            let gone = config.layout.surplusWorkspaces(among: Array(workspaces.keys), isEmpty: { workspaces[$0]?.isEmpty ?? true },
+                                                       keep: { presets[$0] != nil || displayShowing($0) != nil })
+            for name in gone {
+                workspaces[name] = nil
+                extraPins[name] = nil
+            }
+        }
+        if config.layout.default != old.layout.default {
+            for ws in workspaces.values where ws.isEmpty && presets[ws.name]?.layout == nil && ws.layout == old.layout.default {
+                ws.setLayout(config.layout.default, area: area(of: ws))
+            }
+        }
+        // A setup switch arranges everything anyway (applySetup).
+        guard !setupChanged else { return }
+        for name in presets.keys.sorted(by: Self.nameOrder) where presets[name] != oldPresets[name] { arrange(name) }
     }
 
     /// Puts every hidden window back on screen (paw quitting must not lose windows).
@@ -518,8 +581,8 @@ final class WindowManager {
         guard el.bool(kAXMinimizedAttribute) != true, el.bool("AXFullScreen") != true else { return nil }
         let appName = NSRunningApplication(processIdentifier: pid)?.localizedName ?? ""
         let title = el.string(kAXTitleAttribute) ?? ""
-        let rules = config.rules.filter { $0.matches(app: appName, title: title) }
-        if rules.contains(where: { $0.manage == false }) { return nil }
+        if config.ignores(app: appName, title: title) { return nil }
+        let ruleWorkspace = config.ruleWorkspace(app: appName, title: title)
         let frame = el.frame ?? .zero
         let w = Window(id: id, element: el, pid: pid, app: appName, frame: frame)
         windows[id] = w
@@ -528,20 +591,20 @@ final class WindowManager {
         // A greyed-out green button: the app fixes the window's size (System Settings), so no tile fits it.
         let fixedSize = el.element(kAXZoomButtonAttribute)?.bool(kAXEnabledAttribute) == false
         // Only a hint (an app can grey it out on a resizable window): a rule with float: false tiles it.
-        let float = rules.contains { $0.float == true } || subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute)
-            || fixedSize && !rules.contains { $0.float == false }
+        w.nativeFloat = subrole != "AXStandardWindow" || !el.isSettable(kAXSizeAttribute) ? .kind : fixedSize ? .fixedSize : .none
+        let float = config.floats(app: appName, title: title, native: w.nativeFloat)
         var presetName = presets.first { $0.value.slot(for: appName, title: title) != nil }?.key
         // A new window of an app you already use on this workspace (a second Finder window moved
         // here, then ⌘K) stays with it instead of jumping to the app's preset workspace.
         if !initial, presetName != nil, focusedWorkspace.allWindows.contains(where: { $0 != id && windows[$0]?.pid == pid }) {
             presetName = nil
         }
-        var name = state?[id] ?? rules.first(where: { $0.workspace != nil })?.workspace ?? presetName
+        var name = state?[id] ?? ruleWorkspace ?? presetName
         if name == nil, initial, let di = displays.indices.first(where: { displays[$0].frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }) {
             name = displays[di].workspace
         }
         // Back where it was before it was minimized, hidden or its app quit.
-        let ghost = state == nil && !rules.contains(where: { $0.workspace != nil }) ? takeGhost(app: appName, title: title) : nil
+        let ghost = state == nil && ruleWorkspace == nil ? takeGhost(app: appName, title: title) : nil
         if let ghost { name = ghost.workspace }
         let ws = workspace(name ?? focusedWorkspace.name)
         if float { w.floatFrame = frame }
@@ -1545,7 +1608,7 @@ final class WindowManager {
         }) { mouseMonitors.append(m) }
         guard config.focus.focusFollowsMouse else { return }
         // Global monitoring excludes events sent to paw while a placeholder owns focus.
-        mouseMonitors = [
+        mouseMonitors += [
             NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in self?.hovered() },
             NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
                 self?.hovered()
@@ -2194,7 +2257,7 @@ final class WindowManager {
         case .recover:
             recover()
         case .reload:
-            settings.load()
+            settings.load(force: true)
         }
     }
 
