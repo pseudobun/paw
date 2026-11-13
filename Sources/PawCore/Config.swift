@@ -407,6 +407,11 @@ public struct PawConfig: Codable, Equatable, Sendable {
         /// macOS 26 and later: the islands are Liquid Glass (the theme's island colour tints it);
         /// false, or an older macOS: the theme's flat fill, border and shadow. Not part of a theme.
         public var glass = true
+        /// The glass material: "regular" (frosted, like Spotlight) or "clear" (barely frosted).
+        public var glassStyle = "regular"
+        /// How much of the island colour tints the glass, 0…1. Low: what is behind shows through
+        /// as in Spotlight; 1: the island colour at its full strength over the glass.
+        public var glassTint = 0.2
         public var colors = Colors()
         public init() {}
     }
@@ -577,7 +582,7 @@ extension PawConfig.Indicator {
 extension PawConfig.Appearance {
     enum CodingKeys: String, CodingKey, CaseIterable {
         case theme, font, fontSize, fontWeight, boldWeight, appFont, appIconSize, radius, cellRadius, borderWidth, shadow,
-             shadowOpacity, shadowRadius, islandHeight, pills, hudOpacity, edgeOpacity, glass, colors
+             shadowOpacity, shadowRadius, islandHeight, pills, hudOpacity, edgeOpacity, glass, glassStyle, glassTint, colors
     }
     /// Starts from the theme, then applies the keys that are set.
     public init(from decoder: Decoder) throws {
@@ -590,7 +595,8 @@ extension PawConfig.Appearance {
         try f(.radius, &radius); try f(.cellRadius, &cellRadius); try f(.borderWidth, &borderWidth); try f(.shadow, &shadow)
         try f(.shadowOpacity, &shadowOpacity); try f(.shadowRadius, &shadowRadius); try f(.islandHeight, &islandHeight)
         try f(.pills, &pills); try f(.hudOpacity, &hudOpacity); try f(.edgeOpacity, &edgeOpacity)
-        try f(.glass, &glass)
+        try f(.glass, &glass); try f(.glassStyle, &glassStyle); try f(.glassTint, &glassTint)
+        glassTint = min(max(glassTint, 0), 1)
         if c.contains(.colors) {
             try colors.decodeOver(c.nestedContainer(keyedBy: PawConfig.Colors.CodingKeys.self, forKey: .colors))
         }
@@ -610,12 +616,14 @@ extension PawConfig.Appearance {
         return out
     }
 
-    /// Back to the theme's values, keeping the app icon font and glass (not part of a theme's look).
+    /// Back to the theme's values, keeping the app icon font and the glass settings (not part of a theme's look).
     public func resetToTheme(_ name: String? = nil) -> Self {
         var a = Themes.appearance(name ?? theme)
         a.appFont = appFont
         a.appIconSize = appIconSize
         a.glass = glass
+        a.glassStyle = glassStyle
+        a.glassTint = glassTint
         return a
     }
 }

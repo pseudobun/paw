@@ -86,7 +86,7 @@ struct Style {
     /// panel's `GlassHost` draws the glass, tinted with the fill.
     func decorate(_ l: CALayer, radius: Double, fill: ARGB? = nil, border: ARGB? = nil) {
         if glass {
-            Glass.mark(l, fill: fill ?? colors.island)
+            Glass.mark(l, fill: fill ?? colors.island, tint: a.glassTint, clear: a.glassStyle == "clear")
             l.backgroundColor = nil
             l.borderWidth = 0
             l.shadowOpacity = 0

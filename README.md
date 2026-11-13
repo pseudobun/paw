@@ -389,6 +389,8 @@ config. The Settings window writes the same file, so people and agents can both 
   workspace HUD, the move strip, the mode island and the edge markers sit on native glass
   (`NSGlassEffectView`), tinted with the theme's island colour, light or dark as the theme is.
   The window server draws it, so it costs paw nothing per frame. On by default;
+  `appearance.glassStyle` picks `"regular"` (frosted, like Spotlight) or `"clear"` (barely
+  frosted), `appearance.glassTint` (0–1, default 0.2) how much of the island colour tints it.
   `appearance.glass: false` (Settings → Appearance → Liquid Glass) keeps the theme's flat fill,
   border and shadow, which is also what older macOS versions get
 - **Animations** for window moves: duration, curve (`easeOutCubic`, `spring`, `easeOutBack`…),
@@ -496,7 +498,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
 | `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
 | `indicator` | `enabled` (true), `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
-| `appearance` | `theme` (og, og-light, modern, minimal, solarpunk, cyberpunk; the other keys override it), `font` (a family, or system / system-mono / system-rounded), `fontSize`, `fontWeight`, `boldWeight`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `pills`, `islandHeight`, `borderWidth`, `shadow`, `shadowOpacity`, `shadowRadius`, `hudOpacity`, `edgeOpacity`, `glass` (Liquid Glass on macOS 26+, default true; kept across themes), `colors {island islandHi border fg muted dim accent wave good bad}` |
+| `appearance` | `theme` (og, og-light, modern, minimal, solarpunk, cyberpunk; the other keys override it), `font` (a family, or system / system-mono / system-rounded), `fontSize`, `fontWeight`, `boldWeight`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `pills`, `islandHeight`, `borderWidth`, `shadow`, `shadowOpacity`, `shadowRadius`, `hudOpacity`, `edgeOpacity`, `glass` (Liquid Glass on macOS 26+, default true; kept across themes), `glassStyle` (regular, clear), `glassTint` (0–1, default 0.2), `colors {island islandHi border fg muted dim accent wave good bad}` |
 | `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`), `brandColors` (true), `colors` (`"App": "#RRGGBB"`) |
 | `hooks` | `workspaceChanged`, `windowFocused`, `windowsChanged`, `modeChanged`, `displaysChanged` (shell commands with `PAW_*` variables) |
 | `mouse` | `dropZones` (true), `stackModifier` (`alt`), `seamHandles` (true), `gestures` (`[{ button: "middle", direction: "left", command: "workspace prev" }, …]`; buttons `middle back forward`, directions `left right up down click`) |
