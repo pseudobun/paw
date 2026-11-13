@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.0-beta.28](https://github.com/pseudobun/paw/compare/v0.1.0-beta.27...v0.1.0-beta.28) (2026-11-13)
+
+
+### Features
+
+* **ui:** add liquid glass design ([#93](https://github.com/pseudobun/paw/issues/93)) ([56e8bf8](https://github.com/pseudobun/paw/commit/56e8bf8313aa728ef16d2d1189fed09571a2437e))
+
+## [0.1.0-beta.27](https://github.com/pseudobun/paw/compare/v0.1.0-beta.26...v0.1.0-beta.27) (2026-11-12)
+
+
+### Features
+
+* **hud:** glide the edge markers to a new neighbour like the tip bar's islands ([#91](https://github.com/pseudobun/paw/issues/91)) ([38fd059](https://github.com/pseudobun/paw/commit/38fd059aaa2dd9efe959a667be22cfa794654c7c))
+
+## [0.1.0-beta.26](https://github.com/pseudobun/paw/compare/v0.1.0-beta.25...v0.1.0-beta.26) (2026-11-12)
+
+
+### Features
+
+* **indicator:** glide the stack highlight to the window on top like the tip bar ([#88](https://github.com/pseudobun/paw/issues/88)) ([3229156](https://github.com/pseudobun/paw/commit/3229156284fd113f986758ca6ffb5cfadc82b9ec))
+
 ## [0.1.0-beta.25](https://github.com/pseudobun/paw/compare/v0.1.0-beta.24...v0.1.0-beta.25) (2026-11-12)
 
 
