@@ -144,7 +144,11 @@ start notification, saves raw `profile.trace`, and explicitly produces
 `profile-symbolicated.trace` with the selected app's dSYM. No Spotlight symbol discovery is
 assumed. Inspect known symbols and spans manually. Profiling overhead is part of that workload:
 use a separate calibration for traced runs, and inspect plain/instrumented pilots before
-trusting tiny deltas. A successful symbolication command cannot prove every frame resolves.
+trusting tiny deltas. A successful symbolication command cannot prove every frame resolves. With
+Xcode 26.6 it named only about a fifth of the distinct paw frames (UUIDs matched); the rest stay
+addresses in `profile-symbolicated.trace`. Resolve those from an export with the same dSYM:
+`atos -o <label>/paw.dSYM/Contents/Resources/DWARF/paw -arch arm64 -l <paw load-addr> <addresses>`,
+taking `load-addr` from the `binary name="paw"` element of `xctrace export`.
 
 Comparison rereads raw data, checks summaries, workload/identity signatures, safe unique batch
 paths and pairing. It requires five calibration batches and five pairs. The primary metric
