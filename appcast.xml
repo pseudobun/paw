@@ -6,6 +6,18 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.28</title>
+      <pubDate>Fri, 13 Nov 2026 00:20:00 +0000</pubDate>
+      <sparkle:version>150</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.28</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
+<ul>
+<li><b>ui:</b> add liquid glass design (<a href="https://github.com/pseudobun/paw/issues/93">#93</a>) (<a href="https://github.com/pseudobun/paw/commit/56e8bf8313aa728ef16d2d1189fed09571a2437e">56e8bf8</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.28">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.28/paw-0.1.0-beta.28-macos.zip" type="application/octet-stream" sparkle:edSignature="KE5Q6dYpdwpOEif35K3ZLPTAoFH2vNtz3A/vMvuxBombFeG/ulYzFjYIXHtQL3aC/bMeBbfxSpmTGIUkTgzkDQ==" length="3683303"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.27</title>
       <pubDate>Thu, 12 Nov 2026 23:50:04 +0000</pubDate>
       <sparkle:version>148</sparkle:version>
@@ -262,18 +274,6 @@
 <li><b>zoom:</b> keep directional focus inside a zoom and report the zoom level (<a href="https://github.com/pseudobun/paw/issues/38">#38</a>) (<a href="https://github.com/pseudobun/paw/commit/f3239f0f48c0fe7844c11343b20931d229cb39b7">f3239f0</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.9">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.9/paw-0.1.0-beta.9-macos.zip" type="application/octet-stream" sparkle:edSignature="XKQcuTr+1GSBOXeDVjNc+fhOGsjH3xGc7tUsVK5hvXN56qk3sbSFjdkM/LdFt9e77St9QrWZCPioqjCvkbGEBQ==" length="3258825"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.8</title>
-      <pubDate>Tue, 10 Nov 2026 22:07:55 +0000</pubDate>
-      <sparkle:version>83</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.8</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
-<ul>
-<li><b>dev:</b> build from source as paw Dev, next to the release paw (<a href="https://github.com/pseudobun/paw/issues/35">#35</a>) (<a href="https://github.com/pseudobun/paw/commit/67f944371f144280d245ec0c1a39c20580a929ff">67f9443</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.8">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.8/paw-0.1.0-beta.8-macos.zip" type="application/octet-stream" sparkle:edSignature="dkD1Pje9qpy6EYTXAlIyMwDW2X2Ji9jfVbiXOx6duCvrg0iLeiwKYd7UnAQ8du54kZG7kOIkCrwpp6JiGvF3BA==" length="3255002"/>
     </item>
   </channel>
 </rss>
