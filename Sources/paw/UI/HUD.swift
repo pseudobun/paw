@@ -30,8 +30,10 @@ final class WorkspaceHUD {
         return root
     }
 
-    /// `area` in AX coordinates (the display's tiling area).
-    func show(label: String, apps: [String], in area: CGRect, icons: AppIconMap, config: PawConfig, duration: Double) {
+    /// `area` in AX coordinates (the display's tiling area). `step`: which way the workspace
+    /// went (+1 next, -1 previous, 0 neither); the new one slides in from that side.
+    func show(label: String, apps: [String], in area: CGRect, icons: AppIconMap, config: PawConfig, duration: Double,
+              step: Int = 0) {
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         let root = Self.layer(label: label, apps: apps, icons: icons, config: config, style: style, scale: scale)
         let w = root.bounds.width, h = root.bounds.height
@@ -40,9 +42,8 @@ final class WorkspaceHUD {
         let frame = ScreenGeometry.cocoa(fromAX: ax, primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
         hideWork?.cancel()
         let wasVisible = panel.isVisible && panel.alphaValue > 0.4
-        panel.show(root, at: frame)
+        panel.show(root, at: frame, wasVisible ? .glide(direction: step) : .enter(direction: step))
         if !wasVisible {
-            if style.glass { Glass.settle(root) }
             panel.alphaValue = 0
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.1
@@ -171,8 +172,9 @@ final class MoveHUD {
         let root = Self.layer(prev: prev, current: current, next: next, side: side, icons: icons, config: config, style: style, scale: scale)
         let width = root.bounds.width, h = root.bounds.height
         let ax = CGRect(x: (area.midX - width / 2).rounded(), y: area.minY + 10, width: width, height: h)
-        if style.glass, !panel.isVisible || panel.alphaValue < 0.4 { Glass.settle(root) }
-        panel.show(root, at: ScreenGeometry.cocoa(fromAX: ax, primaryHeight: NSScreen.screens.first?.frame.height ?? 0))
+        let entering = !panel.isVisible || panel.alphaValue < 0.4
+        panel.show(root, at: ScreenGeometry.cocoa(fromAX: ax, primaryHeight: NSScreen.screens.first?.frame.height ?? 0),
+                   entering ? .enter(direction: 0) : .none)
         panel.alphaValue = 0.95
         shownAt = Date()
         watchHyper()

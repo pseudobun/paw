@@ -93,6 +93,10 @@ final class WindowManager {
     private var borderHeldFor: WindowID?
     private var dragMonitor: Any?
     let edges = EdgeMarkers()
+    /// The workspace each display showed when the edge islands / the HUD were last drawn, to tell
+    /// which way a switch went.
+    private var edgesShowed: [CGDirectDisplayID: String] = [:]
+    private var hudShowed: [CGDirectDisplayID: String] = [:]
     /// Inside a workspace switch: indicators, border and edges wait until switching settles.
     private var settling = false
     private var settleWork: DispatchWorkItem?
@@ -2450,8 +2454,21 @@ final class WindowManager {
         let apps = workspace(name).allWindows.compactMap { windows[$0]?.app }
         var unique: [String] = []
         for a in apps where !unique.contains(a) { unique.append(a) }
+        let id = displays[di].id
+        let step = stepDirection(from: hudShowed[id], to: name)
+        hudShowed[id] = name
         hud.show(label: label(name), apps: unique, in: displays[di].area, icons: settings.icons, config: config,
-                 duration: config.hud.durationMs / 1000)
+                 duration: config.hud.durationMs / 1000, step: step)
+    }
+
+    /// +1 when `to` comes after `from` in the workspace order (going round the ends with
+    /// focus.wrapWorkspaces), -1 when before, 0 for the same or unknown.
+    private func stepDirection(from: String?, to: String) -> Int {
+        let names = numbered
+        guard let from, from != to, let a = names.firstIndex(of: from), let b = names.firstIndex(of: to) else { return 0 }
+        var d = b - a
+        if config.focus.wrapWorkspaces, names.count > 2, abs(d) == names.count - 1 { d = -d }
+        return d > 0 ? 1 : -1
     }
 
     // MARK: - Dragging
@@ -2740,8 +2757,13 @@ final class WindowManager {
                 markers.append(.init(display: d.id, left: step < 0, name: n, label: label(n), apps: apps, area: d.area, screen: d.frame))
             }
         }
+        var steps: [CGDirectDisplayID: Int] = [:]
+        for d in displays {
+            steps[d.id] = stepDirection(from: edgesShowed[d.id], to: d.workspace)
+            edgesShowed[d.id] = d.workspace
+        }
         edges.style = indicators.style
-        edges.apply(markers, icons: settings.icons, config: config)
+        edges.apply(markers, steps: steps, icons: settings.icons, config: config)
     }
 
     private func runHook(_ cmd: String, _ env: [String: String]) {

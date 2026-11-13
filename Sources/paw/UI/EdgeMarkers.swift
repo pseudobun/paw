@@ -26,7 +26,9 @@ final class EdgeMarkers {
     private var shown: [String: Marker] = [:]
     private var styleKey: (PawConfig.Appearance, PawConfig.Icons)?
 
-    func apply(_ markers: [Marker], icons: AppIconMap, config: PawConfig) {
+    /// `steps`: per display, which way its workspace just went (+1 next, -1 previous), so the
+    /// neighbours' content slides along with it.
+    func apply(_ markers: [Marker], steps: [CGDirectDisplayID: Int] = [:], icons: AppIconMap, config: PawConfig) {
         let restyle = styleKey.map { $0.0 != config.appearance || $0.1 != config.icons } ?? true
         styleKey = (config.appearance, config.icons)
         var keep = Set<String>()
@@ -38,10 +40,13 @@ final class EdgeMarkers {
             panel.onClick = { [weak self] in self?.onClick?(m.name) }
             panel.idleAlpha = style.a.edgeOpacity
             if !restyle, shown[k] == m, panel.isVisible { continue }
-            // A neighbour that changed glides to its new size, like the tip bar's islands.
-            let glide = !restyle && shown[k] != nil && panel.isVisible
+            // A neighbour that changed glides to its new size, like the tip bar's islands; one
+            // that comes up slides in.
+            let step = steps[m.display] ?? 0
+            let transition: IslandMotion.Transition = restyle ? .none
+                : shown[k] != nil && panel.isVisible ? .glide(direction: step) : .enter(direction: step)
             shown[k] = m
-            draw(m, in: panel, icons: icons, config: config, animated: glide)
+            draw(m, in: panel, icons: icons, config: config, transition)
         }
         for (k, p) in panels where !keep.contains(k) {
             p.orderOut(nil)
@@ -84,14 +89,15 @@ final class EdgeMarkers {
         return root
     }
 
-    private func draw(_ m: Marker, in panel: EdgePanel, icons: AppIconMap, config: PawConfig, animated: Bool) {
+    private func draw(_ m: Marker, in panel: EdgePanel, icons: AppIconMap, config: PawConfig,
+                      _ transition: IslandMotion.Transition) {
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         let root = Self.layer(left: m.left, label: m.label, apps: m.apps, icons: icons, config: config, style: style, scale: scale)
         let w = root.bounds.width, h = root.bounds.height
         let x = m.left ? m.screen.minX + Self.inset : m.screen.maxX - Self.inset - w
         let ax = CGRect(x: x, y: (m.area.midY - h / 2).rounded(), width: w, height: h)
         panel.show(root, at: ScreenGeometry.cocoa(fromAX: ax, primaryHeight: NSScreen.screens.first?.frame.height ?? 0),
-                   animated: animated)
+                   transition)
     }
 }
 
@@ -130,89 +136,15 @@ private final class EdgePanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
 
-    /// The island shown now: its background and its rows, kept apart so the background can
-    /// glide while the rows swap.
-    private var island: CALayer?
-    private var rows: CALayer?
-    private var generation = 0
+    private let motion: IslandMotion = {
+        let m = IslandMotion()
+        m.shift = 6
+        return m
+    }()
 
-    /// The tip bar's motion: islands glide over 220 ms (easeOutQuint), content swaps in 80 ms.
-    private static let glide: CFTimeInterval = 0.22
-    private static let contentFade: CFTimeInterval = 0.08
-
-    /// Shows the island `l` at `cocoaFrame`. `animated`, the old island's background glides to
-    /// the new size and place while its rows cross-fade into the new ones.
-    func show(_ l: CALayer, at cocoaFrame: CGRect, animated: Bool = false) {
-        guard let root = host.content.layer else { return }
-        generation += 1
-        let gen = generation
-        // The rows move into their own layer; `l` keeps only the island's chrome.
-        let content = CALayer()
-        content.contentsScale = l.contentsScale
-        for row in l.sublayers ?? [] { content.addSublayer(row) }
-        let from = frame
-        // A glass island doesn't glide: the glass fills the panel, which grows for the glide.
-        let motion = animated && isVisible && from != cocoaFrame && island != nil
-            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && Glass.tint(of: l) == nil
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        guard motion else {
-            setFrame(cocoaFrame, display: false)
-            l.frame = CGRect(origin: .zero, size: cocoaFrame.size)
-            content.frame = l.frame
-            root.sublayers = [l, content]
-            island = l
-            rows = content
-            host.adopt(l)
-            CATransaction.commit()
-            orderFrontRegardless()
-            return
-        }
-        // Grow the panel to cover both places for the glide, then settle on the new one.
-        let union = from.union(cocoaFrame)
-        let f = from.offsetBy(dx: -union.minX, dy: -union.minY)
-        let t = cocoaFrame.offsetBy(dx: -union.minX, dy: -union.minY)
-        setFrame(union, display: false)
-        let oldRows = rows
-        oldRows?.frame = f
-        l.frame = t
-        content.frame = t
-        root.sublayers = [l, oldRows, content].compactMap { $0 }
-        host.adopt(l)
-        island = l
-        rows = content
-        let ease = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
-        func anim(_ key: String, _ from: Any?, _ duration: CFTimeInterval, _ timing: CAMediaTimingFunction) -> CABasicAnimation {
-            let a = CABasicAnimation(keyPath: key)
-            a.fromValue = from
-            a.duration = duration
-            a.timingFunction = timing
-            return a
-        }
-        l.add(anim("bounds", NSValue(rect: CGRect(origin: .zero, size: f.size)), Self.glide, ease), forKey: "glide.bounds")
-        l.add(anim("position", NSValue(point: CGPoint(x: f.midX, y: f.midY)), Self.glide, ease), forKey: "glide.position")
-        if l.shadowPath != nil {
-            let r = l.cornerRadius
-            let fromPath = CGPath(roundedRect: CGRect(origin: .zero, size: f.size), cornerWidth: min(r, f.width / 2),
-                                  cornerHeight: min(r, f.height / 2), transform: nil)
-            l.add(anim("shadowPath", fromPath, Self.glide, ease), forKey: "glide.shadow")
-        }
-        let linear = CAMediaTimingFunction(name: .linear)
-        content.add(anim("opacity", 0, Self.contentFade, linear), forKey: "fade")
-        oldRows?.opacity = 0
-        oldRows?.add(anim("opacity", 1, Self.contentFade, linear), forKey: "fade")
-        CATransaction.setCompletionBlock { [weak self] in
-            guard let self, gen == generation else { return }
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            setFrame(cocoaFrame, display: false)
-            l.frame = CGRect(origin: .zero, size: cocoaFrame.size)
-            content.frame = l.frame
-            root.sublayers = [l, content]
-            CATransaction.commit()
-        }
-        CATransaction.commit()
-        orderFrontRegardless()
+    /// Shows the island `l` at `cocoaFrame`; `transition` says how it gets there from the one shown.
+    func show(_ l: CALayer, at cocoaFrame: CGRect, _ transition: IslandMotion.Transition) {
+        motion.show(l, at: cocoaFrame, in: self, host: host, transition)
     }
 }
 
