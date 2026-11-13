@@ -611,10 +611,19 @@ def grant(args):
         print(f"Accessibility granted; Screen Recording: {ipc(sock, 'perf status')['screenRecording']}")
 
 
+def quiet(limit=4.0, timeout=600):
+    """Wait for the 1-minute load average to drop below limit: a build or backup running alongside skews a batch."""
+    if os.getloadavg()[0] < limit: return
+    print(f"load average {os.getloadavg()[0]:.1f}; waiting for it to drop below {limit}", flush=True)
+    wait_for(lambda: os.getloadavg()[0] < limit, timeout,
+             f"load average stayed at or above {limit} for {timeout // 60} minutes; stop builds/backups and rerun")
+
+
 def record_batch(artifact, tools_artifact, args, directory, app):
     directory.mkdir()
     cfg = directory / "config.json5"; save(cfg, config(args.windows, args.scene))
     require(not main_apps(), "another PAW is running; the session stops it first")
+    quiet()
     load_average = os.getloadavg()
     sock = install(artifact, app)
     manifest = load(artifact / "build.json")
