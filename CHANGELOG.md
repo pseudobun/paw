@@ -3,6 +3,55 @@
 All notable changes to paw. Versions follow [Semantic Versioning](https://semver.org); entries
 come from [Conventional Commits](https://www.conventionalcommits.org) via release-please.
 
+## [0.1.0](https://github.com/pseudobun/paw/compare/v0.1.0-beta.16...v0.1.0) (2026-11-13)
+
+
+### Features
+
+* **hud:** glide the edge markers to a new neighbour like the tip bar's islands ([#90](https://github.com/pseudobun/paw/issues/90)) ([cd44400](https://github.com/pseudobun/paw/commit/cd44400879ca9dafe57c5c0ef38b8e4ca7324fbd))
+* **hud:** glide the edge markers to a new neighbour like the tip bar's islands ([#91](https://github.com/pseudobun/paw/issues/91)) ([38fd059](https://github.com/pseudobun/paw/commit/38fd059aaa2dd9efe959a667be22cfa794654c7c))
+* **hud:** slide the workspace HUD and edge markers the way the workspace went ([d7ada60](https://github.com/pseudobun/paw/commit/d7ada6077ec9c2a12ba197dce38d0f63d7bf05f0))
+* **hud:** slide the workspace HUD and edge markers the way the workspace went ([442c648](https://github.com/pseudobun/paw/commit/442c648282763b8eb5376c362e5766cc6f45154c))
+* **indicator:** cross-fade stack cells on change like the bar's spaces ([b47c758](https://github.com/pseudobun/paw/commit/b47c758ed430e21c5e99e93ce6333b1d6d8c798e))
+* **indicator:** cross-fade stack cells on change like the bar's spaces ([193d157](https://github.com/pseudobun/paw/commit/193d157c8eefb7df895d60056cf037c37a101df7))
+* **indicator:** glide the stack highlight to the window on top like the tip bar ([#87](https://github.com/pseudobun/paw/issues/87)) ([cc5aac8](https://github.com/pseudobun/paw/commit/cc5aac8df6bae51e89fef5a372e704c0594c9247))
+* **indicator:** glide the stack highlight to the window on top like the tip bar ([#88](https://github.com/pseudobun/paw/issues/88)) ([3229156](https://github.com/pseudobun/paw/commit/3229156284fd113f986758ca6ffb5cfadc82b9ec))
+* **indicator:** show app icons without the app font and cross-fade stack cells ([#78](https://github.com/pseudobun/paw/issues/78)) ([b736ae1](https://github.com/pseudobun/paw/commit/b736ae165234c0e795e6c127a864fd4e073bd317))
+* **indicator:** show app icons without the app font and cross-fade stack cells ([#79](https://github.com/pseudobun/paw/issues/79)) ([4dbb653](https://github.com/pseudobun/paw/commit/4dbb653d8ab79375921b054394837ad05217610d))
+* **setups:** make switching setups on display changes optional ([#74](https://github.com/pseudobun/paw/issues/74)) ([7646592](https://github.com/pseudobun/paw/commit/7646592ca4020bda5cc33fd71b493cb73ec75ad2))
+* **setups:** make switching setups on display changes optional ([#75](https://github.com/pseudobun/paw/issues/75)) ([1180e8e](https://github.com/pseudobun/paw/commit/1180e8e7270168b08f2bbf928068ae588bbe87ab))
+* **ui:** add liquid glass design ([#93](https://github.com/pseudobun/paw/issues/93)) ([56e8bf8](https://github.com/pseudobun/paw/commit/56e8bf8313aa728ef16d2d1189fed09571a2437e))
+* **ui:** make liquid glass more see-through and configurable ([#107](https://github.com/pseudobun/paw/issues/107)) ([4e061cf](https://github.com/pseudobun/paw/commit/4e061cf78a4cb52dd445bff3f2c9b8dbc61f61ad))
+* **updates:** add a beta channel and release betas from a beta branch ([#61](https://github.com/pseudobun/paw/issues/61)) ([da07dbd](https://github.com/pseudobun/paw/commit/da07dbd13c2be9975843273de223af651cc2e1be))
+
+
+### Bug Fixes
+
+* **border:** hide focus border while dragging or resizing a window ([#60](https://github.com/pseudobun/paw/issues/60)) ([bfb525c](https://github.com/pseudobun/paw/commit/bfb525c6c2fb1fe9ae6edce03364c5f6d66b4c56))
+* **bundle:** don't fail when PackageFrameworks is missing ([#62](https://github.com/pseudobun/paw/issues/62)) ([18698a9](https://github.com/pseudobun/paw/commit/18698a9f56adf312db29c904e0bfb5525816cffc))
+* **cask:** name the conflicting cask with its tap ([#81](https://github.com/pseudobun/paw/issues/81)) ([19fc0c1](https://github.com/pseudobun/paw/commit/19fc0c1f3411ce7918df1a22e3f0cc5b23612b18))
+* **cask:** name the conflicting cask with its tap ([#82](https://github.com/pseudobun/paw/issues/82)) ([e31e3e1](https://github.com/pseudobun/paw/commit/e31e3e149a497499773c4c6ccc303a6c53a2356b))
+* **config:** apply every setting on live reload and surface broken configs ([#108](https://github.com/pseudobun/paw/issues/108)) ([7e16c8b](https://github.com/pseudobun/paw/commit/7e16c8b530ca6f4ba896e783ceb85a6ed57824e1))
+* **float:** keep fixed-size and floating windows usable ([#63](https://github.com/pseudobun/paw/issues/63)) ([1795563](https://github.com/pseudobun/paw/commit/179556398dfefb7743e2035b5c76beb46e122741))
+* **float:** keep tiled parents below floating windows ([#76](https://github.com/pseudobun/paw/issues/76)) ([fd8f959](https://github.com/pseudobun/paw/commit/fd8f9591d7d4720819d46acd0aac551fd41cf5a7))
+* **hud:** keep island content centred while a glass island glides ([789b7ed](https://github.com/pseudobun/paw/commit/789b7ed05a6173af4afb4e3c0a54e5ed3e89ada0))
+* **hud:** keep island content centred while a glass island glides ([20c89e4](https://github.com/pseudobun/paw/commit/20c89e4a8f26b42537b1f9f86fd372575fafa511))
+* **indicator:** draw app icons in edge markers without the app font ([#84](https://github.com/pseudobun/paw/issues/84)) ([a6f55c7](https://github.com/pseudobun/paw/commit/a6f55c7de16fb74ccf742bf5e7597c0f9df1cd8e))
+* **indicator:** draw app icons in edge markers without the app font ([#85](https://github.com/pseudobun/paw/issues/85)) ([76becdc](https://github.com/pseudobun/paw/commit/76becdcb61ae06d2a3626641bdcd740ef77d6c0b))
+* **indicator:** show app icons instead of initials without the app font ([63656aa](https://github.com/pseudobun/paw/commit/63656aaee3c979d7a1401cf551a2fdb5f5b04ecd))
+* **indicator:** show app icons instead of initials without the app font ([d5e6306](https://github.com/pseudobun/paw/commit/d5e630638ee145798a137077b1979ddc88471029))
+* **layout:** put windows an app shrank right after placing back on their tile ([#72](https://github.com/pseudobun/paw/issues/72)) ([6b3d065](https://github.com/pseudobun/paw/commit/6b3d06588626a54fd3901340cdb060ac4ef728c1))
+* **settings:** offer only the beta channel until a stable version exists ([#66](https://github.com/pseudobun/paw/issues/66)) ([eff1d57](https://github.com/pseudobun/paw/commit/eff1d574e5939612dc81635a3ab4719914e57c98))
+* **settings:** offer only the beta channel until a stable version exists ([#67](https://github.com/pseudobun/paw/issues/67)) ([aaef1fd](https://github.com/pseudobun/paw/commit/aaef1fdcf628524ceb4264f5c2fbd0beb29f88f4))
+* **wm:** leave self-floating panels like Ghostty's quick terminal alone ([1e67994](https://github.com/pseudobun/paw/commit/1e67994f25f66b346f5f7f65ff566e64424ec214))
+
+
+### Performance
+
+* **overview:** reuse closed overview panels ([#99](https://github.com/pseudobun/paw/issues/99)) ([4c766e0](https://github.com/pseudobun/paw/commit/4c766e0fbc9ebf66bd2eec4e9312d61880a4e0bd))
+* **state:** skip rewriting an unchanged state file ([#97](https://github.com/pseudobun/paw/issues/97)) ([d08d4dc](https://github.com/pseudobun/paw/commit/d08d4dc5ea3742003b47904c8b12268faeb99a8e))
+* **wm:** read live window numbers without bridging descriptions ([#96](https://github.com/pseudobun/paw/issues/96)) ([2d08fa8](https://github.com/pseudobun/paw/commit/2d08fa8c47a74b809ec8d51efad09611c9b486c7))
+
 ## [0.1.0-beta.16](https://github.com/pseudobun/paw/compare/v0.1.0-beta.15...v0.1.0-beta.16) (2026-11-12)
 
 
