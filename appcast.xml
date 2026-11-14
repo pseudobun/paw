@@ -6,6 +6,18 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.37</title>
+      <pubDate>Sat, 14 Nov 2026 16:41:26 +0000</pubDate>
+      <sparkle:version>176</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.37</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
+<ul>
+<li><b>wm:</b> open new windows of running apps on the current workspace (<a href="https://github.com/pseudobun/paw/commit/759bd5a063a27f6ae7c397def7b10eba1ade8cc1">759bd5a</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.37">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.37/paw-0.1.0-beta.37-macos.zip" type="application/octet-stream" sparkle:edSignature="9aRWeUd5BV7/SQbgoIAESSvR3q95KjUPaY3lEbuSNjIdbyRlppcN+xLR4aK92u/VF0fIzsE3RWFvMBg89yj9Ag==" length="3822992"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.36</title>
       <pubDate>Sat, 14 Nov 2026 12:29:39 +0000</pubDate>
       <sparkle:version>174</sparkle:version>
@@ -249,18 +261,6 @@
 <li><b>settings:</b> offer only the beta channel until a stable version exists (<a href="https://github.com/pseudobun/paw/issues/66">#66</a>) (<a href="https://github.com/pseudobun/paw/commit/eff1d574e5939612dc81635a3ab4719914e57c98">eff1d57</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.18">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.18/paw-0.1.0-beta.18-macos.zip" type="application/octet-stream" sparkle:edSignature="1Vk+xlRi5Nm+7PGh5YSkmxMyPYLkmsXuCpZafv6GvtXTvDvmMkVZpai9R7YudJfNiwbePrr4nUro/IlN9NniCQ==" length="3621716"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.17</title>
-      <pubDate>Thu, 12 Nov 2026 09:21:44 +0000</pubDate>
-      <sparkle:version>117</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.17</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
-<ul>
-<li><b>updates:</b> add a beta channel and release betas from a beta branch (<a href="https://github.com/pseudobun/paw/issues/61">#61</a>) (<a href="https://github.com/pseudobun/paw/commit/da07dbd13c2be9975843273de223af651cc2e1be">da07dbd</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.17">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.17/paw-0.1.0-beta.17-macos.zip" type="application/octet-stream" sparkle:edSignature="ue8y+zaCVu1sh/B7LBmsjRcxqPujeyLf7RMELwnKAaYoSbEE7iUsoUVMBF45FJGtyarT06T+367DVwdPAnbZDw==" length="3622168"/>
     </item>
   </channel>
 </rss>
