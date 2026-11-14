@@ -46,6 +46,8 @@ final class WindowManager {
     private var movedTo: [String: CGDirectDisplayID] = [:]
     /// When paw last switched a display's workspace itself.
     private var lastSwitch = Date.distantPast
+    /// The workspace that switch hid.
+    private var lastSwitchFrom: String?
     /// The workspace presets in effect: the active setup's, else `workspaces`.
     var presets: [String: WorkspacePreset] { config.presets(setup: activeSetup) }
     /// The config `configChanged` last applied, to tell what a reload changed.
@@ -204,6 +206,9 @@ final class WindowManager {
             for delay in [0.4, 1.5, 4.0] {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.adopt(app, state: nil, fresh: true) }
             }
+            // Slow starters refuse accessibility for seconds, and the window they make meanwhile
+            // sends paw nothing.
+            self?.adoptWhenReady(app, until: Date().addingTimeInterval(Self.slowStartWait))
         })
         observers.append(ws.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
@@ -285,7 +290,8 @@ final class WindowManager {
             if w.isHidden { w.isHidden = false; w.setFrame(w.floatFrame ?? w.frame) }
             remove(w.id)
         }
-        if let old, old.rules != config.rules { applyRules(since: old) }
+        // `always` rules also put back windows moved off their workspace since.
+        if let old, old.rules != config.rules || config.rules.contains(where: { $0.always == true }) { applyRules(since: old) }
         if !displays.isEmpty {
             rebuildDisplays()
             if let old { applyWorkspaceSettings(since: old, presets: oldPresets ?? [:]) }
@@ -300,7 +306,7 @@ final class WindowManager {
         for w in windows.values {
             guard let ws = workspaceOf(w.id) else { continue }
             let change = RuleChange.between(old, config, app: w.app, title: w.title, native: w.nativeFloat,
-                                            floating: ws.isFloating(w.id), on: ws.name)
+                                            floating: ws.isFloating(w.id), on: ws.name, exists: isPermanent)
             if let float = change.float {
                 let area = area(of: ws)
                 ws.toggleFloat(w.id, area: area)
@@ -565,7 +571,39 @@ final class WindowManager {
             if let win = add(w, pid: app.processIdentifier, state: state, initial: !fresh) { added.append(win.id) }
         }
         if state == nil, !added.isEmpty { layoutVisible(animated: true) }
-        if fresh, let id = added.last, let ws = workspaceOf(id), displayShowing(ws.name) != nil { focusWindow(id, warp: true) }
+        if fresh, let id = added.last { focusNew(id) }
+    }
+
+    /// A window that just opened takes focus when its workspace is shown; one an `always` rule
+    /// keeps on a hidden workspace shows that workspace.
+    private func focusNew(_ id: WindowID) {
+        guard let w = windows[id], let ws = workspaceOf(id) else { return }
+        if displayShowing(ws.name) != nil {
+            focusWindow(id, warp: true)
+        } else if config.pinnedWorkspace(app: w.app, title: w.title) == ws.name {
+            ws.focused = id
+            show(ws.name)
+        }
+    }
+
+    /// How long paw keeps looking for the first window of an app that just launched.
+    static let slowStartWait: TimeInterval = 60
+
+    /// Asks a launching app for its windows off the main thread, once a second, and adopts them on
+    /// the main thread once it answers with some. Stops once paw manages one of its windows. While
+    /// the app is busy, `AXHealth` would fail the main thread's calls at once anyway.
+    private func adoptWhenReady(_ app: NSRunningApplication, until deadline: Date) {
+        let pid = app.processIdentifier
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [weak self] in
+            let ready = !AXUIElementCreateApplication(pid).elements(kAXWindowsAttribute).isEmpty
+            DispatchQueue.main.async {
+                guard let self, !app.isTerminated, !self.windows.values.contains(where: { $0.pid == pid }) else { return }
+                if ready { self.adopt(app, state: nil, fresh: true) }
+                if Date() < deadline, !self.windows.values.contains(where: { $0.pid == pid }) {
+                    self.adoptWhenReady(app, until: deadline)
+                }
+            }
+        }
     }
 
     /// Starts managing a window; nil when it isn't one paw manages.
@@ -583,7 +621,12 @@ final class WindowManager {
         let appName = NSRunningApplication(processIdentifier: pid)?.localizedName ?? ""
         let title = el.string(kAXTitleAttribute) ?? ""
         if config.ignores(app: appName, title: title) { return nil }
-        let ruleWorkspace = config.ruleWorkspace(app: appName, title: title)
+        // An `always` rule: that workspace wins over where the window was. One that doesn't exist
+        // (above layout.workspaces, no preset) counts for nothing, rather than being made.
+        let rulePin = config.pinnedWorkspace(app: appName, title: title)
+        let pinned = rulePin.flatMap { isPermanent($0) ? $0 : nil }
+        var ruleWorkspace = config.ruleWorkspace(app: appName, title: title)
+        if rulePin != nil, pinned == nil, ruleWorkspace == rulePin { ruleWorkspace = nil }
         // A panel that floats itself above normal windows (Ghostty's quick terminal) places
         // itself: managing it would re-centre it off its edge. A manage: true rule still takes it.
         if subrole == "AXFloatingWindow", let layer, Self.isSelfLayeredPanel(layer),
@@ -604,7 +647,7 @@ final class WindowManager {
         if !initial, presetName != nil, focusedWorkspace.allWindows.contains(where: { $0 != id && windows[$0]?.pid == pid }) {
             presetName = nil
         }
-        var name = state?[id] ?? ruleWorkspace ?? presetName
+        var name = pinned ?? state?[id] ?? ruleWorkspace ?? presetName
         if name == nil, initial, let di = displays.indices.first(where: { displays[$0].frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }) {
             name = displays[di].workspace
         }
@@ -810,7 +853,7 @@ final class WindowManager {
     /// Some apps announce a window before it has its role and size; try again shortly.
     private func windowCreated(_ el: AXUIElement, pid: pid_t, retries: Int) {
         if let w = add(el, pid: pid, state: nil, initial: false) {
-            if let ws = workspaceOf(w.id), displayShowing(ws.name) != nil { focusWindow(w.id, warp: true) }
+            focusNew(w.id)
         } else if retries > 0, el.windowID.map({ windows[$0] == nil }) ?? true {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.windowCreated(el, pid: pid, retries: retries - 1) }
         }
@@ -866,8 +909,9 @@ final class WindowManager {
             focusChanged(id)
         } else {
             // Right after paw switches (to an empty workspace, say), macOS hands focus to some
-            // window it just hid; following that would switch straight back.
-            guard force || Date().timeIntervalSince(lastSwitch) > 1.5 else { return }
+            // window it just hid; following that would switch straight back. Any other workspace's
+            // window (a link opening in the browser) is followed.
+            guard force || ws.name != lastSwitchFrom || Date().timeIntervalSince(lastSwitch) > 1.5 else { return }
             ws.focused = id
             show(ws.name)
         }
@@ -1734,6 +1778,7 @@ final class WindowManager {
         displays[di].workspace = name
         focusedDisplay = di
         lastSwitch = Date()
+        lastSwitchFrom = old
         if old != name { lastWorkspace = old }
         // The new windows come up and the old ones go away together, every app at once.
         AXQueue.run {

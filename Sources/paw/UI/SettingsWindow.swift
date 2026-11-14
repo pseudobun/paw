@@ -637,6 +637,12 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             }
             bind(field, text) { text.stringValue = ($0 as? [String] ?? []).joined(separator: ", ") }
             row = rowStack([textColumn(field.label, field.help), text])
+        case .apps(let placeholder):
+            let text = textField((value as? [String] ?? []).joined(separator: ", "), placeholder: placeholder, width: 240 - 8 - 32) { [unowned self] t in
+                write(field, Self.list(t.stringValue))
+            }
+            bind(field, text) { text.stringValue = ($0 as? [String] ?? []).joined(separator: ", ") }
+            row = rowStack([textColumn(field.label, field.help), appField(text, multiple: true)])
         case .number(let min, let max, let step, let unit):
             let stepper = NSStepper()
             let text = textField(Self.format(value as? Double ?? 0), placeholder: "", width: 72) { [unowned self] t in
@@ -745,6 +751,29 @@ final class SettingsController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         b.font = Theme.sans(13)
         on(b, action)
         return b
+    }
+
+    /// `text` with an app picker beside it. A pick replaces the field's text (`multiple`: adds to its
+    /// comma-separated list) and commits it like an edit, or runs the field's ↵ action (an "Add" row).
+    /// Typing a name or /regex/ still works.
+    func appField(_ text: NSTextField, multiple: Bool) -> NSStackView {
+        let pick = AppPicker.button { [unowned self] b in
+            let current = Self.list(text.stringValue)
+            AppPicker.show(from: b, multiple: multiple, exclude: multiple ? Set(current) : []) { [weak self] apps in
+                guard let self else { return }
+                let names = apps.map(\.name)
+                text.stringValue = (multiple ? current + names : [names[0]]).joined(separator: ", ")
+                if let commit = commits[ObjectIdentifier(text)] {
+                    commit(text)
+                } else {
+                    returns[ObjectIdentifier(text)]?()
+                }
+            }
+        }
+        let stack = NSStackView(views: [text, pick])
+        stack.spacing = 8
+        stack.setHuggingPriority(text.contentHuggingPriority(for: .horizontal), for: .horizontal)
+        return stack
     }
 
     /// The borderless ⓧ that removes a row.

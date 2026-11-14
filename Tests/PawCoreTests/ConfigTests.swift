@@ -88,7 +88,7 @@ struct ConfigTests {
 
     /// Rules and gestures decode with synthesized keys; the lists unknownKeys checks must match them.
     @Test func ruleAndGestureKeyListsMatchTheirFields() throws {
-        let rule = PawConfig.Rule(app: "A", title: "t", unlessTitle: "u", manage: true, float: true, workspace: "1")
+        let rule = PawConfig.Rule(app: "A", title: "t", unlessTitle: "u", manage: true, float: true, workspace: "1", always: true)
         let ruleKeys = try JSONSerialization.jsonObject(with: JSONEncoder().encode(rule)) as? [String: Any]
         #expect(Set(ruleKeys?.keys.map { $0 } ?? []) == ConfigLoader.ruleKeys)
         let gesture = PawConfig.Gesture(button: "middle", direction: "left", command: "balance")
