@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.0-beta.36](https://github.com/pseudobun/paw/compare/v0.1.0-beta.35...v0.1.0-beta.36) (2026-11-14)
+
+
+### Features
+
+* add always rules and an app picker in settings ([f0d92e6](https://github.com/pseudobun/paw/commit/f0d92e60dec672513bd40c266e2d9f58e0ebbfda))
+* add always rules and an app picker in settings ([#114](https://github.com/pseudobun/paw/issues/114)) ([8986278](https://github.com/pseudobun/paw/commit/89862789c9f20677709b08d0cd7389ab28883dbe))
+
+
+### Bug Fixes
+
+* **wm:** adopt windows of apps that refuse accessibility while starting ([ed12f92](https://github.com/pseudobun/paw/commit/ed12f92197b7f5ca5a00e5a1cded3aa83bfd8400))
+* **wm:** follow focus to another workspace right after a switch ([57e6b0a](https://github.com/pseudobun/paw/commit/57e6b0aae2faa0ab1ac82531e76c67edfd13d599))
+
 ## [0.1.0-beta.35](https://github.com/pseudobun/paw/compare/v0.1.0-beta.34...v0.1.0-beta.35) (2026-11-13)
 
 
