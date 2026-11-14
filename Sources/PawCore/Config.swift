@@ -115,15 +115,19 @@ public struct PawConfig: Codable, Equatable, Sendable {
         public var float: Bool?
         /// Workspace new windows of the app go to.
         public var workspace: String?
+        /// true: the windows always live on `workspace` (when they open, when paw starts, after a
+        /// reload), and paw shows it when one opens. Ignored while that workspace doesn't exist.
+        public var always: Bool?
 
         public init(app: String, title: String? = nil, unlessTitle: String? = nil, manage: Bool? = nil, float: Bool? = nil,
-                    workspace: String? = nil) {
+                    workspace: String? = nil, always: Bool? = nil) {
             self.app = app
             self.title = title
             self.unlessTitle = unlessTitle
             self.manage = manage
             self.float = float
             self.workspace = workspace
+            self.always = always
         }
 
         public func matches(app a: String, title t: String) -> Bool {
@@ -765,7 +769,7 @@ public enum ConfigLoader {
 
     static let paddingKeys = Set(Padding.CodingKeys.allCases.map(\.rawValue))
     /// Rules and gestures decode with synthesized keys: listed here, kept in step by a test.
-    static let ruleKeys: Set<String> = ["app", "title", "unlessTitle", "manage", "float", "workspace"]
+    static let ruleKeys: Set<String> = ["app", "title", "unlessTitle", "manage", "float", "workspace", "always"]
     static let gestureKeys: Set<String> = ["button", "direction", "command"]
 
     /// `value`'s keys that aren't in `known`, as `path.key`; nothing when it isn't an object.

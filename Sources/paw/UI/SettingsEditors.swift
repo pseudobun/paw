@@ -86,8 +86,9 @@ extension SettingsController {
                     endEditing()
                     update(name, rebuild: true) { if $0.tiles.indices.contains(i) { $0.tiles.remove(at: i) } }
                 }
-                let line = lineStack([number, apps, size, titleField, launch, remove])
-                apps.widthAnchor.constraint(equalTo: launch.widthAnchor, multiplier: 1.3).isActive = true
+                let appsField = appField(apps, multiple: true)
+                let line = lineStack([number, appsField, size, titleField, launch, remove])
+                appsField.widthAnchor.constraint(equalTo: launch.widthAnchor, multiplier: 1.3).isActive = true
                 card.add(line)
             }
 
@@ -98,7 +99,7 @@ extension SettingsController {
                 update(name, rebuild: true) { $0.tiles.append(.init(apps: apps)) }
             }
             returns[ObjectIdentifier(newApps)] = add
-            card.add(lineStack([newApps, button("Add Tile", add)]))
+            card.add(lineStack([appField(newApps, multiple: true), button("Add Tile", add)]))
             addCard(card)
         }
         addCard(addRow("Add a workspace", placeholder: "name") { [unowned self] name in
@@ -175,8 +176,10 @@ extension SettingsController {
             let title = textField(rule.title ?? "", placeholder: "title") { t in update(i) { $0.title = optional(t) } }
             let unless = textField(rule.unlessTitle ?? "", placeholder: "unless title") { t in update(i) { $0.unlessTitle = optional(t) } }
             let workspace = textField(rule.workspace ?? "", placeholder: "workspace", width: 90) { t in update(i) { $0.workspace = optional(t) } }
-            let top = lineStack([app, float, ignore, remove])
-            let bottom = lineStack([title, unless, workspace])
+            let top = lineStack([appField(app, multiple: false), float, ignore, remove])
+            let always = checkbox("Always", rule.always == true) { on in update(i) { $0.always = on ? true : nil } }
+            always.toolTip = "Keep its windows on this workspace and show it when one opens"
+            let bottom = lineStack([title, unless, workspace, always])
             top.edgeInsets.bottom = 4
             bottom.edgeInsets.top = 0
             // Line the second row up under the app field.
@@ -195,7 +198,7 @@ extension SettingsController {
             write(rebuild: true) { $0.rules.append(.init(app: app)) }
         }
         returns[ObjectIdentifier(newApp)] = add
-        card.add(lineStack([newApp, button("Add Rule", add)]))
+        card.add(lineStack([appField(newApp, multiple: false), button("Add Rule", add)]))
         addCard(card)
     }
 
@@ -334,7 +337,7 @@ extension SettingsController {
                 endEditing()
                 write(rebuild: true) { $0.icons.colors[app] = nil }
             }
-            card.add(lineStack([name, well, remove]))
+            card.add(lineStack([appField(name, multiple: false), well, remove]))
         }
         let newApp = textField("", placeholder: "app, e.g. Brave Browser")
         let add = { [unowned self] in
@@ -343,7 +346,7 @@ extension SettingsController {
             write(rebuild: true) { $0.icons.colors[app] = AppColors.shared.color(for: app, icons: $0.icons) ?? $0.appearance.colors.accent }
         }
         returns[ObjectIdentifier(newApp)] = add
-        card.add(lineStack([newApp, button("Add", add)]))
+        card.add(lineStack([appField(newApp, multiple: false), button("Add", add)]))
         addCard(card)
     }
 

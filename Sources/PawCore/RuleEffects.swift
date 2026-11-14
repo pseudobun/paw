@@ -40,6 +40,11 @@ extension PawConfig {
         rules(app: app, title: title).first { $0.workspace != nil }?.workspace
     }
 
+    /// The workspace an `always` rule keeps the window on, if any.
+    public func pinnedWorkspace(app: String, title: String) -> String? {
+        rules(app: app, title: title).first { $0.always == true && $0.workspace != nil }?.workspace
+    }
+
     /// The workspace presets in effect with `setup` active: its own, else `workspaces`.
     public func presets(setup: String?) -> [String: WorkspacePreset] {
         setup.flatMap { setups[$0]?.workspaces } ?? workspaces
@@ -60,13 +65,17 @@ public struct RuleChange: Equatable, Sendable {
         self.workspace = workspace
     }
 
+    /// `exists`: whether a workspace exists now; an `always` rule for one that doesn't is ignored.
     public static func between(_ old: PawConfig, _ new: PawConfig, app: String, title: String, native: NativeFloat,
-                               floating: Bool, on workspace: String) -> RuleChange {
+                               floating: Bool, on workspace: String, exists: (String) -> Bool = { _ in true }) -> RuleChange {
         var change = RuleChange()
         let was = old.floats(app: app, title: title, native: native)
         let now = new.floats(app: app, title: title, native: native)
         if was != now, floating != now { change.float = now }
-        if let to = new.ruleWorkspace(app: app, title: title), to != old.ruleWorkspace(app: app, title: title), to != workspace {
+        // Always there: back on it even when the rule didn't change (moved by hand meanwhile).
+        if let pin = new.pinnedWorkspace(app: app, title: title), exists(pin) {
+            if pin != workspace { change.workspace = pin }
+        } else if let to = new.ruleWorkspace(app: app, title: title), to != old.ruleWorkspace(app: app, title: title), to != workspace {
             change.workspace = to
         }
         return change
