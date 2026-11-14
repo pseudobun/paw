@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.37](https://github.com/pseudobun/paw/compare/v0.1.0-beta.36...v0.1.0-beta.37) (2026-11-14)
+
+
+### Bug Fixes
+
+* **wm:** open new windows of running apps on the current workspace ([759bd5a](https://github.com/pseudobun/paw/commit/759bd5a063a27f6ae7c397def7b10eba1ade8cc1))
+
 ## [0.1.0-beta.36](https://github.com/pseudobun/paw/compare/v0.1.0-beta.35...v0.1.0-beta.36) (2026-11-14)
 
 
