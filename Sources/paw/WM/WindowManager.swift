@@ -46,6 +46,8 @@ final class WindowManager {
     private var movedTo: [String: CGDirectDisplayID] = [:]
     /// When paw last switched a display's workspace itself.
     private var lastSwitch = Date.distantPast
+    /// The workspace that switch hid.
+    private var lastSwitchFrom: String?
     /// The workspace presets in effect: the active setup's, else `workspaces`.
     var presets: [String: WorkspacePreset] { config.presets(setup: activeSetup) }
     /// The config `configChanged` last applied, to tell what a reload changed.
@@ -889,8 +891,9 @@ final class WindowManager {
             focusChanged(id)
         } else {
             // Right after paw switches (to an empty workspace, say), macOS hands focus to some
-            // window it just hid; following that would switch straight back.
-            guard force || Date().timeIntervalSince(lastSwitch) > 1.5 else { return }
+            // window it just hid; following that would switch straight back. Any other workspace's
+            // window (a link opening in the browser) is followed.
+            guard force || ws.name != lastSwitchFrom || Date().timeIntervalSince(lastSwitch) > 1.5 else { return }
             ws.focused = id
             show(ws.name)
         }
@@ -1757,6 +1760,7 @@ final class WindowManager {
         displays[di].workspace = name
         focusedDisplay = di
         lastSwitch = Date()
+        lastSwitchFrom = old
         if old != name { lastWorkspace = old }
         // The new windows come up and the old ones go away together, every app at once.
         AXQueue.run {
