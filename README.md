@@ -479,6 +479,7 @@ A typical setup: presets for the apps you always use, a status bar, and a key to
     { app: "/^(System Settings|Calculator|Raycast)$/", float: true },
     { app: "Brave Browser", unlessTitle: "Brave", float: true }, // extension popups float
     { app: "Telegram", workspace: "5" },
+    { app: "Spotify", workspace: "9", always: true }, // always on 9; opening it shows 9
   ],
 }
 ```
@@ -497,7 +498,7 @@ Setting `bindings` or `rules` replaces the default list, so start from the ones 
 | `setups` | `"name": { displays: ["builtin", "DELL"], focus, autoSwitch?, workspaces: { … } }` |
 | `autoSwitchSetups` | `true`: switch to the setup matching the displays when they change; `false`: keep the one in use until you pick another |
 | `initiate` | `apps` ([] = every plain app name in the presets), `focus` (""), `timeout` (15 s) |
-| `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace? }`; `app`/`title` are names or `/regex/` |
+| `rules` | `{ app, title?, unlessTitle?, manage?, float?, workspace?, always? }`; `app`/`title` are names or `/regex/`; `always: true` keeps the windows on `workspace` (on open, at start, after a reload) and shows it when one opens, unless that workspace doesn't exist |
 | `indicator` | `enabled` (true), `side` (`auto left right insideLeft insideRight`), `offsetX/Y`, `width`, `cellHeight`, `gap`, `padding`, `titles` (`hover`/`never`), `clickToFocus`, `scrollToCycle`, `unfocusedOpacity`, `fadeMs` |
 | `appearance` | `theme` (og, og-light, modern, minimal, solarpunk, cyberpunk; the other keys override it), `font` (a family, or system / system-mono / system-rounded), `fontSize`, `fontWeight`, `boldWeight`, `appFont`, `appIconSize`, `radius`, `cellRadius`, `pills`, `islandHeight`, `borderWidth`, `shadow`, `shadowOpacity`, `shadowRadius`, `hudOpacity`, `edgeOpacity`, `glass` (Liquid Glass on macOS 26+, default true; kept across themes), `glassStyle` (regular, clear), `glassTint` (0–1, default 0.2), `colors {island islandHi border fg muted dim accent wave good bad}` |
 | `icons` | `map` (a sketchybar `app_icons.lua`; paw has a built-in copy), `overrides` (`"App": ":glyph:"`), `brandColors` (true), `colors` (`"App": "#RRGGBB"`) |

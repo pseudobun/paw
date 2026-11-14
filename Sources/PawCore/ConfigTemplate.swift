@@ -125,7 +125,8 @@ public enum ConfigTemplate {
           },
 
           // app: name or /regex/; title / unlessTitle: substring or /regex/
-          // manage: false leaves windows alone, float: true floats them, workspace: where they open
+          // manage: false leaves windows alone, float: true floats them, workspace: where they open,
+          // always: true keeps them on that workspace and shows it when one opens
           rules: [
 
         """
@@ -299,6 +300,7 @@ public enum ConfigTemplate {
         if let m = r.manage { parts.append("manage: \(m)") }
         if let f = r.float { parts.append("float: \(f)") }
         if let w = r.workspace { parts.append("workspace: \(str(w))") }
+        if let a = r.always { parts.append("always: \(a)") }
         return "{ \(parts.joined(separator: ", ")) }"
     }
 

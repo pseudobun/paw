@@ -27,6 +27,8 @@ struct SettingsField {
         case wide(placeholder: String = "")
         /// Comma-separated in the field, a JSON array in the file.
         case list(placeholder: String = "")
+        /// A list of app names (or /regex/), with a picker beside the field.
+        case apps(placeholder: String = "")
         case number(min: Double, max: Double, step: Double = 1, unit: String = "")
         case choice([(value: String, label: String)])
         case color
@@ -74,7 +76,7 @@ enum SettingsEditor {
         switch self {
         case .presets: "workspace preset tiles apps size title launch display layout axis"
         case .setups: "setups displays arrangement focus workspace presets automatic switch monitor"
-        case .rules: "rules app title unless float ignore manage workspace"
+        case .rules: "rules app title unless float ignore manage workspace always pin"
         case .map(_, let key, let value, _): "\(key) \(value)"
         case .modes: "modes mode keys"
         case .gestures: "gestures mouse button direction middle back forward click command"
@@ -379,7 +381,7 @@ enum SettingsCatalog {
         SettingsPage(id: "rules", title: "Rules", subtitle: "Windows paw floats, ignores or sends to a workspace.",
                      symbol: "list.bullet.rectangle.fill", color: Theme.chart4, sections: [
             SettingsSection([
-                .note("App: a name or /regex/. Title and unless title: a substring or /regex/. Workspace: where new windows of the app open. Ignore: paw never touches them."),
+                .note("App: a name or /regex/. Title and unless title: a substring or /regex/. Workspace: where new windows of the app open. Always: its windows stay on that workspace (on open, at start, after a reload) and opening one shows it; ignored while the workspace doesn't exist. Ignore: paw never touches them. The app button picks from installed apps."),
             ]),
             SettingsSection(editor: .rules),
         ])
@@ -389,7 +391,7 @@ enum SettingsCatalog {
         SettingsPage(id: "initiate", title: "Initiate", subtitle: "`paw initiate`: open the preset apps and arrange every workspace.",
                      symbol: "play.rectangle.fill", color: Theme.good, sections: [
             SettingsSection([
-                f(\.initiate.apps, "initiate.apps", "Apps to open", .list(placeholder: "every app in the presets"),
+                f(\.initiate.apps, "initiate.apps", "Apps to open", .apps(placeholder: "every app in the presets"),
                   "Names as in /Applications, comma-separated; empty: every plain app name in the presets."),
                 f(\.initiate.focus, "initiate.focus", "Then show", .text(placeholder: "stay"), "Workspace to show when done; empty stays."),
                 f(\.initiate.timeout, "initiate.timeout", "Wait for windows", .number(min: 0, max: 600, unit: "s"),
@@ -424,7 +426,7 @@ enum SettingsCatalog {
             ]),
             SettingsSection("Gestures", editor: .gestures),
             SettingsSection([
-                f(\.mouse.gestureIgnoreApps, "mouse.gestureIgnoreApps", "No gestures in", .list(placeholder: "FreeCAD, /Fusion/"),
+                f(\.mouse.gestureIgnoreApps, "mouse.gestureIgnoreApps", "No gestures in", .apps(placeholder: "FreeCAD, /Fusion/"),
                   "Apps (name or /regex/) that keep their own middle-button drags."),
             ]),
         ])

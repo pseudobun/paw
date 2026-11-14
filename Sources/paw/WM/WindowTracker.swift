@@ -37,14 +37,17 @@ final class WindowTracker {
         guard AXObserverCreate(pid, callback, &observer) == .success, let observer else { return }
         let appElement = AXUIElementCreateApplication(pid)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-        var ok = true
         for n in Self.appNotifications {
-            let r = AXObserverAddNotification(observer, appElement, n as CFString, refcon)
-            if r != .success && r != .notificationAlreadyRegistered && n == kAXWindowCreatedNotification { ok = false }
+            // Through AXHealth: a busy app isn't asked again until its backoff ends, instead of
+            // waiting out the messaging timeout on the main thread each time.
+            let r = AXHealth.call(pid: pid, onMain: Thread.isMainThread) {
+                AXObserverAddNotification(observer, appElement, n as CFString, refcon)
+            }
+            // Apps still starting up (Electron, ChatGPT, slow-loading ones) refuse at first: not observed
+            // yet, so the next launch check or activation tries again. Window-created comes first, so a
+            // refusal leaves the rest unasked.
+            if r != .success && r != .notificationAlreadyRegistered && n == kAXWindowCreatedNotification { return }
         }
-        // Apps still starting up (Electron, ChatGPT) refuse at first: not observed yet, so the next
-        // launch check or activation tries again.
-        guard ok else { return }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
         observers[pid] = observer
     }

@@ -91,7 +91,8 @@
   },
 
   // app: name or /regex/; title / unlessTitle: substring or /regex/
-  // manage: false leaves windows alone, float: true floats them, workspace: where they open
+  // manage: false leaves windows alone, float: true floats them, workspace: where they open,
+  // always: true keeps them on that workspace and shows it when one opens
   rules: [
     { app: "/^(System Settings|System Information|Calculator|Archive Utility|Raycast|Alfred|1Password)$/", float: true },
     { app: "/^(CleanShot X|Screen Studio|Shottr|Loom|OBS|Kap|Xnapper)$/", manage: false },

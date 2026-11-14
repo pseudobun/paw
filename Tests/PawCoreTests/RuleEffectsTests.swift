@@ -54,6 +54,19 @@ struct RuleEffectsTests {
         #expect(c.ruleWorkspace(app: "Mail", title: "Draft") == nil)
     }
 
+    @Test func alwaysKeepsWindowsOnTheirWorkspace() {
+        let c = config([.init(app: "Spotify", workspace: "9", always: true), .init(app: "Mail", workspace: "6")])
+        #expect(c.pinnedWorkspace(app: "Spotify", title: "") == "9")
+        #expect(c.pinnedWorkspace(app: "Mail", title: "") == nil)
+        // Moved by hand: a reload puts it back even though the rule didn't change.
+        #expect(RuleChange.between(c, c, app: "Spotify", title: "", native: .none, floating: false, on: "2") == .init(workspace: "9"))
+        #expect(RuleChange.between(c, c, app: "Spotify", title: "", native: .none, floating: false, on: "9") == .init())
+        #expect(RuleChange.between(c, c, app: "Mail", title: "", native: .none, floating: false, on: "2") == .init())
+        // That workspace doesn't exist: the rule counts for nothing.
+        #expect(RuleChange.between(c, c, app: "Spotify", title: "", native: .none, floating: false, on: "2",
+                                   exists: { $0 != "9" }) == .init())
+    }
+
     @Test func manageTrueClaimsSelfLayeredPanels() {
         let c = config([.init(app: "Ghostty", manage: true), .init(app: "Raycast", manage: false)])
         #expect(c.forcesManage(app: "Ghostty", title: ""))
