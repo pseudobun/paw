@@ -204,6 +204,9 @@ final class WindowManager {
             for delay in [0.4, 1.5, 4.0] {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.adopt(app, state: nil, fresh: true) }
             }
+            // Slow starters refuse accessibility for seconds, and the window they make meanwhile
+            // sends paw nothing.
+            self?.adoptWhenReady(app, until: Date().addingTimeInterval(Self.slowStartWait))
         })
         observers.append(ws.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
@@ -566,6 +569,26 @@ final class WindowManager {
         }
         if state == nil, !added.isEmpty { layoutVisible(animated: true) }
         if fresh, let id = added.last, let ws = workspaceOf(id), displayShowing(ws.name) != nil { focusWindow(id, warp: true) }
+    }
+
+    /// How long paw keeps looking for the first window of an app that just launched.
+    static let slowStartWait: TimeInterval = 60
+
+    /// Asks a launching app for its windows off the main thread, once a second, and adopts them on
+    /// the main thread once it answers with some. Stops once paw manages one of its windows. While
+    /// the app is busy, `AXHealth` would fail the main thread's calls at once anyway.
+    private func adoptWhenReady(_ app: NSRunningApplication, until deadline: Date) {
+        let pid = app.processIdentifier
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [weak self] in
+            let ready = !AXUIElementCreateApplication(pid).elements(kAXWindowsAttribute).isEmpty
+            DispatchQueue.main.async {
+                guard let self, !app.isTerminated, !self.windows.values.contains(where: { $0.pid == pid }) else { return }
+                if ready { self.adopt(app, state: nil, fresh: true) }
+                if Date() < deadline, !self.windows.values.contains(where: { $0.pid == pid }) {
+                    self.adoptWhenReady(app, until: deadline)
+                }
+            }
+        }
     }
 
     /// Starts managing a window; nil when it isn't one paw manages.
