@@ -647,6 +647,11 @@ final class WindowManager {
         if !initial, presetName != nil, focusedWorkspace.allWindows.contains(where: { $0 != id && windows[$0]?.pid == pid }) {
             presetName = nil
         }
+        // Presets place an app's windows when it starts. A window opened later in an app that was
+        // already running (⌘N in Finder on workspace 4) opens where you are, not hidden on the preset's.
+        if !initial, presetName != nil, !Self.launchedRecently(pid) {
+            presetName = nil
+        }
         var name = pinned ?? state?[id] ?? ruleWorkspace ?? presetName
         if name == nil, initial, let di = displays.indices.first(where: { displays[$0].frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }) {
             name = displays[di].workspace
@@ -676,6 +681,22 @@ final class WindowManager {
         if !initial { layout(ws, animated: true) }
         scheduleSave()
         return w
+    }
+
+    /// Started within the last 15 s (slow apps make their first window late); unknown counts as new.
+    static func launchedRecently(_ pid: pid_t, now: Date = Date()) -> Bool {
+        // Apps launchd starts (Finder, Dock) have no launchDate: the process's own start time.
+        guard let launched = NSRunningApplication(processIdentifier: pid)?.launchDate ?? processStart(pid) else { return true }
+        return now.timeIntervalSince(launched) < 15
+    }
+
+    static func processStart(_ pid: pid_t) -> Date? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let t = info.kp_proc.p_starttime
+        return Date(timeIntervalSince1970: TimeInterval(t.tv_sec) + TimeInterval(t.tv_usec) / 1_000_000)
     }
 
     private func remove(_ id: WindowID, relayout: Bool = true, closed: Bool = false) {
