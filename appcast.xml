@@ -6,6 +6,24 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.36</title>
+      <pubDate>Sat, 14 Nov 2026 12:29:39 +0000</pubDate>
+      <sparkle:version>174</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.36</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Features</h3>
+<ul>
+<li>add always rules and an app picker in settings (<a href="https://github.com/pseudobun/paw/commit/f0d92e60dec672513bd40c266e2d9f58e0ebbfda">f0d92e6</a>)</li>
+<li>add always rules and an app picker in settings (<a href="https://github.com/pseudobun/paw/issues/114">#114</a>) (<a href="https://github.com/pseudobun/paw/commit/89862789c9f20677709b08d0cd7389ab28883dbe">8986278</a>)</li>
+</ul>
+<h3>Bug Fixes</h3>
+<ul>
+<li><b>wm:</b> adopt windows of apps that refuse accessibility while starting (<a href="https://github.com/pseudobun/paw/commit/ed12f92197b7f5ca5a00e5a1cded3aa83bfd8400">ed12f92</a>)</li>
+<li><b>wm:</b> follow focus to another workspace right after a switch (<a href="https://github.com/pseudobun/paw/commit/57e6b0aae2faa0ab1ac82531e76c67edfd13d599">57e6b0a</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.36">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.36/paw-0.1.0-beta.36-macos.zip" type="application/octet-stream" sparkle:edSignature="0f8IKM3oDqvHppzGdLBcm+9boOf8cpphrmRkekrpnmEcvH9odSCH51+fZHAGMrUoLYWc7gOTfILLEfbSsNMLCQ==" length="3822474"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.35</title>
       <pubDate>Fri, 13 Nov 2026 21:10:25 +0000</pubDate>
       <sparkle:version>169</sparkle:version>
@@ -243,20 +261,6 @@
 <li><b>updates:</b> add a beta channel and release betas from a beta branch (<a href="https://github.com/pseudobun/paw/issues/61">#61</a>) (<a href="https://github.com/pseudobun/paw/commit/da07dbd13c2be9975843273de223af651cc2e1be">da07dbd</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.17">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.17/paw-0.1.0-beta.17-macos.zip" type="application/octet-stream" sparkle:edSignature="ue8y+zaCVu1sh/B7LBmsjRcxqPujeyLf7RMELwnKAaYoSbEE7iUsoUVMBF45FJGtyarT06T+367DVwdPAnbZDw==" length="3622168"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.16</title>
-      <pubDate>Thu, 12 Nov 2026 08:52:23 +0000</pubDate>
-      <sparkle:version>115</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.16</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
-<ul>
-<li><b>cask:</b> only quit paw on upgrade (<a href="https://github.com/pseudobun/paw/commit/9141c0eb426411eee50a072f73f9d916ab30ee0d">9141c0e</a>)</li>
-<li><b>focus:</b> select revealed tiles and restore placeholder shortcuts (<a href="https://github.com/pseudobun/paw/issues/57">#57</a>) (<a href="https://github.com/pseudobun/paw/commit/e2c6d35732146e6bedc6589a0627dd116eced260">e2c6d35</a>)</li>
-<li><b>wm:</b> ignore pop-up menu windows such as Qt context menus (<a href="https://github.com/pseudobun/paw/issues/59">#59</a>) (<a href="https://github.com/pseudobun/paw/commit/6e9434f93d5e0d0b7d7538c94c1a7675e5c86ac8">6e9434f</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.16">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.16/paw-0.1.0-beta.16-macos.zip" type="application/octet-stream" sparkle:edSignature="pcySMEuiEFWDbvQMHWnWXcjVvIFnZZAq5u62950q0mSjk5WD7K7VSGWzixYLiyYroB4Jr+8DI1T83YHSIgDNBg==" length="3617034"/>
     </item>
   </channel>
 </rss>
