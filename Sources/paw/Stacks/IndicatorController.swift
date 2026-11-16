@@ -6,6 +6,8 @@ final class IndicatorController {
     let settings: Settings
     private(set) var style: Style
     private var panels: [String: IndicatorPanel] = [:]
+    /// Panels on their way out, until their fade ends.
+    private var fading: [ObjectIdentifier: IndicatorPanel] = [:]
     private var stacks: [Stack] = []
     /// Panels drawn so far (tests).
     private(set) var renders = 0
@@ -42,6 +44,18 @@ final class IndicatorController {
 
     var snapshot: [Stack] { stacks }
 
+    /// Drops every panel at once, fading ones too, so the next apply builds them afresh. After
+    /// sleep or a display change macOS may have moved panels to another screen (or left one
+    /// mid-fade) while the stacks themselves look unchanged.
+    func reset() {
+        for p in panels.values { p.orderOut(nil) }
+        for p in fading.values { p.orderOut(nil) }
+        panels.removeAll()
+        fading.removeAll()
+        title.orderOut(nil)
+        stacks = []
+    }
+
     func apply(_ new: [Stack], force: Bool = false) {
         if !force, new == stacks, panels.count == new.count { return }
         // Stacks that didn't change keep their panels as they are: no new layers, no fade.
@@ -49,7 +63,9 @@ final class IndicatorController {
         stacks = new
         guard !hidden, config.indicator.enabled else {
             for p in panels.values { p.orderOut(nil) }
+            for p in fading.values { p.orderOut(nil) }
             panels.removeAll()
+            fading.removeAll()
             title.orderOut(nil)
             return
         }
@@ -85,10 +101,15 @@ final class IndicatorController {
         }
         for (key, panel) in panels where !keep.contains(key) {
             panels[key] = nil
+            let id = ObjectIdentifier(panel)
+            fading[id] = panel
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = fade
                 panel.animator().alphaValue = 0
-            }, completionHandler: { panel.orderOut(nil) })
+            }, completionHandler: { [weak self] in
+                guard self?.fading.removeValue(forKey: id) != nil else { return }
+                panel.orderOut(nil)
+            })
         }
         title.orderOut(nil)
     }
