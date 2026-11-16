@@ -430,7 +430,9 @@ final class WindowManager {
                 }
             }
         }
+        indicators.reset()
         layoutAll(animated: false)
+        updateIndicators()
         if setupChanged { applySetup() }
         let gone = Set(onDisplay.keys).subtracting(displays.map(\.id))
         if !gone.isEmpty { setAside(Set(gone.flatMap { onDisplay[$0] ?? [] })) }

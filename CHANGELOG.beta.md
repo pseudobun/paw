@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.38](https://github.com/pseudobun/paw/compare/v0.1.0-beta.37...v0.1.0-beta.38) (2026-11-16)
+
+
+### Bug Fixes
+
+* **stacks:** rebuild stack indicators after displays change ([afb58a6](https://github.com/pseudobun/paw/commit/afb58a6ac47c99bd516aefd335c49616c27f8d02))
+
 ## [0.1.0-beta.37](https://github.com/pseudobun/paw/compare/v0.1.0-beta.36...v0.1.0-beta.37) (2026-11-14)
 
 
