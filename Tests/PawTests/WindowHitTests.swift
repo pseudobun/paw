@@ -17,6 +17,18 @@ struct WindowHitTests {
         #expect(!WindowManager.isSelfLayeredPanel(Int(CGWindowLevelForKey(.normalWindow))))
     }
 
+    @Test func parkedSliversDoNotCountAsShown() {
+        let screens = [CGRect(x: 0, y: 0, width: 1728, height: 1117), CGRect(x: 1728, y: 0, width: 1200, height: 1920)]
+        let size = CGSize(width: 1660, height: 1072)
+        // Bottom-right and bottom-left corners, and macOS pulling a parked window up by its title bar.
+        #expect(!WindowManager.showsOnScreen(CGRect(origin: CGPoint(x: 1727, y: 1116), size: size), displays: screens[..<1].map { $0 }))
+        #expect(!WindowManager.showsOnScreen(CGRect(origin: CGPoint(x: -1659, y: 1116), size: size), displays: screens))
+        #expect(!WindowManager.showsOnScreen(CGRect(origin: CGPoint(x: 1727, y: 1085), size: size), displays: screens[..<1].map { $0 }))
+        // An app put it back where it was before it was parked.
+        #expect(WindowManager.showsOnScreen(CGRect(origin: CGPoint(x: 68, y: 45), size: size), displays: screens))
+        #expect(!WindowManager.showsOnScreen(CGRect(origin: CGPoint(x: 5000, y: 5000), size: size), displays: screens))
+    }
+
     @MainActor @Test func liveWindowsKeepsOnlyWindowsTheServerHas() {
         _ = NSApplication.shared
         let window = NSWindow(contentRect: CGRect(x: -2000, y: -2000, width: 50, height: 50), styleMask: .borderless,
