@@ -28,6 +28,9 @@ final class WindowManager {
     private var ignoreFocusUntil = Date.distantPast
     private var focusWork: DispatchWorkItem?
     private var suppressMoves: [WindowID: Date] = [:]
+    /// Pending checks that a parked window stayed parked, and how often each was parked again.
+    private var reparkChecks: [WindowID: DispatchWorkItem] = [:]
+    private var reparks: [WindowID: (count: Int, since: Date)] = [:]
     private var dragTimer: Timer?
     private var saveWork: DispatchWorkItem?
     private var windowsHookWork: DispatchWorkItem?
@@ -713,6 +716,8 @@ final class WindowManager {
             : w.frame
         windows[id] = nil
         suppressMoves[id] = nil
+        reparkChecks.removeValue(forKey: id)?.cancel()
+        reparks[id] = nil
         minimumBackoff[id] = nil
         if lastFocusReported == id { lastFocusReported = nil }
         windowMins[id] = nil
@@ -944,6 +949,7 @@ final class WindowManager {
     /// Moving shows where it would land (drop zones) and puts it there; resizing an edge
     /// changes the tile sizes; anything else snaps back.
     private func userMoved(_ w: Window) {
+        if w.isHidden { scheduleReparkCheck(w); return }
         if let until = suppressMoves[w.id], until > Date() {
             if w.id == focusedID { scheduleBorderRefresh() }
             // The app may be moving it itself: check once it stops.
@@ -1468,6 +1474,40 @@ final class WindowManager {
         suppressMoves[w.id] = Date().addingTimeInterval(1)
         w.setPosition(origin)
         w.isHidden = true
+    }
+
+    /// An app moved a parked window back on screen (Signal restoring its bounds, Finder): it
+    /// would sit untiled over another workspace's windows. Checked once its moves settle, against
+    /// the window server (no call into the app); parked again at most 5 times in 10 s, so an app
+    /// that insists can't make paw fight it.
+    private func scheduleReparkCheck(_ w: Window) {
+        reparkChecks[w.id]?.cancel()
+        let work = DispatchWorkItem { [weak self, weak w] in
+            guard let self, let w else { return }
+            self.reparkChecks[w.id] = nil
+            guard self.windows[w.id] === w, w.isHidden, let ws = self.workspaceOf(w.id) else { return }
+            if w.isMoving || self.animator.isRunning || self.overview.isOpen { self.scheduleReparkCheck(w); return }
+            guard let f = SkyLight.frame(w.id), Self.showsOnScreen(f, displays: self.displays.map(\.frame)) else { return }
+            let now = Date()
+            var r = self.reparks[w.id].flatMap { now.timeIntervalSince($0.since) < 10 ? $0 : nil } ?? (count: 0, since: now)
+            guard r.count < 5 else { return }
+            r.count += 1
+            self.reparks[w.id] = r
+            Performance.count("reparks")
+            // Parked by its size, from the display it was parked on; a float keeps its frame.
+            w.frame.size = f.size
+            self.hide(w, from: ws)
+        }
+        reparkChecks[w.id] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
+    /// More of the window than a parked sliver shows on some display.
+    static func showsOnScreen(_ frame: CGRect, displays: [CGRect]) -> Bool {
+        displays.contains { d in
+            let i = d.intersection(frame)
+            return !i.isNull && i.width > 2 && i.height > 2
+        }
     }
 
     /// A screen corner where the window sticks out by one pixel and covers no other display:
