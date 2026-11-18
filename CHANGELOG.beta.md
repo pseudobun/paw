@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.39](https://github.com/pseudobun/paw/compare/v0.1.0-beta.38...v0.1.0-beta.39) (2026-11-18)
+
+
+### Bug Fixes
+
+* **wm:** park hidden windows again when their app moves them back on screen ([8171f7f](https://github.com/pseudobun/paw/commit/8171f7f6d1baa9229c8d0c78e4953c88a0687ca8))
+
 ## [0.1.0-beta.38](https://github.com/pseudobun/paw/compare/v0.1.0-beta.37...v0.1.0-beta.38) (2026-11-16)
 
 
