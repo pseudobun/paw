@@ -6,6 +6,18 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.39</title>
+      <pubDate>Wed, 18 Nov 2026 09:44:16 +0000</pubDate>
+      <sparkle:version>180</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.39</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
+<ul>
+<li><b>wm:</b> park hidden windows again when their app moves them back on screen (<a href="https://github.com/pseudobun/paw/commit/8171f7f6d1baa9229c8d0c78e4953c88a0687ca8">8171f7f</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.39">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.39/paw-0.1.0-beta.39-macos.zip" type="application/octet-stream" sparkle:edSignature="JNyegGfAcmYnDsKCJqflsaawG4qYO2TJ5OW9O1ulhXpJCqn5ctTUoULO8cp/gK4GbxxLxb//xAZMCxwOD267Dg==" length="3828430"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.38</title>
       <pubDate>Mon, 16 Nov 2026 12:03:21 +0000</pubDate>
       <sparkle:version>178</sparkle:version>
@@ -248,19 +260,6 @@
 <li><b>float:</b> keep fixed-size and floating windows usable (<a href="https://github.com/pseudobun/paw/issues/63">#63</a>) (<a href="https://github.com/pseudobun/paw/commit/179556398dfefb7743e2035b5c76beb46e122741">1795563</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.20">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.20/paw-0.1.0-beta.20-macos.zip" type="application/octet-stream" sparkle:edSignature="eCgvKaf5TO1bjpwX9EwVUzl+Wq3yj9sQc9cKkOQRD8EetWJ5L57TOXj5ROt8vvB8yZhcWx8RrYE/bSswhWhQAg==" length="3649067"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.19</title>
-      <pubDate>Thu, 12 Nov 2026 09:56:33 +0000</pubDate>
-      <sparkle:version>122</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.19</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
-<ul>
-<li><b>border:</b> hide focus border while dragging or resizing a window (<a href="https://github.com/pseudobun/paw/issues/60">#60</a>) (<a href="https://github.com/pseudobun/paw/commit/bfb525c6c2fb1fe9ae6edce03364c5f6d66b4c56">bfb525c</a>)</li>
-<li><b>bundle:</b> don't fail when PackageFrameworks is missing (<a href="https://github.com/pseudobun/paw/issues/62">#62</a>) (<a href="https://github.com/pseudobun/paw/commit/18698a9f56adf312db29c904e0bfb5525816cffc">18698a9</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.19">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.19/paw-0.1.0-beta.19-macos.zip" type="application/octet-stream" sparkle:edSignature="Sq2izZoz8bBHgEKU6aT1e7PVoxa2Q/VQcK7+EFK2ycbpPdYK/ytLUtaVtvrAPxuhlxxGwgPdhzOPK9vIsGfrDw==" length="3623131"/>
     </item>
   </channel>
 </rss>
