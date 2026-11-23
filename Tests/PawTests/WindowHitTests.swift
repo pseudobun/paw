@@ -29,6 +29,15 @@ struct WindowHitTests {
         #expect(!WindowManager.showsOnScreen(CGRect(origin: CGPoint(x: 5000, y: 5000), size: size), displays: screens))
     }
 
+    @Test func resyncRetilesOnlyWindowsSomewhereElse() {
+        let tile = CGRect(x: -2057, y: -1397, width: 1132, height: 1875)
+        // A move that never landed while the screen was locked: still on the laptop's tile.
+        #expect(WindowManager.differs(CGRect(x: 68, y: 45, width: 1660, height: 1072), tile))
+        // An app that keeps a minimum size bigger than its tile stays put.
+        #expect(!WindowManager.differs(CGRect(x: -2057, y: -1397, width: 1300, height: 1875), tile))
+        #expect(!WindowManager.differs(tile.offsetBy(dx: 1, dy: -2), tile))
+    }
+
     @MainActor @Test func liveWindowsKeepsOnlyWindowsTheServerHas() {
         _ = NSApplication.shared
         let window = NSWindow(contentRect: CGRect(x: -2000, y: -2000, width: 50, height: 50), styleMask: .borderless,
