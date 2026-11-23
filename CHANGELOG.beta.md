@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.40](https://github.com/pseudobun/paw/compare/v0.1.0-beta.39...v0.1.0-beta.40) (2026-11-23)
+
+
+### Bug Fixes
+
+* **wm:** put windows back after the screen unlocks when moves made while locked never landed ([d155ca3](https://github.com/pseudobun/paw/commit/d155ca3007ae56d867c6a4be8740e54bf79e7975))
+
 ## [0.1.0-beta.39](https://github.com/pseudobun/paw/compare/v0.1.0-beta.38...v0.1.0-beta.39) (2026-11-18)
 
 
