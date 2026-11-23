@@ -6,6 +6,18 @@
     <description>paw releases</description>
     <language>en</language>
     <item>
+      <title>paw 0.1.0-beta.40</title>
+      <pubDate>Mon, 23 Nov 2026 09:01:24 +0000</pubDate>
+      <sparkle:version>182</sparkle:version>
+      <sparkle:shortVersionString>0.1.0-beta.40</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
+<ul>
+<li><b>wm:</b> put windows back after the screen unlocks when moves made while locked never landed (<a href="https://github.com/pseudobun/paw/commit/d155ca3007ae56d867c6a4be8740e54bf79e7975">d155ca3</a>)</li>
+</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.40">Release on GitHub</a></p>]]></description>
+      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.40/paw-0.1.0-beta.40-macos.zip" type="application/octet-stream" sparkle:edSignature="CwDJshEsLO3t3KUsbc/rYV78yOK+t8rcPr9hU+CvpsfKhGjU7uuKIbdRIcwaQWeEdwQ4EjEkYt9cIo0Hka+WCA==" length="3833988"/>
+    </item>
+    <item>
       <title>paw 0.1.0-beta.39</title>
       <pubDate>Wed, 18 Nov 2026 09:44:16 +0000</pubDate>
       <sparkle:version>180</sparkle:version>
@@ -248,18 +260,6 @@
 <li><b>layout:</b> put windows an app shrank right after placing back on their tile (<a href="https://github.com/pseudobun/paw/issues/72">#72</a>) (<a href="https://github.com/pseudobun/paw/commit/6b3d06588626a54fd3901340cdb060ac4ef728c1">6b3d065</a>)</li>
 </ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.21">Release on GitHub</a></p>]]></description>
       <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.21/paw-0.1.0-beta.21-macos.zip" type="application/octet-stream" sparkle:edSignature="wR6oJoHhdFR1vMYT7RxFaOkd+NGkzcdNOlsPMEDwGRkuXcErFdlFa0r9YjrRnDap1OYh/XodGVDzY1ibajJrCQ==" length="3671429"/>
-    </item>
-    <item>
-      <title>paw 0.1.0-beta.20</title>
-      <pubDate>Thu, 12 Nov 2026 11:15:46 +0000</pubDate>
-      <sparkle:version>125</sparkle:version>
-      <sparkle:shortVersionString>0.1.0-beta.20</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<style>body{font:13px -apple-system,sans-serif;margin:12px 14px;color:#222}h3{font-size:13px;margin:12px 0 4px}ul{padding-left:18px;margin:4px 0}li{margin:2px 0}code{font:12px ui-monospace,monospace}a{color:#0a64d0}@media(prefers-color-scheme:dark){body{color:#ddd}a{color:#6ab0ff}}</style><h3>Bug Fixes</h3>
-<ul>
-<li><b>float:</b> keep fixed-size and floating windows usable (<a href="https://github.com/pseudobun/paw/issues/63">#63</a>) (<a href="https://github.com/pseudobun/paw/commit/179556398dfefb7743e2035b5c76beb46e122741">1795563</a>)</li>
-</ul><p><a href="https://github.com/pseudobun/paw/releases/tag/v0.1.0-beta.20">Release on GitHub</a></p>]]></description>
-      <enclosure url="https://github.com/pseudobun/paw/releases/download/v0.1.0-beta.20/paw-0.1.0-beta.20-macos.zip" type="application/octet-stream" sparkle:edSignature="eCgvKaf5TO1bjpwX9EwVUzl+Wq3yj9sQc9cKkOQRD8EetWJ5L57TOXj5ROt8vvB8yZhcWx8RrYE/bSswhWhQAg==" length="3649067"/>
     </item>
   </channel>
 </rss>
