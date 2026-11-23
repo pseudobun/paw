@@ -241,9 +241,11 @@ final class WindowManager {
         // While the screen is locked, accessibility lists placeholders instead of an app's
         // windows: paw started then (a login item, a restart over SSH) knows none of them. Once
         // it's unlocked, take on every window it doesn't have yet.
+        // Moves paw made while locked (displays plugged in, the lid opened at the lock screen)
+        // may never have reached the screen: then put windows back where paw has them.
         let unlocked: (Notification) -> Void = { [weak self] _ in
             for delay in [0.5, 2.0] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.adoptAll() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.adoptAll(); self?.resync() }
             }
         }
         observers.append(DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsUnlocked"),
@@ -426,7 +428,9 @@ final class WindowManager {
             let ws = workspace(d.workspace)
             for id in ws.allWindows {
                 guard let w = windows[id] else { continue }
-                if !ws.isFloating(id) { w.isHidden = true; continue }
+                // Its real size too, or a window macOS resized keeps it (a move sends the size
+                // only when it differs from the one paw has).
+                if !ws.isFloating(id) { _ = w.readFrame(); w.isHidden = true; continue }
                 if let f = w.readFrame(), !displays.contains(where: { $0.frame.intersects(f.insetBy(dx: 20, dy: 20)) }) {
                     w.floatFrame = nil
                     w.isHidden = true
@@ -445,6 +449,41 @@ final class WindowManager {
             publish("displaysChanged", ["displays": displays.count, "workspaces": query()])
         }
         scheduleSave()
+        // macOS keeps restoring windows for the new arrangement for a while after it settles.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.resync() }
+    }
+
+    /// Puts windows back where paw has them when the screen says otherwise: parked windows that
+    /// show again (macOS moved them, or paw's move never landed) are parked again, and shown
+    /// tiles that sit elsewhere go back on their tiles. Read from the window server, so nothing
+    /// waits on an app.
+    func resync() {
+        guard !displays.isEmpty, !animator.isRunning, !overview.isOpen else { return }
+        let screens = displays.map(\.frame)
+        let visible = Set(displays.map(\.workspace))
+        var relayout = false
+        AXQueue.run {
+            for w in windows.values {
+                guard !w.isMoving, let ws = workspaceOf(w.id), let f = SkyLight.frame(w.id) else { continue }
+                if w.isHidden {
+                    guard Self.showsOnScreen(f, displays: screens) else { continue }
+                    Log.app.info("resync: parking \(w.app, privacy: .public) again")
+                    w.frame.size = f.size
+                    hide(w, from: ws)
+                } else if visible.contains(ws.name), !ws.isFloating(w.id), Self.differs(f, w.frame) {
+                    Log.app.info("resync: retiling \(w.app, privacy: .public)")
+                    w.frame = f
+                    w.isHidden = true
+                    relayout = true
+                }
+            }
+            if relayout { layoutVisible(animated: false) }
+        }
+    }
+
+    /// Somewhere else, not just another size (apps with a minimum size keep theirs).
+    static func differs(_ a: CGRect, _ b: CGRect) -> Bool {
+        abs(a.minX - b.minX) > 2 || abs(a.minY - b.minY) > 2
     }
 
     private func rebuildDisplays() {
@@ -2423,6 +2462,7 @@ final class WindowManager {
     /// Re-reads every app's windows and puts anything stray back where it belongs.
     func recover() {
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular { adopt(app, state: nil) }
+        resync()
         // Visible floating windows that ended up off every screen come back to the middle.
         for d in displays {
             let ws = workspace(d.workspace)
