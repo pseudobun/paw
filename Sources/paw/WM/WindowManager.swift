@@ -2122,29 +2122,37 @@ final class WindowManager {
             }
         }
         for app in apps where !running.contains(app) && !launched.contains(app) { Shell.run("open -g -a \(Self.shellQuote(app))", env: [:]) }
+        // Only apps started just now get a window to wait for: one already running without a
+        // window (Finder with none open) gets none from `open -g`, and waiting would always run
+        // into the timeout.
+        let waitFor = Set(apps.filter { !running.contains($0) || launched.contains($0) })
         let deadline = Date().addingTimeInterval(cfg.timeout)
         func check() {
-            for app in NSWorkspace.shared.runningApplications where apps.contains(app.localizedName ?? "") { adopt(app, state: nil) }
             let have = Set(windows.values.map(\.app))
-            if apps.allSatisfy({ have.contains($0) }) || Date() > deadline {
+            let missing = waitFor.subtracting(have)
+            for app in NSWorkspace.shared.runningApplications where missing.contains(app.localizedName ?? "") { adopt(app, state: nil) }
+            let now = Set(windows.values.map(\.app))
+            if waitFor.isSubset(of: now) || Date() > deadline {
                 applySetup()
                 return
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { check() }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { check() }
+        check()
     }
 
     /// Puts everything where the presets in effect say: every preset workspace arranged, windows
-    /// of other apps on `layout.unassignedWorkspace`, each display on its pinned workspace, then
+    /// of other apps on `layout.unassignedWorkspace`, each display on one of its own workspaces, then
     /// the setup's (or initiate's) focus.
     func applySetup() {
         setupChanged = false
         let prevWorkspace = displays.isEmpty ? "" : label(focusedWorkspace.name)
         arrangeAll()
         for i in displays.indices {
-            let pinned = presets.keys.sorted(by: Self.nameOrder).first { displayIndex(for: presets[$0]?.display) == i }
-            if let pinned, pinned != displays[i].workspace {
+            let own = presets.keys.sorted(by: Self.nameOrder).filter { displayIndex(for: presets[$0]?.display) == i }
+            // A display already showing one of its own workspaces keeps it; otherwise the first one.
+            guard !own.contains(displays[i].workspace) else { continue }
+            if let pinned = own.first, pinned != displays[i].workspace {
                 focusedDisplay = i
                 show(pinned)
             }
