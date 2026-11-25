@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.41](https://github.com/pseudobun/paw/compare/v0.1.0-beta.40...v0.1.0-beta.41) (2026-11-25)
+
+
+### Bug Fixes
+
+* **wm:** apply setups without waiting on running apps that have no window ([b6b9495](https://github.com/pseudobun/paw/commit/b6b949516a28cb52c9cd6349d10590e5a75709ee))
+
 ## [0.1.0-beta.40](https://github.com/pseudobun/paw/compare/v0.1.0-beta.39...v0.1.0-beta.40) (2026-11-23)
 
 
